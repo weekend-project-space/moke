@@ -71,6 +71,15 @@ function isTerminalRun(run: Run) {
   return ['completed', 'failed', 'cancelled', 'timeout'].includes(run.status);
 }
 
+function summarizeSession(session: Session) {
+  const { messages, metadata, ...summary } = session;
+  return {
+    ...summary,
+    preview: messages.find((message) => message.role === 'user')?.content.slice(0, 42) || session.title,
+    message_count: messages.length,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') return json(res, 204, {});
@@ -102,7 +111,7 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'GET' && url.pathname === '/api/sessions') {
       return json(res, 200, {
-        sessions: [...sessions.values()].map(({ messages, metadata, ...session }) => session),
+        sessions: [...sessions.values()].map(summarizeSession),
         next_cursor: null,
       });
     }
@@ -115,8 +124,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      const { messages, metadata, ...summary } = session;
-      return json(res, 200, { session: summary, messages });
+      return json(res, 200, { session: summarizeSession(session), messages: session.messages });
     }
 
     if (method === 'POST' && parts[0] === 'api' && parts[1] === 'sessions' && parts[3] === 'messages') {

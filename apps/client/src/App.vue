@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import DOMPurify from 'dompurify'
+import { PanelRightClose, PanelRightOpen, SendHorizontal, Square } from 'lucide-vue-next'
+import MarkdownIt from 'markdown-it'
+import { computed, nextTick, onMounted, ref } from 'vue'
 
 type AgentEvent = {
   id: string
@@ -19,6 +22,8 @@ type SessionSummary = {
   title: string
   created_at: string
   updated_at: string
+  preview?: string
+  message_count?: number
 }
 
 type TraceStep = {
@@ -38,7 +43,8 @@ const events = ref<AgentEvent[]>([])
 const streamingText = ref('')
 const pendingApproval = ref<any | null>(null)
 const isRunning = ref(false)
-const traceCollapsed = ref(false)
+const traceCollapsed = ref(true)
+const composerInput = ref<HTMLTextAreaElement | null>(null)
 const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
 const statusText = computed(() => {
   if (serverStatus.value === 'checking') return '连接中'
@@ -51,9 +57,53 @@ const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): s
 const sortedSessions = computed(() =>
   [...sessions.value].sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)),
 )
+const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
+const currentTitle = computed(() => currentSession.value?.preview || currentSession.value?.title || '新会话')
+const primaryDisabled = computed(() => {
+  if (isRunning.value) return !runId.value
+  return serverStatus.value !== 'online' || !input.value.trim()
+})
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
+
+const defaultLinkOpen =
+  markdown.renderer.rules.link_open ||
+  ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options))
+
+markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  const token = tokens[index]
+  token.attrSet('target', '_blank')
+  token.attrSet('rel', 'noreferrer')
+  return defaultLinkOpen(tokens, index, options, env, self)
+}
+
+function renderMarkdown(content: string) {
+  return DOMPurify.sanitize(markdown.render(content))
+}
+
+function sessionLabel(session: SessionSummary) {
+  return session.preview || session.title || '新会话'
+}
+
+function sessionMeta(session: SessionSummary) {
+  const count = session.message_count || 0
+  return count > 0 ? `${count} 条消息` : session.id
+}
+
+function resizeComposer() {
+  const input = composerInput.value
+  if (!input) return
+
+  input.style.height = 'auto'
+  input.style.height = `${Math.min(input.scrollHeight, 136)}px`
+}
 
 function compactJson(value: unknown) {
   try {
@@ -243,6 +293,8 @@ async function loadSessionMessages(id: string) {
   const data = await response.json()
   sessionId.value = id
   messages.value = data.messages || []
+  await nextTick()
+  resizeComposer()
   return true
 }
 
@@ -262,8 +314,21 @@ async function startNewSession() {
 }
 
 function sendOnEnter(event: KeyboardEvent) {
-  if (event.shiftKey) return
+  if (event.shiftKey || isRunning.value) return
   event.preventDefault()
+  void sendMessage()
+}
+
+function handleInput() {
+  resizeComposer()
+}
+
+function handlePrimaryAction() {
+  if (isRunning.value) {
+    void cancelRun()
+    return
+  }
+
   void sendMessage()
 }
 
@@ -277,6 +342,8 @@ async function sendMessage() {
 
   messages.value.push({ role: 'user', content })
   input.value = ''
+  await nextTick()
+  resizeComposer()
   events.value = []
   streamingText.value = ''
   pendingApproval.value = null
@@ -403,8 +470,8 @@ onMounted(async () => {
           :disabled="isRunning"
           @click="selectSession(session.id)"
         >
-          <span>{{ session.title }}</span>
-          <small>{{ session.id }}</small>
+          <span>{{ sessionLabel(session) }}</span>
+          <small>{{ sessionMeta(session) }}</small>
         </button>
       </section>
     </aside>
@@ -412,33 +479,54 @@ onMounted(async () => {
     <section class="chat">
       <header class="topbar">
         <div>
-          <p>ReAct Runtime</p>
-          <h2>{{ statusText }}</h2>
+          <p>{{ statusText }}</p>
+          <h2>{{ currentTitle }}</h2>
         </div>
-        <span class="server-pill" :class="serverStatus">{{ serverStatus }}</span>
-        <button class="ghost" type="button" :disabled="!isRunning" @click="cancelRun">Cancel</button>
-        <button class="ghost" type="button" @click="traceCollapsed = !traceCollapsed">
-          {{ traceCollapsed ? '显示轨迹' : '收起轨迹' }}
+        <span class="server-pill" :class="serverStatus">
+          <i aria-hidden="true"></i>
+          {{ serverStatus }}
+        </span>
+        <button
+          class="ghost icon-button"
+          type="button"
+          :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
+          :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
+          @click="traceCollapsed = !traceCollapsed"
+        >
+          <PanelRightOpen v-if="traceCollapsed" :size="18" stroke-width="2.2" />
+          <PanelRightClose v-else :size="18" stroke-width="2.2" />
         </button>
       </header>
 
       <div class="conversation">
         <article v-for="(message, index) in messages" :key="index" class="bubble" :class="message.role">
-          {{ message.content }}
+          <div v-if="message.role === 'assistant'" class="markdown" v-html="renderMarkdown(message.content)"></div>
+          <template v-else>{{ message.content }}</template>
         </article>
         <article v-if="streamingText" class="bubble assistant live">
-          {{ streamingText }}
+          <div class="markdown" v-html="renderMarkdown(streamingText)"></div>
         </article>
       </div>
 
-      <form class="composer" @submit.prevent="sendMessage">
+      <form class="composer" @submit.prevent="handlePrimaryAction">
         <textarea
           v-model="input"
+          ref="composerInput"
           rows="1"
           placeholder="告诉 Agent 要做什么..."
+          @input="handleInput"
           @keydown.enter="sendOnEnter"
         ></textarea>
-        <button type="submit" :disabled="serverStatus !== 'online' || isRunning || !input.trim()">发送</button>
+        <button
+          type="submit"
+          :class="{ stop: isRunning }"
+          :disabled="primaryDisabled"
+          :aria-label="isRunning ? '停止运行' : '发送消息'"
+          :title="isRunning ? '停止运行' : '发送消息'"
+        >
+          <Square v-if="isRunning" :size="17" fill="currentColor" stroke-width="2.2" />
+          <SendHorizontal v-else :size="19" stroke-width="2.2" />
+        </button>
       </form>
     </section>
 
