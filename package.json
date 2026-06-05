@@ -6,8 +6,18 @@
   "scripts": {
     "dev": "npm run dev:server & npm run dev:client",
     "dev:client": "npm --prefix apps/client run dev -- --host 127.0.0.1",
-    "dev:server": "node apps/mock-server/server.mjs",
+    "dev:server": "tsx apps/server/server.ts",
     "desktop": "npm run dev:server & npm --prefix apps/client run desktop",
     "build": "npm --prefix apps/client run build"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/openai": "^1.4.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }

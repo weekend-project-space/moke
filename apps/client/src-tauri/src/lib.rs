@@ -10,14 +10,19 @@ struct AgentServer {
 
 impl AgentServer {
     fn start() -> Self {
-        let client_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let repo_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("src-tauri should live under the client app")
+            .parent()
+            .expect("client app should live under apps")
+            .parent()
+            .expect("apps should live under the repository root")
             .to_path_buf();
 
-        let child = Command::new("node")
-            .arg("../mock-server/server.mjs")
-            .current_dir(client_dir)
+        let child = Command::new("npx")
+            .arg("tsx")
+            .arg("apps/server/server.ts")
+            .current_dir(repo_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

@@ -14,25 +14,179 @@ type Message = {
   content: string
 }
 
+type SessionSummary = {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+type TraceStep = {
+  id: string
+  kind: string
+  title: string
+  detail: string
+  meta: string
+}
+
 const sessionId = ref('')
 const runId = ref('')
 const input = ref('检查当前项目，并告诉我下一步应该做什么')
 const messages = ref<Message[]>([])
+const sessions = ref<SessionSummary[]>([])
 const events = ref<AgentEvent[]>([])
 const streamingText = ref('')
 const pendingApproval = ref<any | null>(null)
 const isRunning = ref(false)
+const traceCollapsed = ref(false)
 const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
 const statusText = computed(() => {
-  if (serverStatus.value === 'checking') return 'Connecting'
-  if (serverStatus.value === 'offline') return 'Server Offline'
-  if (pendingApproval.value) return 'Awaiting Approval'
-  if (isRunning.value) return 'Running'
-  return 'Ready'
+  if (serverStatus.value === 'checking') return '连接中'
+  if (serverStatus.value === 'offline') return '服务离线'
+  if (pendingApproval.value) return '等待确认'
+  if (isRunning.value) return '运行中'
+  return '就绪'
 })
+const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
+const sortedSessions = computed(() =>
+  [...sessions.value].sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)),
+)
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+
+function compactJson(value: unknown) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function summarizeOutput(output: Record<string, any> | undefined) {
+  if (!output) return 'Tool finished.'
+  if (output.error) return String(output.error)
+
+  if (Array.isArray(output.matches)) {
+    const structured = Array.isArray(output.results) ? output.results : []
+    const preview =
+      structured.length > 0
+        ? structured
+            .slice(0, 3)
+            .map((match) => `${match.path}${match.line ? `:${match.line}` : ''}`)
+            .join(', ')
+        : output.matches.slice(0, 3).join(', ')
+    return `${output.count ?? output.matches.length} matches${preview ? `: ${preview}` : ''}`
+  }
+
+  if (output.path) {
+    return `Read ${output.path}${output.truncated ? ' (truncated)' : ''}`
+  }
+
+  return compactJson(output).slice(0, 180)
+}
+
+function toTraceStep(event: AgentEvent): TraceStep | null {
+  const payload = event.payload
+  const meta = `#${event.seq}`
+
+  if (event.type === 'agent.started') {
+    return {
+      id: event.id,
+      kind: 'input',
+      title: 'Request',
+      detail: payload.input || 'Run started.',
+      meta,
+    }
+  }
+
+  if (event.type === 'agent.plan') {
+    return {
+      id: event.id,
+      kind: 'plan',
+      title: 'ReAct Runtime',
+      detail: `${payload.planner || 'llm'} · ${(payload.tools || []).join(', ')}`,
+      meta,
+    }
+  }
+
+  if (event.type === 'agent.state') {
+    const labels: Record<string, string> = {
+      reason: 'Choosing next action',
+      act: 'Running tool',
+      respond: 'Writing final answer',
+    }
+    return {
+      id: event.id,
+      kind: payload.state || 'state',
+      title: labels[payload.state] || 'State changed',
+      detail: payload.state || 'state',
+      meta,
+    }
+  }
+
+  if (event.type === 'tool.call') {
+    return {
+      id: event.id,
+      kind: 'tool',
+      title: `Tool: ${payload.tool}`,
+      detail: compactJson(payload.input || {}),
+      meta: payload.risk || meta,
+    }
+  }
+
+  if (event.type === 'tool.result') {
+    return {
+      id: event.id,
+      kind: payload.status === 'ok' ? 'observation' : 'error',
+      title: payload.status === 'ok' ? 'Observation' : 'Tool Error',
+      detail: summarizeOutput(payload.output),
+      meta: `${payload.duration_ms || 0}ms`,
+    }
+  }
+
+  if (event.type === 'approval.required') {
+    return {
+      id: event.id,
+      kind: 'approval',
+      title: 'Approval Required',
+      detail: payload.reason || 'Waiting for user decision.',
+      meta,
+    }
+  }
+
+  if (event.type === 'agent.message.done') {
+    return {
+      id: event.id,
+      kind: 'final',
+      title: 'Final Answer',
+      detail: payload.message?.content || 'Answer completed.',
+      meta,
+    }
+  }
+
+  if (event.type === 'agent.done') {
+    return {
+      id: event.id,
+      kind: 'done',
+      title: 'Run Finished',
+      detail: `${payload.status || 'completed'} · ${payload.usage?.tool_calls || 0} tool calls`,
+      meta,
+    }
+  }
+
+  if (event.type === 'agent.error') {
+    return {
+      id: event.id,
+      kind: 'error',
+      title: 'Run Error',
+      detail: payload.message || 'Unknown error',
+      meta,
+    }
+  }
+
+  return null
+}
 
 async function checkServer() {
   serverStatus.value = 'checking'
@@ -65,6 +219,52 @@ async function createSession() {
   })
   const data = await response.json()
   sessionId.value = data.session.id
+  messages.value = []
+  events.value = []
+  streamingText.value = ''
+  pendingApproval.value = null
+  await loadSessions()
+}
+
+async function loadSessions() {
+  if (serverStatus.value !== 'online') return
+
+  const response = await fetch(`${apiBase}/api/sessions`)
+  if (!response.ok) return
+
+  const data = await response.json()
+  sessions.value = data.sessions || []
+}
+
+async function loadSessionMessages(id: string) {
+  const response = await fetch(`${apiBase}/api/sessions/${id}`)
+  if (!response.ok) return false
+
+  const data = await response.json()
+  sessionId.value = id
+  messages.value = data.messages || []
+  return true
+}
+
+async function selectSession(id: string) {
+  if (id === sessionId.value || isRunning.value) return
+
+  if (!(await loadSessionMessages(id))) return
+
+  events.value = []
+  streamingText.value = ''
+  pendingApproval.value = null
+}
+
+async function startNewSession() {
+  if (isRunning.value) return
+  await createSession()
+}
+
+function sendOnEnter(event: KeyboardEvent) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  void sendMessage()
 }
 
 async function sendMessage() {
@@ -131,6 +331,8 @@ function subscribe(eventsUrl: string) {
       if (event.type === 'agent.done' || event.type === 'agent.error') {
         isRunning.value = false
         source.close()
+        void loadSessions()
+        void loadSessionMessages(sessionId.value)
       }
     })
   }
@@ -162,12 +364,19 @@ async function cancelRun() {
 }
 
 onMounted(async () => {
-  if (await checkServer()) await createSession()
+  if (await checkServer()) {
+    await loadSessions()
+    if (sessions.value[0]) {
+      await selectSession(sessions.value[0].id)
+    } else {
+      await createSession()
+    }
+  }
 })
 </script>
 
 <template>
-  <main class="shell">
+  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed }">
     <aside class="sidebar">
       <div class="traffic-lights" aria-hidden="true">
         <span class="red"></span>
@@ -178,20 +387,39 @@ onMounted(async () => {
         <p>Local Agent</p>
         <h1>Moke</h1>
       </section>
-      <button class="session active" type="button">
-        <span>Workspace</span>
-        <small>{{ sessionId || 'Creating session' }}</small>
+
+      <button class="new-session" type="button" :disabled="serverStatus !== 'online' || isRunning" @click="startNewSession">
+        新建会话
       </button>
+
+      <section class="session-list">
+        <p>会话</p>
+        <button
+          v-for="session in sortedSessions"
+          :key="session.id"
+          class="session"
+          :class="{ active: session.id === sessionId }"
+          type="button"
+          :disabled="isRunning"
+          @click="selectSession(session.id)"
+        >
+          <span>{{ session.title }}</span>
+          <small>{{ session.id }}</small>
+        </button>
+      </section>
     </aside>
 
     <section class="chat">
       <header class="topbar">
         <div>
-          <p>PreAct Runtime</p>
+          <p>ReAct Runtime</p>
           <h2>{{ statusText }}</h2>
         </div>
         <span class="server-pill" :class="serverStatus">{{ serverStatus }}</span>
         <button class="ghost" type="button" :disabled="!isRunning" @click="cancelRun">Cancel</button>
+        <button class="ghost" type="button" @click="traceCollapsed = !traceCollapsed">
+          {{ traceCollapsed ? '显示轨迹' : '收起轨迹' }}
+        </button>
       </header>
 
       <div class="conversation">
@@ -204,8 +432,13 @@ onMounted(async () => {
       </div>
 
       <form class="composer" @submit.prevent="sendMessage">
-        <input v-model="input" placeholder="Ask the agent to do something..." />
-        <button type="submit" :disabled="serverStatus !== 'online' || isRunning || !input.trim()">Send</button>
+        <textarea
+          v-model="input"
+          rows="1"
+          placeholder="告诉 Agent 要做什么..."
+          @keydown.enter="sendOnEnter"
+        ></textarea>
+        <button type="submit" :disabled="serverStatus !== 'online' || isRunning || !input.trim()">发送</button>
       </form>
     </section>
 
@@ -225,9 +458,12 @@ onMounted(async () => {
       </section>
 
       <ol class="events">
-        <li v-for="event in events" :key="event.id">
-          <span>{{ event.type }}</span>
-          <code>#{{ event.seq }}</code>
+        <li v-for="step in traceSteps" :key="step.id" :class="step.kind">
+          <div>
+            <span>{{ step.title }}</span>
+            <p>{{ step.detail }}</p>
+          </div>
+          <code>{{ step.meta }}</code>
         </li>
       </ol>
     </aside>
