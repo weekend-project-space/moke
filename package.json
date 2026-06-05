@@ -1,0 +1,13 @@
+{
+  "name": "moke",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev:server & npm run dev:client",
+    "dev:client": "npm --prefix apps/client run dev -- --host 127.0.0.1",
+    "dev:server": "node apps/mock-server/server.mjs",
+    "desktop": "npm run dev:server & npm --prefix apps/client run desktop",
+    "build": "npm --prefix apps/client run build"
+  }
+}
