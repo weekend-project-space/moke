@@ -262,12 +262,15 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
   }
 
   if (event.type === 'tool.call') {
+    const source = payload.source || {}
+    const sourceMeta = source.type === 'mcp' ? `mcp:${source.server_id || 'unknown'}` : payload.risk || meta
+
     return {
       id: event.id,
       kind: 'tool',
       title: `Tool: ${payload.tool}`,
       detail: compactJson(payload.input || {}),
-      meta: payload.risk || meta,
+      meta: sourceMeta,
     }
   }
 

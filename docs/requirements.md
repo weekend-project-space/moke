@@ -100,6 +100,7 @@ The backend provides:
 - SSE event streaming
 - Tool registry
 - Tool execution
+- MCP tool loading
 - Runtime limits
 - Error reporting
 - Local JSON persistence
@@ -226,7 +227,47 @@ Execution policy:
 - `ask_user` pauses the run and asks the client to choose from 2 to 5 options
 - `write` and `dangerous` tools are delayed until approval policy is implemented
 
-## 11. Event Streaming
+## 11. MCP Tool Layer
+
+MCP is an optional external tool source for the MVP. It should stay behind the existing tool registry instead of changing the ReAct loop.
+
+Current MCP scope:
+
+```txt
+client only
+stdio transport only
+tools only
+```
+
+MCP non-goals for this stage:
+
+```txt
+Moke as MCP server
+resources
+prompts
+sampling
+OAuth
+remote MCP transport
+MCP server management UI
+```
+
+Configuration:
+
+```txt
+default path  .moke/mcp.json
+env override  MOKE_MCP_CONFIG
+example       packages/mcp-client/mcp.example.json
+```
+
+Tool naming:
+
+```txt
+mcp__<server_id>__<tool_name>
+```
+
+MCP tools are registered as runtime tools with `source.type = "mcp"` and `source.server_id`. For the MVP, MCP tool input is accepted as a generic JSON object; the MCP input schema is included in the tool description so the model can format arguments correctly.
+
+## 12. Event Streaming
 
 All runtime progress should be emitted through SSE using a unified event envelope.
 
@@ -245,7 +286,7 @@ agent.error
 
 The event stream is the main contract between the backend and frontend.
 
-## 12. Persistence
+## 13. Persistence
 
 The MVP persists:
 
@@ -257,7 +298,7 @@ The MVP persists:
 
 Implementation starts with a local JSON file at `.moke/state.json`. SQLite can replace it later if concurrent access or querying becomes important.
 
-## 13. Security And Permissions
+## 14. Security And Permissions
 
 The MVP should be conservative by default.
 
@@ -273,7 +314,7 @@ Required protections:
 
 The Agent must not execute arbitrary high-risk actions without policy checks.
 
-## 14. API Requirements
+## 15. API Requirements
 
 The API should follow `docs/agent-api.md`.
 
@@ -293,7 +334,7 @@ GET /api/sessions
 GET /api/sessions/:session_id
 ```
 
-## 15. Implementation Milestones
+## 16. Implementation Milestones
 
 ### Milestone 1: Protocol And Skeleton
 
@@ -340,7 +381,7 @@ GET /api/sessions/:session_id
 - Add local configuration
 - Package basic desktop build
 
-## 16. Open Questions
+## 17. Open Questions
 
 - Should the Agent server always run locally, or can it also run remotely?
 - Should `shell` be enabled in MVP, or delayed until file tools are stable?

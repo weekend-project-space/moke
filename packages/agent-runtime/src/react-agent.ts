@@ -135,6 +135,7 @@ export class ReactAgent {
           tool: call.name,
           input: call.args || {},
           risk: runtimeTool?.risk || 'safe',
+          source: runtimeTool?.source || { type: 'local' },
         });
 
         const startedAt = Date.now();

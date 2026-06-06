@@ -15,6 +15,10 @@ export type RuntimeTool<TInput extends z.ZodType = z.ZodType> = {
   name: string;
   description: string;
   risk: RiskLevel;
+  source?: {
+    type: 'local' | 'mcp';
+    server_id?: string;
+  };
   schema: TInput;
   handler: (input: z.infer<TInput>, context: ToolContext) => Promise<Record<string, unknown>>;
 };

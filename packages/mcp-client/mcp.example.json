@@ -1,0 +1,12 @@
+{
+  "servers": [
+    {
+      "id": "filesystem",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "timeout_ms": 30000
+    }
+  ]
+}

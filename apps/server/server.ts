@@ -4,6 +4,8 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { z } from 'zod';
+
 import {
   ReactAgent,
   RunManager,
@@ -12,6 +14,7 @@ import {
   createReadFileTool,
   createSearchTool,
 } from '../../packages/agent-runtime/src/index.js';
+import { McpManager, loadMcpConfig, type McpTool } from '../../packages/mcp-client/src/index.js';
 import type { Session, Run } from '../../packages/protocol/src/index.js';
 
 const envPath = join(new URL('../..', import.meta.url).pathname, '.env');
@@ -21,6 +24,7 @@ if (existsSync(envPath)) {
 
 const port = Number(process.env.PORT || 4010);
 const statePath = process.env.MOKE_STATE_PATH || join(new URL('../..', import.meta.url).pathname, '.moke/state.json');
+const mcpConfigPath = process.env.MOKE_MCP_CONFIG || join(new URL('../..', import.meta.url).pathname, '.moke/mcp.json');
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
 const workspace = new URL('../..', import.meta.url).pathname;
@@ -29,6 +33,7 @@ const toolRegistry = new ToolRegistry()
   .register(createReadFileTool())
   .register(createAskUserTool());
 const agent = new ReactAgent();
+let mcpManager: McpManager | undefined;
 
 type StoredRun = Omit<Run, 'clients'>;
 
@@ -89,6 +94,65 @@ function saveState() {
 
 loadState();
 
+function describeMcpTool(tool: McpTool) {
+  const schema = JSON.stringify(tool.inputSchema);
+  const schemaHint = schema && schema !== '{}' ? ` Input schema: ${schema.slice(0, 1200)}` : '';
+  return `${tool.description} MCP server: ${tool.serverId}.${schemaHint}`;
+}
+
+function normalizeMcpResult(result: unknown): Record<string, unknown> {
+  if (!result || typeof result !== 'object') return { content: result };
+
+  const candidate = result as Record<string, unknown>;
+  return {
+    content: candidate.content,
+    structuredContent: candidate.structuredContent,
+    isError: candidate.isError,
+    _meta: candidate._meta,
+  };
+}
+
+async function registerMcpTools() {
+  if (!existsSync(mcpConfigPath)) return;
+
+  try {
+    const config = await loadMcpConfig(mcpConfigPath);
+    mcpManager = new McpManager(config);
+    const results = await mcpManager.connectAll();
+
+    for (const result of results) {
+      if (result.status === 'failed') {
+        console.warn(`MCP server ${result.serverId} failed: ${result.error}`);
+      }
+    }
+
+    for (const mcpTool of mcpManager.listTools()) {
+      toolRegistry.register({
+        name: mcpTool.name,
+        description: describeMcpTool(mcpTool),
+        risk: 'safe',
+        source: {
+          type: 'mcp',
+          server_id: mcpTool.serverId,
+        },
+        schema: z.record(z.string(), z.unknown()),
+        async handler(input) {
+          if (!mcpManager) throw new Error('MCP manager is not initialized');
+          const toolInput = input && typeof input === 'object' ? input : {};
+          const result = await mcpManager.callTool(mcpTool.name, toolInput as Record<string, unknown>);
+          return normalizeMcpResult(result);
+        },
+      });
+    }
+
+    console.log(`Registered ${mcpManager.listTools().length} MCP tools from ${mcpConfigPath}`);
+  } catch (error) {
+    console.warn(`Failed to load MCP config from ${mcpConfigPath}:`, error);
+  }
+}
+
+await registerMcpTools();
+
 const runManager = new RunManager({
   sessions,
   runs,
@@ -96,6 +160,13 @@ const runManager = new RunManager({
   toolRegistry,
   workspace,
   onChange: saveStateSoon,
+});
+
+process.once('SIGINT', () => {
+  void mcpManager?.close();
+});
+process.once('SIGTERM', () => {
+  void mcpManager?.close();
 });
 
 function id(prefix: string) {

@@ -429,7 +429,30 @@ Emitted before a tool is executed.
     "input": {
       "query": "package.json"
     },
-    "risk": "safe"
+    "risk": "safe",
+    "source": {
+      "type": "local"
+    }
+  }
+}
+```
+
+MCP tools use the same event shape with MCP source metadata:
+
+```json
+{
+  "type": "tool.call",
+  "payload": {
+    "call_id": "call_02",
+    "tool": "mcp__filesystem__read_file",
+    "input": {
+      "path": "README.md"
+    },
+    "risk": "safe",
+    "source": {
+      "type": "mcp",
+      "server_id": "filesystem"
+    }
   }
 }
 ```
@@ -575,7 +598,54 @@ RATE_LIMITED
 INTERNAL_ERROR
 ```
 
-## 8. Frontend Integration
+## 8. MCP Configuration
+
+MCP is optional. When an MCP config file exists, the server connects enabled stdio MCP servers during startup and registers their tools into the normal runtime tool registry.
+
+Default config path:
+
+```txt
+.moke/mcp.json
+```
+
+Override:
+
+```txt
+MOKE_MCP_CONFIG=/path/to/mcp.json
+```
+
+Example:
+
+```json
+{
+  "servers": [
+    {
+      "id": "filesystem",
+      "enabled": true,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "timeout_ms": 30000
+    }
+  ]
+}
+```
+
+Exposed tool names:
+
+```txt
+mcp__<server_id>__<tool_name>
+```
+
+Current MCP scope:
+
+```txt
+stdio transport only
+tools only
+no resources, prompts, sampling, OAuth, remote MCP, or MCP server management UI
+```
+
+## 9. Frontend Integration
 
 Minimal Vue client flow:
 
@@ -624,7 +694,7 @@ function subscribeRun(eventsUrl: string, onEvent: (event: any) => void) {
 }
 ```
 
-## 9. Minimum MVP Contract
+## 10. Minimum MVP Contract
 
 For the first implementation, these endpoints and events are enough:
 
