@@ -207,6 +207,34 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'answer') {
+      const body = await readJson(req);
+      const askId = typeof body.ask_id === 'string' ? body.ask_id : '';
+      const optionId = typeof body.option_id === 'string' ? body.option_id : '';
+
+      if (!askId || !optionId) {
+        return json(res, 400, {
+          error: { code: 'BAD_REQUEST', message: 'ask_id and option_id are required' },
+        });
+      }
+
+      const result = runManager.answer(parts[2], askId, optionId);
+      if (result.status !== 200) {
+        return json(res, result.status, {
+          error: {
+            code: result.status === 404 ? 'RUN_NOT_FOUND' : result.status === 400 ? 'BAD_REQUEST' : 'ASK_NOT_PENDING',
+            message: result.error,
+          },
+        });
+      }
+
+      return json(res, 200, {
+        run_id: result.run.id,
+        ask_id: askId,
+        status: result.run.status,
+      });
+    }
+
     if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'cancel') {
       const run = runs.get(parts[2]);
       if (!run) {

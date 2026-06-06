@@ -34,7 +34,16 @@ function readAssistantMessage(event: AgentEvent) {
 }
 
 export class RunManager {
-  constructor(private readonly config: RunManagerConfig) {}
+  private readonly pendingAsks = new Map<
+    string,
+    {
+      runId: string;
+      resolve: (selected: { id: string; label: string }) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+
+  constructor(private readonly config: RunManagerConfig) { }
 
   createRun(session: Session, content: string, options: RunOptions = {}) {
     const run: Run = {
@@ -80,6 +89,7 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: this.config.workspace,
+          askUser: (input) => this.askUser(run, eventBus, input),
         },
         limits,
       });
@@ -100,15 +110,19 @@ export class RunManager {
         },
       });
     } catch (error) {
+      if (run.abort) return;
+
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
-      run.status = 'failed';
-      session.messages.push({
+      const assistantMessage: Message = {
         id: id('msg'),
         role: 'assistant',
         content: `运行失败：${message}`,
         created_at: new Date().toISOString(),
+      };
+      run.status = 'failed';
+      eventBus.emit('agent.message.done', {
+        message: assistantMessage,
       });
-      session.updated_at = new Date().toISOString();
       eventBus.emit('agent.error', {
         code: 'RUNTIME_ERROR',
         message,
@@ -116,11 +130,90 @@ export class RunManager {
     }
   }
 
+  private askUser(
+    run: Run,
+    eventBus: EventBus,
+    input: { callId: string; question: string; options: Array<{ id: string; label: string }> },
+  ): Promise<{ id: string; label: string }> {
+    const askId = id('ask');
+    run.status = 'awaiting_user';
+    run.pending_ask = {
+      ask_id: askId,
+      call_id: input.callId,
+      question: input.question,
+      options: input.options,
+      created_at: new Date().toISOString(),
+    };
+
+    eventBus.emit('ask_user.required', run.pending_ask);
+
+    return new Promise<{ id: string; label: string }>((resolve, reject) => {
+      this.pendingAsks.set(askId, {
+        runId: run.id,
+        resolve,
+        reject,
+      });
+    });
+  }
+
+  answer(runId: string, askId: string, optionId: string) {
+    const run = this.config.runs.get(runId);
+    if (!run) return { status: 404 as const, error: 'Run not found' };
+    if (run.pending_ask?.ask_id !== askId) return { status: 409 as const, error: 'Run is not waiting for this answer' };
+
+    const pending = this.pendingAsks.get(askId);
+    if (!pending || pending.runId !== runId) return { status: 409 as const, error: 'Ask is no longer pending' };
+    const selected = run.pending_ask.options.find((option) => option.id === optionId);
+    if (!selected) return { status: 400 as const, error: 'option_id is not valid for this question' };
+
+    this.pendingAsks.delete(askId);
+    const pendingAsk = run.pending_ask;
+    run.pending_ask = undefined;
+    run.status = 'running';
+
+    const session = this.config.sessions.get(run.session_id);
+    if (session) {
+      const questionCreatedAt = pendingAsk.created_at;
+      const answerCreatedAt = new Date().toISOString();
+      session.messages.push(
+        {
+          id: id('msg'),
+          role: 'assistant',
+          content: pendingAsk.question,
+          created_at: questionCreatedAt,
+        },
+        {
+          id: id('msg'),
+          role: 'user',
+          content: selected.label,
+          created_at: answerCreatedAt,
+        },
+      );
+      session.updated_at = answerCreatedAt;
+    }
+
+    new EventBus(run).emit('ask_user.answered', {
+      ask_id: askId,
+      call_id: pendingAsk.call_id,
+      selected,
+    });
+    pending.resolve(selected);
+
+    return { status: 200 as const, run };
+  }
+
   cancel(runId: string) {
     const run = this.config.runs.get(runId);
     if (!run) return null;
     run.abort = true;
     run.status = 'cancelled';
+
+    if (run.pending_ask) {
+      const pending = this.pendingAsks.get(run.pending_ask.ask_id);
+      this.pendingAsks.delete(run.pending_ask.ask_id);
+      run.pending_ask = undefined;
+      pending?.reject(new Error('Run cancelled'));
+    }
 
     new EventBus(run).emit('agent.done', {
       status: 'cancelled',

@@ -1,6 +1,6 @@
 # Agent API Interface
 
-This document describes the first-version interface for an Agent that uses a lightweight PreAct runtime, supports basic tools, and can be consumed by both C/S and B/S clients.
+This document describes the first-version interface for an Agent that uses a lightweight ReAct runtime, supports basic tools, and can be consumed by both C/S and B/S clients.
 
 ## 1. Overview
 
@@ -16,7 +16,7 @@ Client
 
 Default transport:
 
-- HTTP: create sessions, send messages, approve actions, cancel runs
+- HTTP: create sessions, send messages, answer Agent questions, approve actions, cancel runs
 - SSE: stream Agent runtime events
 - WebSocket: optional future replacement, using the same event schema
 
@@ -48,6 +48,7 @@ run_   agent run id
 msg_   message id
 evt_   event id
 call_  tool call id
+ask_   ask_user request id
 apv_   approval id
 ```
 
@@ -84,6 +85,7 @@ Run status:
 ```txt
 queued
 running
+awaiting_user
 awaiting_approval
 completed
 failed
@@ -287,7 +289,34 @@ Response:
 }
 ```
 
-### 4.7 Cancel Run
+### 4.7 Answer Agent Question
+
+Resume a run that is waiting on `ask_user`.
+
+```txt
+POST /api/runs/:run_id/answer
+```
+
+Request:
+
+```json
+{
+  "ask_id": "ask_01",
+  "option_id": "frontend"
+}
+```
+
+Response:
+
+```json
+{
+  "run_id": "run_01HXX",
+  "ask_id": "ask_01",
+  "status": "running"
+}
+```
+
+### 4.8 Cancel Run
 
 ```txt
 POST /api/runs/:run_id/cancel
@@ -355,7 +384,7 @@ Emitted when a run starts.
 
 ### 6.2 agent.plan
 
-Emitted after the PreAct phase.
+Emitted after runtime setup.
 
 ```json
 {
@@ -390,12 +419,9 @@ Optional event for state changes.
 Supported simple states:
 
 ```txt
-idle
-preact
+reason
 act
 respond
-done
-error
 ```
 
 ### 6.4 agent.message.delta
@@ -495,7 +521,51 @@ Emitted when the Agent needs user approval before continuing.
 }
 ```
 
-### 6.9 agent.done
+### 6.9 ask_user.required
+
+Emitted when the Agent needs the user to choose one option before continuing.
+
+```json
+{
+  "type": "ask_user.required",
+  "payload": {
+    "ask_id": "ask_01",
+    "call_id": "call_01",
+    "question": "你希望我优先检查前端还是运行时？",
+    "options": [
+      {
+        "id": "frontend",
+        "label": "先检查前端"
+      },
+      {
+        "id": "runtime",
+        "label": "先检查运行时"
+      }
+    ],
+    "created_at": "2026-06-04T10:01:00Z"
+  }
+}
+```
+
+### 6.10 ask_user.answered
+
+Emitted after the client submits an answer.
+
+```json
+{
+  "type": "ask_user.answered",
+  "payload": {
+    "ask_id": "ask_01",
+    "call_id": "call_01",
+    "selected": {
+      "id": "frontend",
+      "label": "先检查前端"
+    }
+  }
+}
+```
+
+### 6.11 agent.done
 
 Emitted when the run completes.
 
@@ -513,7 +583,7 @@ Emitted when the run completes.
 }
 ```
 
-### 6.10 agent.error
+### 6.12 agent.error
 
 Emitted when the run fails.
 
@@ -595,6 +665,8 @@ function subscribeRun(eventsUrl: string, onEvent: (event: any) => void) {
     "agent.message.done",
     "tool.call",
     "tool.result",
+    "ask_user.required",
+    "ask_user.answered",
     "approval.required",
     "agent.done",
     "agent.error"
@@ -620,6 +692,7 @@ Endpoints:
 POST /api/sessions
 POST /api/sessions/:session_id/messages
 GET  /api/runs/:run_id/events
+POST /api/runs/:run_id/answer
 POST /api/runs/:run_id/approve
 POST /api/runs/:run_id/cancel
 ```
@@ -632,6 +705,8 @@ agent.plan
 agent.message.delta
 tool.call
 tool.result
+ask_user.required
+ask_user.answered
 approval.required
 agent.done
 agent.error

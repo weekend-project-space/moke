@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import { tool } from '@langchain/core/tools';
-import { createAgent } from 'langchain';
+import { tool } from 'langchain';
 
 import type { Message, RuntimeLimits } from '../../protocol/src/index.js';
 import type { EventBus } from './event-bus.js';
@@ -23,12 +22,8 @@ type AgentRunResult = {
   message: Message;
 };
 
-type AgentStreamState = {
-  messages?: BaseMessage[];
-};
-
-function createSystemPrompt(tools: ReturnType<ToolRegistry['list']>) {
-  const toolList = tools.map((tool) => `${tool.name}: ${tool.description}`).join('\n');
+function createSystemPrompt(customTools: ReturnType<ToolRegistry['list']>) {
+  const customToolList = customTools.map((tool) => `${tool.name}: ${tool.description}`).join('\n');
 
   return `You are Moke, a local-first ReAct agent.
 
@@ -38,11 +33,12 @@ Use tools only when the user asks about project files, code, docs, or local cont
 Do not include hidden reasoning, chain-of-thought, or <think> blocks.
 
 Available tools:
-${toolList}
+${customToolList || 'None'}
 
 Guidelines:
 - Prefer Chinese when the user writes Chinese.
 - For repository search, use short file or repository keywords: README, docs, requirements, agent, server, client, runtime, package, tauri, vue.
+- Use ask_user only when you cannot continue without a user decision; ask one concise question and provide 2 to 5 short options.
 - After receiving observations, produce a final answer when you have enough information.
 - Never invent file contents you did not observe.`;
 }
@@ -70,33 +66,8 @@ function getMessageText(message: BaseMessage) {
   return content.map((item) => ('text' in item ? item.text : '')).join('\n');
 }
 
-function getMessageType(message: BaseMessage) {
-  return message._getType();
-}
-
-function getMessageKey(message: BaseMessage) {
-  const id = 'id' in message && typeof message.id === 'string' ? message.id : undefined;
-  return id || `${getMessageType(message)}:${getMessageText(message)}`;
-}
-
 function isAI(message: BaseMessage): message is AIMessage {
   return AIMessage.isInstance(message);
-}
-
-function isTool(message: BaseMessage): message is ToolMessage {
-  return ToolMessage.isInstance(message);
-}
-
-function summarizeToolOutput(output: unknown) {
-  if (typeof output === 'string') {
-    try {
-      return JSON.parse(output) as Record<string, unknown>;
-    } catch {
-      return { content: output };
-    }
-  }
-
-  return output && typeof output === 'object' ? (output as Record<string, unknown>) : { content: String(output) };
 }
 
 export class ReactAgent {
@@ -106,8 +77,9 @@ export class ReactAgent {
     }
 
     const model = createChatModel();
-    const timeoutMs = Number(process.env.OPENAI_TIMEOUT_MS || 15000);
-    const tools = toolRegistry.list().map((runtimeTool) =>
+    const timeoutMs = limits.timeout_ms || Number(process.env.OPENAI_TIMEOUT_MS || 15000);
+    const runtimeTools = toolRegistry.list();
+    const tools = runtimeTools.map((runtimeTool) =>
       tool(
         async (toolInput) => {
           const output = await toolRegistry.execute(runtimeTool.name, toolInput, context);
@@ -120,75 +92,87 @@ export class ReactAgent {
         },
       ),
     );
-    const agent = createAgent({
-      model,
-      tools,
-      version: 'v2',
-    });
-    const messages = [new SystemMessage(createSystemPrompt(toolRegistry.list())), ...createHistoryMessages(history), new HumanMessage(input)];
-    const seen = new Set<string>();
+    const modelWithTools = tools.length > 0 ? model.bindTools(tools) : model;
+    const messages: BaseMessage[] = [
+      new SystemMessage(createSystemPrompt(runtimeTools)),
+      ...createHistoryMessages(history),
+      new HumanMessage(input),
+    ];
     let toolCalls = 0;
     let finalContent = '';
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
       mode: 'react',
-      planner: 'langgraph-react-agent',
+      planner: 'manual-model-loop',
       model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-      tools: toolRegistry.list().map((tool) => tool.name),
+      tools: runtimeTools.map((tool) => tool.name),
     });
 
-    const stream = await withTimeout(
-      agent.stream(
-        { messages },
-        {
-          streamMode: 'values',
-          recursionLimit: Math.max(2, limits.max_steps * 2),
-        },
-      ),
-      timeoutMs,
-    );
+    for (let step = 0; step < limits.max_steps; step++) {
+      eventBus.emit('agent.state', { state: 'reason' });
 
-    for await (const state of stream as AsyncIterable<AgentStreamState>) {
-      const stateMessages = state.messages || [];
-      for (const message of stateMessages) {
-        const key = getMessageKey(message);
-        if (seen.has(key)) continue;
-        seen.add(key);
+      const aiMessage = await withTimeout(modelWithTools.invoke(messages), timeoutMs);
+      messages.push(aiMessage);
 
-        if (isAI(message)) {
-          const calls = message.tool_calls || [];
-          if (calls.length > 0) {
-            eventBus.emit('agent.state', { state: 'act' });
-            for (const call of calls) {
-              if (toolCalls >= limits.max_tool_calls) {
-                throw new Error('Maximum tool calls exceeded');
-              }
+      const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
+      if (calls.length === 0) {
+        finalContent = getMessageText(aiMessage).trim();
+        break;
+      }
 
-              toolCalls++;
-              eventBus.emit('tool.call', {
-                call_id: call.id || `call_${randomUUID().slice(0, 8)}`,
-                tool: call.name,
-                input: call.args || {},
-                risk: toolRegistry.get(call.name)?.risk || 'safe',
-              });
-            }
-            continue;
-          }
-
-          const content = getMessageText(message).trim();
-          if (content) {
-            finalContent = content;
-          }
+      eventBus.emit('agent.state', { state: 'act' });
+      for (const call of calls) {
+        if (toolCalls >= limits.max_tool_calls) {
+          throw new Error('Maximum tool calls exceeded');
         }
 
-        if (isTool(message)) {
+        toolCalls++;
+        const callId = call.id || `call_${randomUUID().slice(0, 8)}`;
+        const runtimeTool = toolRegistry.get(call.name);
+        eventBus.emit('tool.call', {
+          call_id: callId,
+          tool: call.name,
+          input: call.args || {},
+          risk: runtimeTool?.risk || 'safe',
+        });
+
+        const startedAt = Date.now();
+        try {
+          const output =
+            call.name === 'ask_user'
+              ? await this.askUser(call.args || {}, callId, context)
+              : await toolRegistry.execute(call.name, call.args || {}, context);
+
           eventBus.emit('tool.result', {
-            call_id: message.tool_call_id,
-            status: message.status === 'error' ? 'error' : 'ok',
-            duration_ms: 0,
-            output: summarizeToolOutput(message.content),
+            call_id: callId,
+            status: 'ok',
+            duration_ms: Date.now() - startedAt,
+            output,
           });
+          messages.push(
+            new ToolMessage({
+              content: JSON.stringify(output),
+              tool_call_id: callId,
+            }),
+          );
+        } catch (error) {
+          const output = {
+            error: error instanceof Error ? error.message : String(error),
+          };
+          eventBus.emit('tool.result', {
+            call_id: callId,
+            status: 'error',
+            duration_ms: Date.now() - startedAt,
+            output,
+          });
+          messages.push(
+            new ToolMessage({
+              content: JSON.stringify(output),
+              tool_call_id: callId,
+              status: 'error',
+            }),
+          );
         }
       }
     }
@@ -201,4 +185,52 @@ export class ReactAgent {
 
     return { toolCalls, message };
   }
+
+  private async askUser(input: Record<string, unknown>, callId: string, context: ToolContext) {
+    if (!context.askUser) {
+      throw new Error('ask_user is not available in this runtime context');
+    }
+
+    const question = typeof input.question === 'string' && input.question.trim() ? input.question.trim() : '请选择下一步。';
+    const options = normalizeAskOptions(input.options);
+    const selected = await context.askUser({ callId, question, options });
+
+    return {
+      question,
+      selected,
+      status: 'answered',
+    };
+  }
+}
+
+function normalizeAskOptions(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [
+      { id: 'continue', label: '继续' },
+      { id: 'cancel', label: '取消' },
+    ];
+  }
+
+  const options = value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const option = item as Record<string, unknown>;
+      const label = typeof option.label === 'string' ? option.label.trim() : '';
+      if (!label) return null;
+      const rawId = typeof option.id === 'string' ? option.id.trim() : '';
+
+      return {
+        id: rawId || `option_${index + 1}`,
+        label,
+      };
+    })
+    .filter((option): option is { id: string; label: string } => Boolean(option))
+    .slice(0, 5);
+
+  if (options.length >= 2) return options;
+
+  return [
+    { id: 'yes', label: '是' },
+    { id: 'no', label: '否' },
+  ];
 }

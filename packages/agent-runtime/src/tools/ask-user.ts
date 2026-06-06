@@ -4,20 +4,25 @@ import type { RuntimeTool } from '../tool-registry.js';
 
 const askUserSchema = z.object({
   question: z.string().min(1),
+  options: z
+    .array(
+      z.object({
+        index: z.string().min(1),
+        label: z.string().min(1),
+      }),
+    )
+    .min(2)
+    .max(5),
 });
 
 export function createAskUserTool(): RuntimeTool<typeof askUserSchema> {
   return {
     name: 'ask_user',
-    description: 'Ask the user for a short clarification.',
+    description: 'Ask the user one question and provide 2 to 5 concrete options for the user to choose from.',
     risk: 'safe',
     schema: askUserSchema,
-    async handler(input) {
-      return {
-        question: input.question,
-        status: 'mocked',
-        answer: 'No user input was requested in this mock runtime.',
-      };
+    async handler() {
+      throw new Error('ask_user must be handled by the ReAct runtime pause flow');
     },
   };
 }

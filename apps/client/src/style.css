@@ -50,9 +50,7 @@ button:disabled {
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 16% 10%, rgba(255, 255, 255, 0.95), transparent 32%),
-    linear-gradient(135deg, #f5f5f7 0%, #e9edf3 100%);
+  background: linear-gradient(135deg, #f7f7f9 0%, #eceff4 100%);
 }
 
 .shell.trace-collapsed {
@@ -177,9 +175,9 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  min-height: 78px;
-  padding: 18px 24px;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 20px;
   border-bottom: 1px solid rgba(60, 60, 67, 0.14);
 }
 
@@ -192,6 +190,8 @@ button:disabled {
   max-width: min(560px, 52vw);
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 17px;
+  font-weight: 750;
 }
 
 .server-pill {
@@ -251,10 +251,39 @@ button:disabled {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-height: 0;
-  padding: 24px;
+  padding: 18px 24px;
   overflow-y: auto;
+  scroll-padding-bottom: 18px;
+}
+
+.timeline-note {
+  align-self: center;
+  max-width: min(520px, 82%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #6e6e73;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(60, 60, 67, 0.09);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+.message-row.assistant {
+  justify-content: flex-start;
 }
 
 .bubble {
@@ -267,14 +296,12 @@ button:disabled {
 
 .bubble.user {
   max-width: min(620px, 78%);
-  align-self: flex-end;
   color: #fff;
   background: #007aff;
   border-bottom-right-radius: 6px;
 }
 
 .bubble.assistant {
-  align-self: flex-start;
   color: #1d1d1f;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(60, 60, 67, 0.1);
@@ -393,11 +420,23 @@ button:disabled {
 }
 
 .composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
   flex: 0 0 auto;
-  padding: 16px 24px 24px;
+  padding: 10px 24px 22px;
+}
+
+.composer-panel {
+  display: flex;
+  min-height: 112px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(60, 60, 67, 0.13);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .composer textarea {
@@ -405,20 +444,93 @@ button:disabled {
   width: 100%;
   min-width: 0;
   max-height: 136px;
-  padding: 14px 16px;
-  border: 1px solid rgba(60, 60, 67, 0.14);
-  border-radius: 18px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 10px;
   outline: none;
   color: #1d1d1f;
-  background: rgba(255, 255, 255, 0.82);
+  background: transparent;
   line-height: 1.4;
   resize: none;
   overflow-y: auto;
 }
 
+.composer textarea::placeholder {
+  color: #8e8e93;
+}
+
 .composer textarea:focus {
-  border-color: rgba(0, 122, 255, 0.55);
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
+  box-shadow: none;
+}
+
+.composer-panel:focus-within {
+  border-color: rgba(0, 122, 255, 0.42);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.08),
+    0 0 0 4px rgba(0, 122, 255, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.ask-prompt {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0, 122, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.16);
+}
+
+.ask-prompt span {
+  display: block;
+  margin-bottom: 4px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ask-prompt p {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ask-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.composer .ask-options button {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  justify-content: center;
+  padding: 9px 12px;
+  border-radius: 12px;
+  color: #0066cc;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.18);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.composer .ask-options button:hover {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-tools {
+  display: flex;
+  gap: 6px;
 }
 
 .composer button,
@@ -432,18 +544,27 @@ button:disabled {
 
 .composer button {
   display: inline-flex;
-  width: 48px;
-  height: 48px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   padding: 0;
+  border-radius: 12px;
+  color: #6e6e73;
+  background: rgba(118, 118, 128, 0.12);
   transition:
     background 0.16s ease,
     opacity 0.16s ease;
 }
 
-.composer button.stop {
+.composer button.primary-action {
+  color: #fff;
+  background: #007aff;
+}
+
+.composer button.primary-action.stop {
   background: #ff3b30;
 }
 
@@ -539,6 +660,10 @@ button:disabled {
 
 .events li.observation {
   background: rgba(52, 199, 89, 0.1);
+}
+
+.events li.ask {
+  background: rgba(0, 122, 255, 0.08);
 }
 
 .events li.final,

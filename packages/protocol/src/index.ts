@@ -5,6 +5,7 @@ export type RiskLevel = 'safe' | 'write' | 'dangerous';
 export type RunStatus =
   | 'queued'
   | 'running'
+  | 'awaiting_user'
   | 'awaiting_approval'
   | 'completed'
   | 'failed'
@@ -37,6 +38,17 @@ export type Session = {
   metadata: Record<string, unknown>;
 };
 
+export type PendingAsk = {
+  ask_id: string;
+  call_id: string;
+  question: string;
+  options: Array<{
+    id: string;
+    label: string;
+  }>;
+  created_at: string;
+};
+
 export type Run = {
   id: string;
   session_id: string;
@@ -46,6 +58,7 @@ export type Run = {
   clients: Set<ServerResponse>;
   started_at: number;
   abort: boolean;
+  pending_ask?: PendingAsk;
 };
 
 export type RuntimeLimits = {
