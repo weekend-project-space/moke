@@ -15,6 +15,7 @@ type RunManagerConfig = {
   agent: ReactAgent;
   toolRegistry: ToolRegistry;
   workspace: string;
+  onChange?: () => void;
 };
 
 type RunOptions = {
@@ -58,6 +59,7 @@ export class RunManager {
     };
 
     this.config.runs.set(run.id, run);
+    this.config.onChange?.();
     void this.execute(run, session, content, options);
     return run;
   }
@@ -65,14 +67,21 @@ export class RunManager {
   private async execute(run: Run, session: Session, content: string, options: RunOptions) {
     let assistantMessageSaved = false;
     const eventBus = new EventBus(run, (event) => {
-      if (event.type !== 'agent.message.done') return;
+      if (event.type !== 'agent.message.done') {
+        this.config.onChange?.();
+        return;
+      }
 
       const message = readAssistantMessage(event);
-      if (!message) return;
+      if (!message) {
+        this.config.onChange?.();
+        return;
+      }
 
       session.messages.push(message);
       session.updated_at = message.created_at;
       assistantMessageSaved = true;
+      this.config.onChange?.();
     });
     const limits = {
       max_steps: options.max_steps || 6,
@@ -192,6 +201,7 @@ export class RunManager {
       session.updated_at = answerCreatedAt;
     }
 
+    this.config.onChange?.();
     pending.resolve(selected);
 
     return { status: 200 as const, run };
@@ -218,6 +228,7 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
+    this.config.onChange?.();
 
     return run;
   }

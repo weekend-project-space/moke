@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import {
   ReactAgent,
@@ -19,6 +20,7 @@ if (existsSync(envPath)) {
 }
 
 const port = Number(process.env.PORT || 4010);
+const statePath = process.env.MOKE_STATE_PATH || join(new URL('../..', import.meta.url).pathname, '.moke/state.json');
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
 const workspace = new URL('../..', import.meta.url).pathname;
@@ -27,12 +29,73 @@ const toolRegistry = new ToolRegistry()
   .register(createReadFileTool())
   .register(createAskUserTool());
 const agent = new ReactAgent();
+
+type StoredRun = Omit<Run, 'clients'>;
+
+type StoredState = {
+  sessions: Session[];
+  runs: StoredRun[];
+};
+
+function loadState() {
+  if (!existsSync(statePath)) return;
+
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, 'utf8')) as Partial<StoredState>;
+    for (const session of parsed.sessions || []) {
+      if (!session.id) continue;
+      sessions.set(session.id, session);
+    }
+
+    for (const storedRun of parsed.runs || []) {
+      if (!storedRun.id) continue;
+      const status = ['queued', 'running', 'awaiting_user', 'awaiting_approval'].includes(storedRun.status)
+        ? 'failed'
+        : storedRun.status;
+      runs.set(storedRun.id, {
+        ...storedRun,
+        status,
+        abort: status === 'failed' ? true : storedRun.abort,
+        pending_ask: undefined,
+        clients: new Set(),
+      });
+    }
+  } catch (error) {
+    console.warn(`Failed to load state from ${statePath}:`, error);
+  }
+}
+
+let saveTimer: NodeJS.Timeout | undefined;
+
+function saveStateSoon() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 80);
+}
+
+function saveState() {
+  saveTimer = undefined;
+  const state: StoredState = {
+    sessions: [...sessions.values()],
+    runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run),
+  };
+
+  try {
+    mkdirSync(dirname(statePath), { recursive: true });
+    writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  } catch (error) {
+    console.warn(`Failed to save state to ${statePath}:`, error);
+  }
+}
+
+loadState();
+
 const runManager = new RunManager({
   sessions,
   runs,
   agent,
   toolRegistry,
   workspace,
+  onChange: saveStateSoon,
 });
 
 function id(prefix: string) {
@@ -106,6 +169,7 @@ const server = http.createServer(async (req, res) => {
         metadata: typeof body.metadata === 'object' && body.metadata !== null ? body.metadata : {},
       };
       sessions.set(session.id, session);
+      saveStateSoon();
       return json(res, 200, { session });
     }
 

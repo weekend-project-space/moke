@@ -270,7 +270,7 @@ Choose an `ask_user` option:
 }
 ```
 
-Approve or reject a pending action:
+Future approval response:
 
 ```json
 {
@@ -463,7 +463,7 @@ timeout
 
 ### 6.8 approval.required
 
-Emitted when the Agent needs user approval before continuing.
+Future event emitted when the Agent needs user approval before continuing. This is not part of the current MVP because write and dangerous tools are delayed until approval policy exists.
 
 ```json
 {
@@ -646,7 +646,6 @@ agent.message.delta
 tool.call
 tool.result
 ask_user.required
-approval.required
 agent.done
 agent.error
 ```
