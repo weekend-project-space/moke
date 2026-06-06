@@ -305,8 +305,7 @@ Minimum endpoints:
 POST /api/sessions
 POST /api/sessions/:session_id/messages
 GET  /api/runs/:run_id/events
-POST /api/runs/:run_id/approve
-POST /api/runs/:run_id/cancel
+POST /api/runs/:run_id/respond
 ```
 
 Optional but useful:

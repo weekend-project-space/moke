@@ -192,11 +192,6 @@ export class RunManager {
       session.updated_at = answerCreatedAt;
     }
 
-    new EventBus(run).emit('ask_user.answered', {
-      ask_id: askId,
-      call_id: pendingAsk.call_id,
-      selected,
-    });
     pending.resolve(selected);
 
     return { status: 200 as const, run };

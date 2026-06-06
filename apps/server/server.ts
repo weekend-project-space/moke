@@ -191,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'approve') {
+    if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'respond') {
       const run = runs.get(parts[2]);
       if (!run) {
         return json(res, 404, {
@@ -199,54 +199,54 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      await readJson(req);
-      return json(res, 200, {
-        run_id: run.id,
-        approval_id: null,
-        status: 'accepted',
-      });
-    }
-
-    if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'answer') {
       const body = await readJson(req);
-      const askId = typeof body.ask_id === 'string' ? body.ask_id : '';
-      const optionId = typeof body.option_id === 'string' ? body.option_id : '';
+      const type = typeof body.type === 'string' ? body.type : '';
 
-      if (!askId || !optionId) {
-        return json(res, 400, {
-          error: { code: 'BAD_REQUEST', message: 'ask_id and option_id are required' },
+      if (type === 'choose') {
+        const requestId = typeof body.request_id === 'string' ? body.request_id : '';
+        const optionId = typeof body.option_id === 'string' ? body.option_id : '';
+
+        if (!requestId || !optionId) {
+          return json(res, 400, {
+            error: { code: 'BAD_REQUEST', message: 'request_id and option_id are required' },
+          });
+        }
+
+        const result = runManager.answer(run.id, requestId, optionId);
+        if (result.status !== 200) {
+          return json(res, result.status, {
+            error: {
+              code: result.status === 404 ? 'RUN_NOT_FOUND' : result.status === 400 ? 'BAD_REQUEST' : 'ASK_NOT_PENDING',
+              message: result.error,
+            },
+          });
+        }
+
+        return json(res, 200, {
+          run_id: result.run.id,
+          request_id: requestId,
+          status: result.run.status,
         });
       }
 
-      const result = runManager.answer(parts[2], askId, optionId);
-      if (result.status !== 200) {
-        return json(res, result.status, {
-          error: {
-            code: result.status === 404 ? 'RUN_NOT_FOUND' : result.status === 400 ? 'BAD_REQUEST' : 'ASK_NOT_PENDING',
-            message: result.error,
-          },
+      if (type === 'approve') {
+        return json(res, 200, {
+          run_id: run.id,
+          request_id: typeof body.request_id === 'string' ? body.request_id : null,
+          status: 'accepted',
         });
       }
 
-      return json(res, 200, {
-        run_id: result.run.id,
-        ask_id: askId,
-        status: result.run.status,
-      });
-    }
-
-    if (method === 'POST' && parts[0] === 'api' && parts[1] === 'runs' && parts[3] === 'cancel') {
-      const run = runs.get(parts[2]);
-      if (!run) {
-        return json(res, 404, {
-          error: { code: 'RUN_NOT_FOUND', message: 'Run not found' },
+      if (type === 'cancel') {
+        runManager.cancel(run.id);
+        return json(res, 200, {
+          run_id: run.id,
+          status: 'cancelled',
         });
       }
 
-      runManager.cancel(run.id);
-      return json(res, 200, {
-        run_id: run.id,
-        status: 'cancelled',
+      return json(res, 400, {
+        error: { code: 'BAD_REQUEST', message: 'type must be choose, approve, or cancel' },
       });
     }
 

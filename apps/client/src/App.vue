@@ -301,16 +301,6 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     }
   }
 
-  if (event.type === 'ask_user.answered') {
-    return {
-      id: event.id,
-      kind: 'observation',
-      title: 'User Answered',
-      detail: payload.ask_id || 'Answer submitted.',
-      meta,
-    }
-  }
-
   if (event.type === 'agent.message.done') {
     return {
       id: event.id,
@@ -482,7 +472,6 @@ function subscribe(eventsUrl: string) {
     'tool.call',
     'tool.result',
     'ask_user.required',
-    'ask_user.answered',
     'approval.required',
     'agent.done',
     'agent.error',
@@ -512,12 +501,6 @@ function subscribe(eventsUrl: string) {
         })
       }
 
-      if (event.type === 'ask_user.answered') {
-        pendingAsk.value = null
-        input.value = ''
-        void nextTick(resizeComposer)
-      }
-
       if (event.type === 'agent.message.done') {
         messages.value.push(event.payload.message)
         streamingText.value = ''
@@ -542,11 +525,12 @@ async function selectAskOption(option: AskOption) {
   const previousAsk = ask
   pendingAsk.value = null
 
-  const response = await fetch(`${apiBase}/api/runs/${runId.value}/answer`, {
+  const response = await fetch(`${apiBase}/api/runs/${runId.value}/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ask_id: ask.ask_id,
+      type: 'choose',
+      request_id: ask.ask_id,
       option_id: option.id,
     }),
   })
@@ -562,11 +546,12 @@ async function decideApproval(decision: 'approved' | 'rejected') {
   const approval = pendingApproval.value
   pendingApproval.value = null
 
-  await fetch(`${apiBase}/api/runs/${runId.value}/approve`, {
+  await fetch(`${apiBase}/api/runs/${runId.value}/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      approval_id: approval.approval_id,
+      type: 'approve',
+      request_id: approval.approval_id,
       decision,
       message: decision === 'rejected' ? 'User rejected the action' : undefined,
     }),
@@ -575,10 +560,10 @@ async function decideApproval(decision: 'approved' | 'rejected') {
 
 async function cancelRun() {
   if (!runId.value || !isRunning.value) return
-  await fetch(`${apiBase}/api/runs/${runId.value}/cancel`, {
+  await fetch(`${apiBase}/api/runs/${runId.value}/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason: 'User cancelled' }),
+    body: JSON.stringify({ type: 'cancel', reason: 'User cancelled' }),
   })
 }
 

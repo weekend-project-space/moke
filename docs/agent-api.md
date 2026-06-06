@@ -16,7 +16,7 @@ Client
 
 Default transport:
 
-- HTTP: create sessions, send messages, answer Agent questions, approve actions, cancel runs
+- HTTP: create sessions, send messages, respond to run requests
 - SSE: stream Agent runtime events
 - WebSocket: optional future replacement, using the same event schema
 
@@ -254,78 +254,38 @@ data: {"id":"evt_02","seq":2,"type":"agent.plan","run_id":"run_01HXX","session_i
 
 The client should reconnect with `Last-Event-ID` when the connection drops.
 
-### 4.6 Approve Run Action
+### 4.6 Respond to Run
 
 ```txt
-POST /api/runs/:run_id/approve
+POST /api/runs/:run_id/respond
 ```
 
-Request:
+Choose an `ask_user` option:
 
 ```json
 {
-  "approval_id": "apv_01",
-  "decision": "approved"
+  "type": "choose",
+  "request_id": "ask_01",
+  "option_id": "frontend"
 }
 ```
 
-Reject request:
+Approve or reject a pending action:
 
 ```json
 {
-  "approval_id": "apv_01",
+  "type": "approve",
+  "request_id": "apv_01",
   "decision": "rejected",
   "message": "Do not modify this file"
 }
 ```
 
-Response:
+Cancel the run:
 
 ```json
 {
-  "run_id": "run_01HXX",
-  "approval_id": "apv_01",
-  "status": "accepted"
-}
-```
-
-### 4.7 Answer Agent Question
-
-Resume a run that is waiting on `ask_user`.
-
-```txt
-POST /api/runs/:run_id/answer
-```
-
-Request:
-
-```json
-{
-  "ask_id": "ask_01",
-  "option_id": "frontend"
-}
-```
-
-Response:
-
-```json
-{
-  "run_id": "run_01HXX",
-  "ask_id": "ask_01",
-  "status": "running"
-}
-```
-
-### 4.8 Cancel Run
-
-```txt
-POST /api/runs/:run_id/cancel
-```
-
-Request:
-
-```json
-{
+  "type": "cancel",
   "reason": "User cancelled"
 }
 ```
@@ -335,7 +295,8 @@ Response:
 ```json
 {
   "run_id": "run_01HXX",
-  "status": "cancelled"
+  "request_id": "ask_01",
+  "status": "running"
 }
 ```
 
@@ -547,25 +508,7 @@ Emitted when the Agent needs the user to choose one option before continuing.
 }
 ```
 
-### 6.10 ask_user.answered
-
-Emitted after the client submits an answer.
-
-```json
-{
-  "type": "ask_user.answered",
-  "payload": {
-    "ask_id": "ask_01",
-    "call_id": "call_01",
-    "selected": {
-      "id": "frontend",
-      "label": "先检查前端"
-    }
-  }
-}
-```
-
-### 6.11 agent.done
+### 6.10 agent.done
 
 Emitted when the run completes.
 
@@ -583,7 +526,7 @@ Emitted when the run completes.
 }
 ```
 
-### 6.12 agent.error
+### 6.11 agent.error
 
 Emitted when the run fails.
 
@@ -666,7 +609,6 @@ function subscribeRun(eventsUrl: string, onEvent: (event: any) => void) {
     "tool.call",
     "tool.result",
     "ask_user.required",
-    "ask_user.answered",
     "approval.required",
     "agent.done",
     "agent.error"
@@ -692,9 +634,7 @@ Endpoints:
 POST /api/sessions
 POST /api/sessions/:session_id/messages
 GET  /api/runs/:run_id/events
-POST /api/runs/:run_id/answer
-POST /api/runs/:run_id/approve
-POST /api/runs/:run_id/cancel
+POST /api/runs/:run_id/respond
 ```
 
 Events:
@@ -706,7 +646,6 @@ agent.message.delta
 tool.call
 tool.result
 ask_user.required
-ask_user.answered
 approval.required
 agent.done
 agent.error
