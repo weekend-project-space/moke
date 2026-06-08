@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { LoadedSkill, SkillManifest } from './skill-types.js';
 
-const DEFAULT_SKILL_DIR = '.skills';
+const DEFAULT_SKILL_DIR = '.moke/skills';
 const SKILL_FILE = 'SKILL.md';
 
 export class SkillLoader {
