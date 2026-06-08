@@ -3,3 +3,25 @@ export { ReactAgent } from './react-agent.js';
 export { RunManager } from './run-manager.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
 export type { RuntimeTool, ToolContext } from './tool-registry.js';
+export type {
+  ExecutableSystemBackend,
+  SystemContentBlock,
+  SystemBackend,
+  SystemEditResult,
+  SystemExecuteOptions,
+  SystemExecuteResult,
+  SystemFileInfo,
+  SystemFileType,
+  SystemGlobOptions,
+  SystemGlobResult,
+  SystemGrepMatch,
+  SystemGrepMode,
+  SystemGrepOptions,
+  SystemGrepResult,
+  SystemLsResult,
+  SystemReadLine,
+  SystemReadOptions,
+  SystemReadResult,
+  SystemWriteResult,
+  WritableSystemBackend,
+} from './system-backend.js';

@@ -3,11 +3,23 @@ import http from 'node:http';
 import { join } from 'node:path';
 
 import {
+  type ExecutableSystemBackend,
   ReactAgent,
   RunManager,
   ToolRegistry,
 } from '../../packages/agent-runtime/src/index.js';
-import { createAskUserTool, createReadFileTool, createSearchTool } from '../../packages/agent-tools/src/index.js';
+import {
+  createAskUserTool,
+  createEditFileTool,
+  createExecuteTool,
+  createGlobTool,
+  createGrepTool,
+  createLsTool,
+  createReadFileTool,
+  createSearchTool,
+  createWriteFileTool,
+  LocalSystemBackend,
+} from '../../packages/agent-tools/src/index.js';
 import type { Run, Session } from '../../packages/protocol/src/index.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { createRoutes } from './routes.js';
@@ -32,11 +44,20 @@ export async function createApp(): Promise<ServerApp> {
   const sessions = new Map<string, Session>();
   const runs = new Map<string, Run>();
   const workspace = root;
+  const system = new LocalSystemBackend(workspace);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const toolRegistry = new ToolRegistry()
-    .register(createSearchTool())
-    .register(createReadFileTool())
+    .register(createLsTool(system))
+    .register(createGlobTool(system))
+    .register(createGrepTool(system))
+    .register(createSearchTool(system))
+    .register(createReadFileTool(system))
+    .register(createWriteFileTool(system))
+    .register(createEditFileTool(system))
     .register(createAskUserTool());
+  if (isExecutableSystemBackend(system)) {
+    toolRegistry.register(createExecuteTool(system));
+  }
 
   loadState({ statePath, sessions, runs });
 
@@ -67,4 +88,8 @@ export async function createApp(): Promise<ServerApp> {
       await mcpManager?.close();
     },
   };
+}
+
+function isExecutableSystemBackend(system: unknown): system is ExecutableSystemBackend {
+  return typeof system === 'object' && system !== null && 'execute' in system;
 }

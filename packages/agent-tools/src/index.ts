@@ -1,3 +1,10 @@
 export { createAskUserTool } from './ask-user.js';
+export { createEditFileTool } from './edit-file.js';
+export { createExecuteTool } from './execute.js';
+export { createGlobTool } from './glob.js';
+export { createGrepTool } from './grep.js';
+export { createLsTool } from './ls.js';
+export { LocalSystemBackend } from './local-system-backend.js';
 export { createReadFileTool } from './read-file.js';
 export { createSearchTool } from './search.js';
+export { createWriteFileTool } from './write-file.js';
