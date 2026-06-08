@@ -1,0 +1,8 @@
+{
+  "package": {
+    "name": "moke",
+    "version": "0.1.0",
+    "private": true
+  },
+  "tools": {}
+}

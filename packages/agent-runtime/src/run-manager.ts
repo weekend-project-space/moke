@@ -86,8 +86,8 @@ export class RunManager {
       this.config.onChange?.();
     });
     const limits = {
-      max_steps: options.max_steps || 6,
-      max_tool_calls: options.max_tool_calls || 8,
+      max_steps: options.max_steps || 999,
+      max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
     const history = session.messages.slice(0, -1).slice(-12);

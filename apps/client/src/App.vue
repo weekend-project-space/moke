@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Mic, Paperclip, PanelRightClose, PanelRightOpen, SendHorizontal, Square, Wrench } from 'lucide-vue-next'
+import { PanelRightClose, PanelRightOpen, Plus, SendHorizontal, Square } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
@@ -64,7 +64,7 @@ const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
 
 const sessionId = ref('')
 const runId = ref('')
-const input = ref('检查当前项目，并告诉我下一步应该做什么')
+const input = ref('')
 const messages = ref<Message[]>([])
 const sessions = ref<SessionSummary[]>([])
 const events = ref<AgentEvent[]>([])
@@ -81,6 +81,64 @@ const sortedSessions = computed(() =>
 )
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value?.preview || currentSession.value?.title || '新会话')
+const sessionSubtitle = computed(() => {
+  if (isRunning.value) return 'Moke 正在处理'
+  if (pendingAsk.value) return '需要你的补充'
+  if (pendingApproval.value) return '等待你的确认'
+  return messages.value.length > 0 ? '继续这次对话' : '准备开始'
+})
+const serverStatusLabel = computed(() => {
+  const labels = {
+    checking: '连接中',
+    online: '服务在线',
+    offline: '服务离线',
+  }
+
+  return labels[serverStatus.value]
+})
+const approvalTool = computed(() => pendingApproval.value?.action?.tool || '待确认操作')
+const approvalRisk = computed(() => pendingApproval.value?.risk || '需要确认')
+const toolLabels: Record<string, string> = {
+  apply_patch: '编辑内容',
+  bash: '运行命令',
+  cat: '读取文件',
+  exec_command: '运行命令',
+  find: '查找内容',
+  grep: '查找内容',
+  ls: '浏览文件',
+  npm: '运行检查',
+  rg: '查找内容',
+  sed: '读取片段',
+  view_image: '查看图片',
+}
+const recentToolNames = computed(() => {
+  const names: string[] = []
+
+  for (const event of [...events.value].reverse()) {
+    if (event.type !== 'tool.call') continue
+
+    const rawName = String(event.payload.tool || '').trim()
+    const name = toolLabels[rawName] || rawName
+    if (!name || names.includes(name)) continue
+
+    names.push(name)
+  }
+
+  return names
+})
+const toolSummary = computed(() => {
+  const visible = recentToolNames.value.slice(0, 2)
+  const hiddenCount = recentToolNames.value.length - visible.length
+  if (visible.length === 0) return ''
+
+  return `${visible.join(', ')}${hiddenCount > 0 ? ` +${hiddenCount}` : ''}`
+})
+const runSummary = computed(() => {
+  if (pendingApproval.value) return `等待确认 · ${toolLabels[approvalTool.value] || approvalTool.value}`
+  if (pendingAsk.value) return '等待补充'
+  if (toolSummary.value) return `${isRunning.value ? '正在处理' : '刚刚处理'} · ${toolSummary.value}`
+  return '查看动态'
+})
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
   let lastTime = 0
@@ -108,7 +166,7 @@ const displayItems = computed<DisplayItem[]>(() => {
 const timelineNote = computed(() => {
   if (serverStatus.value === 'checking') return '正在连接本地服务'
   if (serverStatus.value === 'offline') return '本地服务离线'
-  if (pendingAsk.value) return 'Agent 正在等待你的补充'
+  if (pendingAsk.value) return 'Moke 正在等待你的补充'
   if (pendingApproval.value) return '需要你确认后继续执行'
   if (isRunning.value) return 'Moke 正在思考和执行'
   if (messages.value.length === 0) return '开始一个新任务'
@@ -150,7 +208,15 @@ function sessionLabel(session: SessionSummary) {
 
 function sessionMeta(session: SessionSummary) {
   const count = session.message_count || 0
-  return count > 0 ? `${count} 条消息` : session.id
+  const updated = formatSessionTime(session.updated_at)
+  return count > 0 ? `${count} 条消息 · ${updated}` : updated
+}
+
+function formatSessionTime(value: string) {
+  const time = Date.parse(value)
+  if (Number.isNaN(time)) return '刚刚'
+
+  return formatTimelineTime(time)
 }
 
 function parseMessageTime(message: Message) {
@@ -200,7 +266,7 @@ function compactJson(value: unknown) {
 }
 
 function summarizeOutput(output: Record<string, any> | undefined) {
-  if (!output) return 'Tool finished.'
+  if (!output) return '已完成'
   if (output.error) return String(output.error)
 
   if (Array.isArray(output.matches)) {
@@ -227,8 +293,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'input',
-      title: 'Request',
-      detail: payload.input || 'Run started.',
+      title: '开始处理',
+      detail: payload.input || 'Moke 已开始处理',
       meta,
     }
   }
@@ -237,17 +303,17 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'plan',
-      title: 'ReAct Runtime',
-      detail: `${payload.planner || 'llm'} · ${(payload.tools || []).join(', ')}`,
+      title: '整理步骤',
+      detail: `${payload.planner || '智能规划'} · ${(payload.tools || []).join(', ')}`,
       meta,
     }
   }
 
   if (event.type === 'agent.state') {
     const labels: Record<string, string> = {
-      reason: 'Choosing next action',
-      act: 'Running tool',
-      respond: 'Writing final answer',
+      reason: '正在判断下一步',
+      act: '正在处理',
+      respond: '正在整理回复',
     }
     return {
       id: event.id,
@@ -265,7 +331,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'tool',
-      title: `Tool: ${payload.tool}`,
+      title: toolLabels[payload.tool] || '正在处理',
       detail: compactJson(payload.input || {}),
       meta: sourceMeta,
     }
@@ -275,7 +341,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: payload.status === 'ok' ? 'observation' : 'error',
-      title: payload.status === 'ok' ? 'Observation' : 'Tool Error',
+      title: payload.status === 'ok' ? '完成一步' : '处理失败',
       detail: summarizeOutput(payload.output),
       meta: `${payload.duration_ms || 0}ms`,
     }
@@ -285,7 +351,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'approval',
-      title: 'Approval Required',
+      title: '等待确认',
       detail: payload.reason || 'Waiting for user decision.',
       meta,
     }
@@ -295,8 +361,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'ask',
-      title: 'Waiting for User',
-      detail: payload.question || 'Agent needs more information.',
+      title: '需要补充',
+      detail: payload.question || 'Moke 需要更多信息',
       meta,
     }
   }
@@ -305,8 +371,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'final',
-      title: 'Final Answer',
-      detail: payload.message?.content || 'Answer completed.',
+      title: '回复完成',
+      detail: payload.message?.content || '已完成回复',
       meta,
     }
   }
@@ -315,7 +381,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'done',
-      title: 'Run Finished',
+      title: '任务完成',
       detail: `${payload.status || 'completed'} · ${payload.usage?.tool_calls || 0} tool calls`,
       meta,
     }
@@ -325,8 +391,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'error',
-      title: 'Run Error',
-      detail: payload.message || 'Unknown error',
+      title: '遇到问题',
+      detail: payload.message || '未知问题',
       meta,
     }
   }
@@ -361,7 +427,7 @@ async function createSession() {
   const response = await fetch(`${apiBase}/api/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Moke Agent' }),
+    body: JSON.stringify({ title: 'Moke 对话' }),
   })
   const data = await response.json()
   sessionId.value = data.session.id
@@ -570,8 +636,9 @@ async function cancelRun() {
 onMounted(async () => {
   if (await checkServer()) {
     await loadSessions()
-    if (sessions.value[0]) {
-      await selectSession(sessions.value[0].id)
+    const latestSession = sortedSessions.value[0]
+    if (latestSession) {
+      await selectSession(latestSession.id)
     } else {
       await createSession()
     }
@@ -582,23 +649,20 @@ onMounted(async () => {
 <template>
   <main class="shell" :class="{ 'trace-collapsed': traceCollapsed }">
     <aside class="sidebar">
-      <div class="traffic-lights" aria-hidden="true">
-        <span class="red"></span>
-        <span class="yellow"></span>
-        <span class="green"></span>
-      </div>
       <section class="brand">
-        <p>Local Agent</p>
+        <p>AI Assistant</p>
         <h1>Moke</h1>
+        <span>{{ sortedSessions.length }} 个最近对话</span>
       </section>
 
       <button class="new-session" type="button" :disabled="serverStatus !== 'online' || isRunning"
         @click="startNewSession">
+        <Plus :size="17" stroke-width="2.2" />
         新建会话
       </button>
 
       <section class="session-list">
-        <p>会话</p>
+        <p>最近对话</p>
         <button v-for="session in sortedSessions" :key="session.id" class="session"
           :class="{ active: session.id === sessionId }" type="button" :disabled="isRunning"
           @click="selectSession(session.id)">
@@ -612,11 +676,16 @@ onMounted(async () => {
       <header class="topbar">
         <div>
           <h2>{{ currentTitle }}</h2>
-          <p>{{ sessionId || '未创建会话' }}</p>
+          <p>{{ sessionSubtitle }}</p>
         </div>
+        <button class="trace-summary" type="button" :class="{ attention: pendingApproval || pendingAsk }"
+          :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
+          @click="traceCollapsed = !traceCollapsed">
+          {{ runSummary }}
+        </button>
         <span class="server-pill" :class="serverStatus">
           <i aria-hidden="true"></i>
-          {{ serverStatus }}
+          {{ serverStatusLabel }}
         </span>
         <button class="ghost icon-button" type="button" :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
           :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" @click="traceCollapsed = !traceCollapsed">
@@ -624,6 +693,17 @@ onMounted(async () => {
           <PanelRightClose v-else :size="18" stroke-width="2.2" />
         </button>
       </header>
+
+      <section v-if="pendingApproval" class="approval approval-banner">
+        <div>
+          <p>{{ pendingApproval.reason }}</p>
+          <span>{{ approvalTool }} · {{ approvalRisk }}</span>
+        </div>
+        <menu>
+          <button type="button" @click="decideApproval('approved')">允许</button>
+          <button type="button" class="secondary" @click="decideApproval('rejected')">拒绝</button>
+        </menu>
+      </section>
 
       <div class="conversation">
         <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
@@ -647,7 +727,7 @@ onMounted(async () => {
       </div>
 
       <form class="composer" @submit.prevent="handlePrimaryAction">
-        <div class="composer-panel">
+        <div class="composer-panel" :class="{ 'input-mode': !pendingAsk }">
           <div v-if="pendingAsk" class="ask-prompt">
             <span>需要补充</span>
             <p>{{ pendingAsk.question }}</p>
@@ -658,20 +738,10 @@ onMounted(async () => {
               </button>
             </div>
           </div>
-          <textarea v-else v-model="input" ref="composerInput" rows="1" placeholder="告诉 Agent 要做什么..."
+          <textarea v-else v-model="input" ref="composerInput" rows="1" placeholder="今天想让 Moke 帮你做什么？"
             @input="handleInput" @keydown.enter="sendOnEnter"></textarea>
           <div v-if="!pendingAsk" class="composer-toolbar">
-            <div class="composer-tools">
-              <button type="button" disabled aria-label="附件" title="附件">
-                <Paperclip :size="17" stroke-width="2.1" />
-              </button>
-              <button type="button" disabled aria-label="工具" title="工具">
-                <Wrench :size="17" stroke-width="2.1" />
-              </button>
-              <button type="button" disabled aria-label="语音" title="语音">
-                <Mic :size="17" stroke-width="2.1" />
-              </button>
-            </div>
+            <span class="composer-hint">Enter 发送 · Shift Enter 换行</span>
             <button class="primary-action" type="submit" :class="{ stop: primaryIsStop }" :disabled="primaryDisabled"
               :aria-label="primaryIsStop ? '停止运行' : '发送消息'" :title="primaryIsStop ? '停止运行' : '发送消息'">
               <Square v-if="primaryIsStop" :size="16" fill="currentColor" stroke-width="2.2" />
@@ -684,18 +754,9 @@ onMounted(async () => {
 
     <aside class="trace">
       <header>
-        <p>Run Trace</p>
-        <strong>{{ events.length }} events</strong>
+        <p>动态</p>
+        <strong>{{ toolSummary || '暂无动态' }}</strong>
       </header>
-
-      <section v-if="pendingApproval" class="approval">
-        <p>{{ pendingApproval.reason }}</p>
-        <span>{{ pendingApproval.action.tool }} · {{ pendingApproval.risk }}</span>
-        <div>
-          <button type="button" @click="decideApproval('approved')">Approve</button>
-          <button type="button" class="secondary" @click="decideApproval('rejected')">Reject</button>
-        </div>
-      </section>
 
       <ol class="events">
         <li v-for="step in traceSteps" :key="step.id" :class="step.kind">

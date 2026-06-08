@@ -207,8 +207,8 @@ Request:
   },
   "options": {
     "stream": true,
-    "max_steps": 6,
-    "max_tool_calls": 8,
+    "max_steps": 999,
+    "max_tool_calls": 99,
     "timeout_ms": 120000
   }
 }
@@ -714,8 +714,8 @@ async function sendMessage(sessionId: string, content: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: { role: "user", content },
-      options: { stream: true, max_steps: 6 }
-    })
+      options: { stream: true, max_steps: 999 },
+    }),
   });
 
   return response.json();
@@ -739,7 +739,7 @@ function subscribeRun(eventsUrl: string, onEvent: (event: any) => void) {
     "ask_user.required",
     "approval.required",
     "agent.done",
-    "agent.error"
+    "agent.error",
   ];
 
   for (const type of eventTypes) {
@@ -782,7 +782,7 @@ agent.error
 Hard runtime limits:
 
 ```txt
-max_steps       default 6
-max_tool_calls  default 8
+max_steps       default 99
+max_tool_calls  default 99
 timeout_ms      default 120000
 ```

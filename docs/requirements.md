@@ -131,8 +131,8 @@ reason -> act -> reason -> act -> respond
 Hard limits must exist from the first version:
 
 ```txt
-max_steps       default 6
-max_tool_calls  default 8
+max_steps       default 999
+max_tool_calls  default 99
 timeout_ms      default 120000
 ```
 
