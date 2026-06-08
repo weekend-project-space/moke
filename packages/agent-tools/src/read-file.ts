@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 
-import type { RuntimeTool } from '../tool-registry.js';
+import type { RuntimeTool } from '../../agent-runtime/src/index.js';
 
 function resolveWorkspacePath(workspace: string, requestedPath: string) {
   const fullPath = path.resolve(workspace, requestedPath);

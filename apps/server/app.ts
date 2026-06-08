@@ -6,10 +6,8 @@ import {
   ReactAgent,
   RunManager,
   ToolRegistry,
-  createAskUserTool,
-  createReadFileTool,
-  createSearchTool,
 } from '../../packages/agent-runtime/src/index.js';
+import { createAskUserTool, createReadFileTool, createSearchTool } from '../../packages/agent-tools/src/index.js';
 import type { Run, Session } from '../../packages/protocol/src/index.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { createRoutes } from './routes.js';

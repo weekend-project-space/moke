@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 
-import type { RuntimeTool } from '../tool-registry.js';
+import type { RuntimeTool } from '../../agent-runtime/src/index.js';
 
 const MAX_FILES = 80;
 const MAX_RESULTS = 20;

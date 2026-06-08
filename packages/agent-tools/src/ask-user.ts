@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool } from '../tool-registry.js';
+import type { RuntimeTool } from '../../agent-runtime/src/index.js';
 
 const askUserSchema = z.object({
   question: z.string().min(1),
