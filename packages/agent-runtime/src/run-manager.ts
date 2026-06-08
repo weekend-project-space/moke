@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Message, Run, Session } from '../../protocol/src/index.js';
 import { EventBus } from './event-bus.js';
 import type { ReactAgent } from './react-agent.js';
+import type { RuntimeContentManager } from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 function id(prefix: string) {
@@ -15,6 +16,7 @@ type RunManagerConfig = {
   agent: ReactAgent;
   toolRegistry: ToolRegistry;
   workspace: string;
+  createSkillContentManager?: () => RuntimeContentManager;
   onChange?: () => void;
 };
 
@@ -89,6 +91,7 @@ export class RunManager {
       timeout_ms: options.timeout_ms || 120000,
     };
     const history = session.messages.slice(0, -1).slice(-12);
+    const contentManager = this.config.createSkillContentManager?.();
 
     try {
       const result = await this.config.agent.run({
@@ -98,6 +101,7 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: this.config.workspace,
+          contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
         },
         limits,

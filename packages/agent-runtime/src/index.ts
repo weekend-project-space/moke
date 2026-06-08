@@ -2,7 +2,8 @@ export { EventBus } from './event-bus.js';
 export { ReactAgent } from './react-agent.js';
 export { RunManager } from './run-manager.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
-export type { RuntimeTool, ToolContext } from './tool-registry.js';
+export type { RuntimeContentManager, ToolContext } from './tool-context.js';
+export type { RuntimeTool } from './tool-registry.js';
 export type {
   ExecutableSystemBackend,
   SystemContentBlock,

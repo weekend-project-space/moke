@@ -20,6 +20,12 @@ import {
   createWriteFileTool,
   LocalSystemBackend,
 } from '../../packages/agent-tools/src/index.js';
+import {
+  ContentManager,
+  createListSkillsTool,
+  createReadSkillTool,
+  SkillLoader,
+} from '../../packages/agent-skills/src/index.js';
 import type { Run, Session } from '../../packages/protocol/src/index.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { createRoutes } from './routes.js';
@@ -45,8 +51,11 @@ export async function createApp(): Promise<ServerApp> {
   const runs = new Map<string, Run>();
   const workspace = root;
   const system = new LocalSystemBackend(workspace);
+  const skillLoader = new SkillLoader(workspace);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const toolRegistry = new ToolRegistry()
+    .register(createListSkillsTool(skillLoader))
+    .register(createReadSkillTool(skillLoader))
     .register(createLsTool(system))
     .register(createGlobTool(system))
     .register(createGrepTool(system))
@@ -68,6 +77,7 @@ export async function createApp(): Promise<ServerApp> {
     agent: new ReactAgent(),
     toolRegistry,
     workspace,
+    createSkillContentManager: () => new ContentManager(),
     onChange: stateSaver.saveStateSoon,
   });
   const server = http.createServer(

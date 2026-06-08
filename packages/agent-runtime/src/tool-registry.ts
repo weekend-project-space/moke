@@ -1,15 +1,7 @@
 import { z } from 'zod';
 
 import type { RiskLevel } from '../../protocol/src/index.js';
-
-export type ToolContext = {
-  workspace: string;
-  askUser?: (input: {
-    callId: string;
-    question: string;
-    options: Array<{ id: string; label: string }>;
-  }) => Promise<{ id: string; label: string }>;
-};
+import type { ToolContext } from './tool-context.js';
 
 export type RuntimeTool<TInput extends z.ZodType = z.ZodType> = {
   name: string;

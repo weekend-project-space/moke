@@ -6,7 +6,8 @@ import { tool } from 'langchain';
 import type { Message, RuntimeLimits } from '../../protocol/src/index.js';
 import type { EventBus } from './event-bus.js';
 import { createChatModel, withTimeout } from './llm-client.js';
-import { ToolExecutionError, type ToolContext, type ToolRegistry } from './tool-registry.js';
+import type { ToolContext } from './tool-context.js';
+import { ToolExecutionError, type ToolRegistry } from './tool-registry.js';
 
 type AgentRunInput = {
   input: string;
@@ -24,6 +25,13 @@ type AgentRunResult = {
 
 function createSystemPrompt(customTools: ReturnType<ToolRegistry['list']>) {
   const customToolList = customTools.map((tool) => `${tool.name}: ${tool.description}`).join('\n');
+  const skillGuidance = customTools.some((tool) => tool.name === 'list_skills' || tool.name === 'read_skill')
+    ? `
+Skills:
+- For code review, implementation planning, frontend design, MCP work, or other specialized tasks, call list_skills before inspecting files.
+- If list_skills returns a relevant skill, call read_skill to activate it before continuing with specialized work.
+- Do not read skills for greetings, small talk, or simple direct answers.`
+    : '';
 
   return `You are Moke, a local-first ReAct agent.
 
@@ -34,6 +42,7 @@ Do not include hidden reasoning, chain-of-thought, or <think> blocks.
 
 Available tools:
 ${customToolList || 'None'}
+${skillGuidance}
 
 Guidelines:
 - Prefer Chinese when the user writes Chinese.
@@ -41,6 +50,14 @@ Guidelines:
 - Use ask_user only when you cannot continue without a user decision; ask one concise question and provide 2 to 5 short options.
 - After receiving observations, produce a final answer when you have enough information.
 - Never invent file contents you did not observe.`;
+}
+
+function createSystemMessage(runtimeTools: ReturnType<ToolRegistry['list']>, context: ToolContext) {
+  const basePrompt = createSystemPrompt(runtimeTools);
+  const extraContext = context.contentManager?.buildContext();
+  if (!extraContext) return new SystemMessage(basePrompt);
+
+  return new SystemMessage(`${basePrompt}\n\n${extraContext}`);
 }
 
 function createFinalMessage(content: string): Message {
@@ -94,7 +111,7 @@ export class ReactAgent {
     );
     const modelWithTools = tools.length > 0 ? model.bindTools(tools) : model;
     const messages: BaseMessage[] = [
-      new SystemMessage(createSystemPrompt(runtimeTools)),
+      createSystemMessage(runtimeTools, context),
       ...createHistoryMessages(history),
       new HumanMessage(input),
     ];
@@ -111,6 +128,7 @@ export class ReactAgent {
 
     for (let step = 0; step < limits.max_steps; step++) {
       eventBus.emit('agent.state', { state: 'reason' });
+      messages[0] = createSystemMessage(runtimeTools, context);
 
       const aiMessage = await withTimeout(modelWithTools.invoke(messages), timeoutMs);
       messages.push(aiMessage);
