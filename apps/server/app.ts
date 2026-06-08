@@ -9,7 +9,6 @@ import {
   ToolRegistry,
 } from '../../packages/agent-runtime/src/index.js';
 import {
-  createAskUserTool,
   createEditFileTool,
   createExecuteTool,
   createGlobTool,
@@ -62,8 +61,7 @@ export async function createApp(): Promise<ServerApp> {
     .register(createSearchTool(system))
     .register(createReadFileTool(system))
     .register(createWriteFileTool(system))
-    .register(createEditFileTool(system))
-    .register(createAskUserTool());
+    .register(createEditFileTool(system));
   if (isExecutableSystemBackend(system)) {
     toolRegistry.register(createExecuteTool(system));
   }

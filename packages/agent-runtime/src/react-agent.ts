@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
+import { z } from 'zod';
 
 import type { Message, RuntimeLimits } from '../../protocol/src/index.js';
 import type { EventBus } from './event-bus.js';
@@ -23,7 +24,46 @@ type AgentRunResult = {
   message: Message;
 };
 
-function createSystemPrompt(customTools: ReturnType<ToolRegistry['list']>) {
+const FINISH_TOOL_NAME = 'finish';
+const ASK_USER_TOOL_NAME = 'ask_user';
+const finishSchema = z.object({
+  content: z.string().min(1),
+});
+const askUserSchema = z.object({
+  question: z.string().min(1),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1).optional(),
+        label: z.string().min(1),
+      }),
+    )
+    .min(2)
+    .max(5),
+});
+
+type RuntimeToolSpec = ReturnType<ToolRegistry['list']>[number];
+type AgentToolSpec = RuntimeToolSpec & {
+  control?: true;
+};
+
+const finishTool: AgentToolSpec = {
+  name: FINISH_TOOL_NAME,
+  description: 'Finish the current agent run with the final answer. Call this when you have enough information to respond.',
+  risk: 'safe',
+  schema: finishSchema,
+  control: true,
+};
+
+const askUserTool: AgentToolSpec = {
+  name: ASK_USER_TOOL_NAME,
+  description: 'Pause the current run to ask the user one question with 2 to 5 concrete options.',
+  risk: 'safe',
+  schema: askUserSchema,
+  control: true,
+};
+
+function createSystemPrompt(customTools: AgentToolSpec[]) {
   const customToolList = customTools.map((tool) => `${tool.name}: ${tool.description}`).join('\n');
   const skillGuidance = customTools.some((tool) => tool.name === 'list_skills' || tool.name === 'read_skill')
     ? `
@@ -35,8 +75,9 @@ Skills:
 
   return `You are Moke, a local-first ReAct agent.
 
-You may either answer directly or request one tool call at a time.
-Do not call tools for greetings, small talk, or self-introduction.
+You may answer directly when no tool is needed.
+If you have used any tool observation in this run, only calling finish ends the current run.
+Do not call project tools for greetings, small talk, or self-introduction; answer directly.
 Use tools only when the user asks about project files, code, docs, or local context.
 Do not include hidden reasoning, chain-of-thought, or <think> blocks.
 
@@ -48,11 +89,11 @@ Guidelines:
 - Prefer Chinese when the user writes Chinese.
 - For repository search, use short file or repository keywords: README, docs, requirements, agent, server, client, runtime, package, tauri, vue.
 - Use ask_user only when you cannot continue without a user decision; ask one concise question and provide 2 to 5 short options.
-- After receiving observations, produce a final answer when you have enough information.
+- After receiving observations, call finish when you have enough information.
 - Never invent file contents you did not observe.`;
 }
 
-function createSystemMessage(runtimeTools: ReturnType<ToolRegistry['list']>, context: ToolContext) {
+function createSystemMessage(runtimeTools: AgentToolSpec[], context: ToolContext) {
   const basePrompt = createSystemPrompt(runtimeTools);
   const extraContext = context.contentManager?.buildContext();
   if (!extraContext) return new SystemMessage(basePrompt);
@@ -87,6 +128,29 @@ function isAI(message: BaseMessage): message is AIMessage {
   return AIMessage.isInstance(message);
 }
 
+function createFinishReminder(aiMessage: BaseMessage) {
+  const content = getMessageText(aiMessage).trim();
+  const answer = content ? ` Use this answer as finish.content if it is already complete: ${JSON.stringify(content)}` : '';
+  return new SystemMessage(`You must call the ${FINISH_TOOL_NAME} tool to end this run.${answer}`);
+}
+
+function readFinishContent(input: unknown) {
+  const result = finishSchema.safeParse(input);
+  if (result.success) return result.data.content.trim();
+
+  throw new ToolExecutionError('Finish input invalid', {
+    error: {
+      code: 'FINISH_INPUT_INVALID',
+      message: z.prettifyError(result.error),
+      tool: FINISH_TOOL_NAME,
+    },
+  });
+}
+
+function isControlTool(name: string) {
+  return name === FINISH_TOOL_NAME || name === ASK_USER_TOOL_NAME;
+}
+
 export class ReactAgent {
   async run({ input, history = [], eventBus, toolRegistry, context, limits }: AgentRunInput): Promise<AgentRunResult> {
     if (!process.env.OPENAI_API_KEY) {
@@ -95,10 +159,18 @@ export class ReactAgent {
 
     const model = createChatModel();
     const timeoutMs = limits.timeout_ms || Number(process.env.OPENAI_TIMEOUT_MS || 15000);
-    const runtimeTools = toolRegistry.list();
+    const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
+    const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
     const tools = runtimeTools.map((runtimeTool) =>
       tool(
         async (toolInput) => {
+          if (runtimeTool.name === FINISH_TOOL_NAME) {
+            return JSON.stringify({ status: 'finished', content: readFinishContent(toolInput) });
+          }
+          if (runtimeTool.name === ASK_USER_TOOL_NAME) {
+            return JSON.stringify({ status: 'awaiting_user' });
+          }
+
           const output = await toolRegistry.execute(runtimeTool.name, toolInput, context);
           return JSON.stringify(output);
         },
@@ -117,6 +189,7 @@ export class ReactAgent {
     ];
     let toolCalls = 0;
     let finalContent = '';
+    let hasObservation = false;
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
@@ -135,19 +208,27 @@ export class ReactAgent {
 
       const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
       if (calls.length === 0) {
-        finalContent = getMessageText(aiMessage).trim();
-        break;
+        const content = getMessageText(aiMessage).trim();
+        if (!hasObservation) {
+          finalContent = content || '我暂时没有更多可补充的信息。';
+          break;
+        }
+
+        messages.push(createFinishReminder(aiMessage));
+        continue;
       }
 
       eventBus.emit('agent.state', { state: 'act' });
       for (const call of calls) {
-        if (toolCalls >= limits.max_tool_calls) {
+        const isFinishCall = call.name === FINISH_TOOL_NAME;
+        const isControlCall = isControlTool(call.name);
+        if (!isControlCall && toolCalls >= limits.max_tool_calls) {
           throw new Error('Maximum tool calls exceeded');
         }
 
-        toolCalls++;
+        if (!isControlCall) toolCalls++;
         const callId = call.id || `call_${randomUUID().slice(0, 8)}`;
-        const runtimeTool = toolRegistry.get(call.name);
+        const runtimeTool = toolSpecs.get(call.name);
         eventBus.emit('tool.call', {
           call_id: callId,
           tool: call.name,
@@ -158,10 +239,33 @@ export class ReactAgent {
 
         const startedAt = Date.now();
         try {
+          if (isFinishCall) {
+            finalContent = readFinishContent(call.args || {});
+            const output = {
+              status: 'finished',
+              content: finalContent,
+            };
+
+            eventBus.emit('tool.result', {
+              call_id: callId,
+              status: 'ok',
+              duration_ms: Date.now() - startedAt,
+              output,
+            });
+            messages.push(
+              new ToolMessage({
+                content: JSON.stringify(output),
+                tool_call_id: callId,
+              }),
+            );
+            break;
+          }
+
           const output =
-            call.name === 'ask_user'
+            call.name === ASK_USER_TOOL_NAME
               ? await this.askUser(call.args || {}, callId, context)
               : await toolRegistry.execute(call.name, call.args || {}, context);
+          hasObservation = true;
 
           eventBus.emit('tool.result', {
             call_id: callId,
@@ -201,9 +305,15 @@ export class ReactAgent {
           );
         }
       }
+
+      if (finalContent) break;
     }
 
-    const content = finalContent || '我暂时没有更多可补充的信息。';
+    if (!finalContent) {
+      throw new Error(`Agent did not call ${FINISH_TOOL_NAME} before reaching the step limit`);
+    }
+
+    const content = finalContent;
     const message = createFinalMessage(content);
     eventBus.emit('agent.state', { state: 'respond' });
     eventBus.emit('agent.message.delta', { content });
