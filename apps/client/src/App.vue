@@ -50,15 +50,15 @@ type TraceStep = {
 
 type DisplayItem =
   | {
-      type: 'time'
-      id: string
-      label: string
-    }
+    type: 'time'
+    id: string
+    label: string
+  }
   | {
-      type: 'message'
-      id: string
-      message: Message
-    }
+    type: 'message'
+    id: string
+    message: Message
+  }
 
 const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
 
@@ -208,16 +208,13 @@ function summarizeOutput(output: Record<string, any> | undefined) {
     const preview =
       structured.length > 0
         ? structured
-            .slice(0, 3)
-            .map((match) => `${match.path}${match.line ? `:${match.line}` : ''}`)
-            .join(', ')
+          .slice(0, 3)
+          .map((match) => `${match.path}${match.line ? `:${match.line}` : ''}`)
+          .join(', ')
         : output.matches.slice(0, 3).join(', ')
     return `${output.count ?? output.matches.length} matches${preview ? `: ${preview}` : ''}`
   }
 
-  if (output.path) {
-    return `Read ${output.path}${output.truncated ? ' (truncated)' : ''}`
-  }
 
   return compactJson(output).slice(0, 180)
 }
@@ -595,21 +592,16 @@ onMounted(async () => {
         <h1>Moke</h1>
       </section>
 
-      <button class="new-session" type="button" :disabled="serverStatus !== 'online' || isRunning" @click="startNewSession">
+      <button class="new-session" type="button" :disabled="serverStatus !== 'online' || isRunning"
+        @click="startNewSession">
         新建会话
       </button>
 
       <section class="session-list">
         <p>会话</p>
-        <button
-          v-for="session in sortedSessions"
-          :key="session.id"
-          class="session"
-          :class="{ active: session.id === sessionId }"
-          type="button"
-          :disabled="isRunning"
-          @click="selectSession(session.id)"
-        >
+        <button v-for="session in sortedSessions" :key="session.id" class="session"
+          :class="{ active: session.id === sessionId }" type="button" :disabled="isRunning"
+          @click="selectSession(session.id)">
           <span>{{ sessionLabel(session) }}</span>
           <small>{{ sessionMeta(session) }}</small>
         </button>
@@ -626,13 +618,8 @@ onMounted(async () => {
           <i aria-hidden="true"></i>
           {{ serverStatus }}
         </span>
-        <button
-          class="ghost icon-button"
-          type="button"
-          :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
-          :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
-          @click="traceCollapsed = !traceCollapsed"
-        >
+        <button class="ghost icon-button" type="button" :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
+          :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" @click="traceCollapsed = !traceCollapsed">
           <PanelRightOpen v-if="traceCollapsed" :size="18" stroke-width="2.2" />
           <PanelRightClose v-else :size="18" stroke-width="2.2" />
         </button>
@@ -645,7 +632,8 @@ onMounted(async () => {
           <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
           <article v-else class="message-row" :class="item.message.role">
             <div class="bubble" :class="item.message.role">
-              <div v-if="item.message.role === 'assistant'" class="markdown" v-html="renderMarkdown(item.message.content)"></div>
+              <div v-if="item.message.role === 'assistant'" class="markdown"
+                v-html="renderMarkdown(item.message.content)"></div>
               <template v-else>{{ item.message.content }}</template>
             </div>
           </article>
@@ -664,25 +652,14 @@ onMounted(async () => {
             <span>需要补充</span>
             <p>{{ pendingAsk.question }}</p>
             <div class="ask-options">
-              <button
-                v-for="option in pendingAsk.options"
-                :key="option.id"
-                type="button"
-                @click="selectAskOption(option)"
-              >
+              <button v-for="option in pendingAsk.options" :key="option.id" type="button"
+                @click="selectAskOption(option)">
                 {{ option.label }}
               </button>
             </div>
           </div>
-          <textarea
-            v-else
-            v-model="input"
-            ref="composerInput"
-            rows="1"
-            placeholder="告诉 Agent 要做什么..."
-            @input="handleInput"
-            @keydown.enter="sendOnEnter"
-          ></textarea>
+          <textarea v-else v-model="input" ref="composerInput" rows="1" placeholder="告诉 Agent 要做什么..."
+            @input="handleInput" @keydown.enter="sendOnEnter"></textarea>
           <div v-if="!pendingAsk" class="composer-toolbar">
             <div class="composer-tools">
               <button type="button" disabled aria-label="附件" title="附件">
@@ -695,14 +672,8 @@ onMounted(async () => {
                 <Mic :size="17" stroke-width="2.1" />
               </button>
             </div>
-            <button
-              class="primary-action"
-              type="submit"
-              :class="{ stop: primaryIsStop }"
-              :disabled="primaryDisabled"
-              :aria-label="primaryIsStop ? '停止运行' : '发送消息'"
-              :title="primaryIsStop ? '停止运行' : '发送消息'"
-            >
+            <button class="primary-action" type="submit" :class="{ stop: primaryIsStop }" :disabled="primaryDisabled"
+              :aria-label="primaryIsStop ? '停止运行' : '发送消息'" :title="primaryIsStop ? '停止运行' : '发送消息'">
               <Square v-if="primaryIsStop" :size="16" fill="currentColor" stroke-width="2.2" />
               <SendHorizontal v-else :size="18" stroke-width="2.2" />
             </button>
