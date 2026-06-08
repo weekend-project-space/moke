@@ -1,12 +1,10 @@
 {
-  "servers": [
-    {
-      "id": "filesystem",
+  "mcpServers": {
+    "filesystem": {
       "enabled": false,
-      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
-      "timeout_ms": 30000
+      "disabled_tools": ["write_file", "delete_file"]
     }
-  ]
+  }
 }

@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { RiskLevel } from '../../protocol/src/index.js';
 
@@ -13,15 +13,27 @@ export type ToolContext = {
 
 export type RuntimeTool<TInput extends z.ZodType = z.ZodType> = {
   name: string;
+  original_name?: string;
   description: string;
   risk: RiskLevel;
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
   };
+  input_schema?: Record<string, unknown>;
   schema: TInput;
   handler: (input: z.infer<TInput>, context: ToolContext) => Promise<Record<string, unknown>>;
 };
+
+export class ToolExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly output: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'ToolExecutionError';
+  }
+}
 
 export class ToolRegistry {
   private readonly tools = new Map<string, RuntimeTool>();
@@ -42,10 +54,30 @@ export class ToolRegistry {
   async execute(name: string, input: unknown, context: ToolContext) {
     const tool = this.get(name);
     if (!tool) {
-      throw new Error(`Tool not found: ${name}`);
+      throw new ToolExecutionError(`Tool not found: ${name}`, {
+        error: {
+          code: 'TOOL_NOT_FOUND',
+          message: `Tool not found: ${name}`,
+          tool: name,
+        },
+      });
     }
 
-    const parsedInput = tool.schema.parse(input);
+    const parsedInput = parseToolInput(tool, input);
     return tool.handler(parsedInput, context);
   }
+}
+
+function parseToolInput(tool: RuntimeTool, input: unknown) {
+  const result = tool.schema.safeParse(input);
+  if (result.success) return result.data;
+
+  throw new ToolExecutionError(`Tool input invalid: ${tool.name}`, {
+    error: {
+      code: tool.source?.type === 'mcp' ? 'MCP_TOOL_INPUT_INVALID' : 'TOOL_INPUT_INVALID',
+      message: z.prettifyError(result.error),
+      tool: tool.name,
+      server_id: tool.source?.server_id,
+    },
+  });
 }

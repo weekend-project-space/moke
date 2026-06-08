@@ -6,7 +6,7 @@ import { tool } from 'langchain';
 import type { Message, RuntimeLimits } from '../../protocol/src/index.js';
 import type { EventBus } from './event-bus.js';
 import { createChatModel, withTimeout } from './llm-client.js';
-import type { ToolContext, ToolRegistry } from './tool-registry.js';
+import { ToolExecutionError, type ToolContext, type ToolRegistry } from './tool-registry.js';
 
 type AgentRunInput = {
   input: string;
@@ -158,9 +158,16 @@ export class ReactAgent {
             }),
           );
         } catch (error) {
-          const output = {
-            error: error instanceof Error ? error.message : String(error),
-          };
+          const output =
+            error instanceof ToolExecutionError
+              ? error.output
+              : {
+                  error: {
+                    code: 'TOOL_FAILED',
+                    message: error instanceof Error ? error.message : String(error),
+                    tool: call.name,
+                  },
+                };
           eventBus.emit('tool.result', {
             call_id: callId,
             status: 'error',

@@ -270,6 +270,39 @@ Choose an `ask_user` option:
 }
 ```
 
+### 4.7 List Tools
+
+```txt
+GET /api/tools
+```
+
+Response:
+
+```json
+{
+  "tools": [
+    {
+      "name": "mcp__moke_local__project_info",
+      "original_name": "project_info",
+      "description": "Return basic read-only information about the current Moke workspace.",
+      "risk": "safe",
+      "source": {
+        "type": "mcp",
+        "server_id": "moke_local"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
 Future approval response:
 
 ```json
@@ -618,18 +651,17 @@ Example:
 
 ```json
 {
-  "servers": [
-    {
-      "id": "filesystem",
-      "enabled": true,
-      "transport": "stdio",
+  "mcpServers": {
+    "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
-      "timeout_ms": 30000
+      "disabled_tools": ["write_file", "delete_file"]
     }
-  ]
+  }
 }
 ```
+
+`mcpServers` keys are used as server ids. If `command` is present, the server is treated as a stdio MCP server. The older internal `servers` array format is still accepted for compatibility.
 
 Exposed tool names:
 
@@ -641,8 +673,34 @@ Current MCP scope:
 
 ```txt
 stdio transport only
-tools only
+tools
+roots/list
 no resources, prompts, sampling, OAuth, remote MCP, or MCP server management UI
+```
+
+MCP tool behavior:
+
+```txt
+input_schema       converted to runtime validation for common JSON Schema fields
+max_output_chars   truncates serialized tool output
+tool_risks         marks MCP tools as safe, write, or dangerous
+disabled_tools     hides configured tools from the Agent
+roots              optional allowed root paths exposed through roots/list
+```
+
+If `roots` is omitted, the server exposes the current workspace as the single MCP root. Root paths are returned to MCP servers as `file://` URIs.
+
+Current JSON Schema validation support:
+
+```txt
+object
+string
+number
+integer
+boolean
+array
+required
+enum
 ```
 
 ## 9. Frontend Integration
@@ -705,6 +763,7 @@ POST /api/sessions
 POST /api/sessions/:session_id/messages
 GET  /api/runs/:run_id/events
 POST /api/runs/:run_id/respond
+GET  /api/tools
 ```
 
 Events:

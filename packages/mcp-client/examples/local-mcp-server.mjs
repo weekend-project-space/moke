@@ -11,6 +11,7 @@ const server = new McpServer({
   name: 'moke-local-tools',
   version: '0.1.0',
 });
+let clientRoots = [];
 
 server.registerTool(
   'project_info',
@@ -33,6 +34,7 @@ server.registerTool(
               ok: true,
               tool: 'project_info',
               workspace,
+              roots: clientRoots,
               topic: topic || 'general',
               package: {
                 name: packageJson.name,
@@ -52,6 +54,12 @@ server.registerTool(
 );
 
 await server.connect(new StdioServerTransport());
+
+try {
+  clientRoots = (await server.server.listRoots()).roots;
+} catch {
+  clientRoots = [];
+}
 
 async function readPackageJson() {
   const raw = await readFile(join(workspace, 'package.json'), 'utf8');

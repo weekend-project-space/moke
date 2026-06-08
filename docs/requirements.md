@@ -236,7 +236,8 @@ Current MCP scope:
 ```txt
 client only
 stdio transport only
-tools only
+tools
+roots/list
 ```
 
 MCP non-goals for this stage:
@@ -257,6 +258,7 @@ Configuration:
 default path  .moke/mcp.json
 env override  MOKE_MCP_CONFIG
 example       packages/mcp-client/mcp.example.json
+format        mcpServers object, compatible with older servers array
 ```
 
 Tool naming:
@@ -265,7 +267,22 @@ Tool naming:
 mcp__<server_id>__<tool_name>
 ```
 
-MCP tools are registered as runtime tools with `source.type = "mcp"` and `source.server_id`. For the MVP, MCP tool input is accepted as a generic JSON object; the MCP input schema is included in the tool description so the model can format arguments correctly.
+MCP tools are registered as runtime tools with `source.type = "mcp"` and `source.server_id`.
+
+MCP roots are exposed through the client `roots/list` capability. By default, the current workspace is the only root. Per-server config may override roots with a small `roots` array.
+
+The first Tools hardening phase includes:
+
+```txt
+GET /api/tools
+input schema validation for common JSON Schema fields
+tool risk overrides
+disabled tools
+output truncation
+structured MCP tool errors
+```
+
+`safe` MCP tools can run directly. `write` and `dangerous` MCP tools are not executed until approval policy is implemented.
 
 ## 12. Event Streaming
 
@@ -332,6 +349,7 @@ Optional but useful:
 ```txt
 GET /api/sessions
 GET /api/sessions/:session_id
+GET /api/tools
 ```
 
 ## 16. Implementation Milestones
