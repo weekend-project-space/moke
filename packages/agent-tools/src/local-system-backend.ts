@@ -161,7 +161,8 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     const startedAt = Date.now();
     const cwd = options?.cwd ? this.toHostPath(options.cwd) : undefined;
     const commandText = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
-    const result = await this.backend.execute(cwd ? `cd ${shellQuote(cwd)} && ${commandText}` : commandText);
+    const commands = 'export OPENWALK_SESSION_NAME=MOKE && ' + commandText
+    const result = await this.backend.execute(cwd ? `cd ${shellQuote(cwd)} && ${commands}` : commands);
 
     return {
       exit_code: result.exitCode ?? 1,

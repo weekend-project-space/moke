@@ -24,7 +24,7 @@ export function createListSkillsTool(loader: SkillLoader): RuntimeTool<typeof li
 
 export function createReadSkillTool(loader: SkillLoader): RuntimeTool<typeof readSkillSchema> {
   return {
-    name: 'read_skill',
+    name: 'active_skill',
     description: 'Read and activate an agent skill by name.',
     risk: 'safe',
     schema: readSkillSchema,

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { PanelRightClose, PanelRightOpen, Plus, SendHorizontal, Square } from 'lucide-vue-next'
+import { Check, Copy, Menu, PanelRightClose, PanelRightOpen } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import ActivityPanel from './components/ActivityPanel.vue'
+import ComposerBox from './components/ComposerBox.vue'
+import SidebarPanel from './components/SidebarPanel.vue'
 
 type AgentEvent = {
   id: string
@@ -45,7 +48,6 @@ type TraceStep = {
   kind: string
   title: string
   detail: string
-  meta: string
 }
 
 type DisplayItem =
@@ -73,31 +75,43 @@ const pendingApproval = ref<any | null>(null)
 const pendingAsk = ref<PendingAsk | null>(null)
 const isRunning = ref(false)
 const traceCollapsed = ref(true)
-const composerInput = ref<HTMLTextAreaElement | null>(null)
+const sidebarOpen = ref(false)
+const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
+const conversationEl = ref<HTMLElement | null>(null)
+const autoScroll = ref(true)
+const runError = ref('')
+const copiedKey = ref('')
+let eventSource: EventSource | null = null
+const suggestions = [
+  { title: '整理下载文件夹', prompt: '帮我看看下载文件夹里哪些文件可以整理' },
+  { title: '找一份文档', prompt: '帮我在电脑里找和报销相关的文档' },
+  { title: '收拾桌面', prompt: '看看桌面上有哪些文件，并建议怎么整理' },
+  { title: '总结项目', prompt: '阅读当前目录，告诉我这个项目是做什么的' },
+]
 const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
 const sortedSessions = computed(() =>
   [...sessions.value].sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)),
 )
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
-const currentTitle = computed(() => currentSession.value?.preview || currentSession.value?.title || '新会话')
+const currentTitle = computed(() => currentSession.value?.title || currentSession.value?.preview || '新会话')
 const sessionSubtitle = computed(() => {
-  if (isRunning.value) return 'Moke 正在处理'
-  if (pendingAsk.value) return '需要你的补充'
-  if (pendingApproval.value) return '等待你的确认'
-  return messages.value.length > 0 ? '继续这次对话' : '准备开始'
+  if (pendingAsk.value) return '等待回应'
+  if (pendingApproval.value) return '等待确认'
+  if (isRunning.value) return '处理中'
+  return ''
 })
 const serverStatusLabel = computed(() => {
   const labels = {
-    checking: '连接中',
-    online: '服务在线',
-    offline: '服务离线',
+    checking: '正在连接',
+    online: '已连接',
+    offline: '未连接',
   }
 
   return labels[serverStatus.value]
 })
 const approvalTool = computed(() => pendingApproval.value?.action?.tool || '待确认操作')
-const approvalRisk = computed(() => pendingApproval.value?.risk || '需要确认')
+const approvalToolLabel = computed(() => toolLabels[approvalTool.value] || approvalTool.value)
 const toolLabels: Record<string, string> = {
   apply_patch: '编辑内容',
   bash: '运行命令',
@@ -110,6 +124,16 @@ const toolLabels: Record<string, string> = {
   rg: '查找内容',
   sed: '读取片段',
   view_image: '查看图片',
+}
+const progressLabels: Record<string, string> = {
+  编辑内容: '编辑',
+  运行命令: '处理',
+  读取文件: '读取',
+  查找内容: '查找',
+  浏览文件: '浏览',
+  运行检查: '检查',
+  读取片段: '读取',
+  查看图片: '查看',
 }
 const recentToolNames = computed(() => {
   const names: string[] = []
@@ -127,17 +151,22 @@ const recentToolNames = computed(() => {
   return names
 })
 const toolSummary = computed(() => {
-  const visible = recentToolNames.value.slice(0, 2)
-  const hiddenCount = recentToolNames.value.length - visible.length
-  if (visible.length === 0) return ''
+  const name = recentToolNames.value[0]
+  if (!name) return ''
 
-  return `${visible.join(', ')}${hiddenCount > 0 ? ` +${hiddenCount}` : ''}`
+  return progressLabels[name] || name
 })
 const runSummary = computed(() => {
-  if (pendingApproval.value) return `等待确认 · ${toolLabels[approvalTool.value] || approvalTool.value}`
-  if (pendingAsk.value) return '等待补充'
-  if (toolSummary.value) return `${isRunning.value ? '正在处理' : '刚刚处理'} · ${toolSummary.value}`
-  return '查看动态'
+  if (pendingApproval.value || pendingAsk.value) return '需要处理'
+  return '进展'
+})
+const progressPanelSummary = computed(() => {
+  if (pendingApproval.value) return '需要确认'
+  if (pendingAsk.value) return '等待回应'
+  if (runError.value) return '遇到问题'
+  if (toolSummary.value) return isRunning.value ? `正在${toolSummary.value}` : '刚刚完成'
+  if (isRunning.value) return '处理中'
+  return '待命'
 })
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
@@ -164,14 +193,20 @@ const displayItems = computed<DisplayItem[]>(() => {
   return items
 })
 const timelineNote = computed(() => {
-  if (serverStatus.value === 'checking') return '正在连接本地服务'
-  if (serverStatus.value === 'offline') return '本地服务离线'
-  if (pendingAsk.value) return 'Moke 正在等待你的补充'
+  if (serverStatus.value === 'checking') return '正在连接 Moke'
+  if (serverStatus.value === 'offline') return 'Moke 未连接'
+  if (runError.value) return runError.value
+  if (pendingAsk.value) return 'Moke 正在等待你的回应'
   if (pendingApproval.value) return '需要你确认后继续执行'
   if (isRunning.value) return 'Moke 正在思考和执行'
-  if (messages.value.length === 0) return '开始一个新任务'
   return ''
 })
+const showThinking = computed(
+  () => isRunning.value && !streamingText.value && !pendingAsk.value && !pendingApproval.value,
+)
+const showEmptyState = computed(
+  () => serverStatus.value === 'online' && messages.value.length === 0 && !isRunning.value,
+)
 const primaryDisabled = computed(() => {
   if (isRunning.value) return !runId.value
   return serverStatus.value !== 'online' || !input.value.trim()
@@ -203,13 +238,11 @@ function renderMarkdown(content: string) {
 }
 
 function sessionLabel(session: SessionSummary) {
-  return session.preview || session.title || '新会话'
+  return session.title || session.preview || '新会话'
 }
 
 function sessionMeta(session: SessionSummary) {
-  const count = session.message_count || 0
-  const updated = formatSessionTime(session.updated_at)
-  return count > 0 ? `${count} 条消息 · ${updated}` : updated
+  return formatSessionTime(session.updated_at)
 }
 
 function formatSessionTime(value: string) {
@@ -249,20 +282,29 @@ function formatTimelineTime(time: number) {
   return `${date.getFullYear()}年${dateLabel} ${timeLabel}`
 }
 
-function resizeComposer() {
-  const input = composerInput.value
-  if (!input) return
+function scrollToBottom(force = false) {
+  const el = conversationEl.value
+  if (!el || (!force && !autoScroll.value)) return
 
-  input.style.height = 'auto'
-  input.style.height = `${Math.min(input.scrollHeight, 136)}px`
+  el.scrollTop = el.scrollHeight
 }
 
-function compactJson(value: unknown) {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
+function handleConversationScroll() {
+  const el = conversationEl.value
+  if (!el) return
+
+  autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+}
+
+watch(
+  () => [messages.value.length, streamingText.value],
+  () => {
+    void nextTick(() => scrollToBottom())
+  },
+)
+
+function resizeComposer() {
+  composerBox.value?.resize()
 }
 
 function summarizeOutput(output: Record<string, any> | undefined) {
@@ -270,24 +312,16 @@ function summarizeOutput(output: Record<string, any> | undefined) {
   if (output.error) return String(output.error)
 
   if (Array.isArray(output.matches)) {
-    const structured = Array.isArray(output.results) ? output.results : []
-    const preview =
-      structured.length > 0
-        ? structured
-          .slice(0, 3)
-          .map((match) => `${match.path}${match.line ? `:${match.line}` : ''}`)
-          .join(', ')
-        : output.matches.slice(0, 3).join(', ')
-    return `${output.count ?? output.matches.length} matches${preview ? `: ${preview}` : ''}`
+    const count = output.count ?? output.matches.length
+    return count > 0 ? `找到 ${count} 条相关内容` : '没有找到相关内容'
   }
 
 
-  return compactJson(output).slice(0, 180)
+  return '已完成'
 }
 
 function toTraceStep(event: AgentEvent): TraceStep | null {
   const payload = event.payload
-  const meta = `#${event.seq}`
 
   if (event.type === 'agent.started') {
     return {
@@ -295,7 +329,6 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       kind: 'input',
       title: '开始处理',
       detail: payload.input || 'Moke 已开始处理',
-      meta,
     }
   }
 
@@ -304,8 +337,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       id: event.id,
       kind: 'plan',
       title: '整理步骤',
-      detail: `${payload.planner || '智能规划'} · ${(payload.tools || []).join(', ')}`,
-      meta,
+      detail: 'Moke 正在安排接下来的处理步骤',
     }
   }
 
@@ -318,22 +350,19 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: payload.state || 'state',
-      title: labels[payload.state] || 'State changed',
-      detail: payload.state || 'state',
-      meta,
+      title: labels[payload.state] || '继续处理',
+      detail: labels[payload.state] || 'Moke 正在继续处理',
     }
   }
 
   if (event.type === 'tool.call') {
-    const source = payload.source || {}
-    const sourceMeta = source.type === 'mcp' ? `mcp:${source.server_id || 'unknown'}` : payload.risk || meta
+    const title = toolLabels[payload.tool] || '处理内容'
 
     return {
       id: event.id,
       kind: 'tool',
-      title: toolLabels[payload.tool] || '正在处理',
-      detail: compactJson(payload.input || {}),
-      meta: sourceMeta,
+      title,
+      detail: `正在${title}`,
     }
   }
 
@@ -343,7 +372,6 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       kind: payload.status === 'ok' ? 'observation' : 'error',
       title: payload.status === 'ok' ? '完成一步' : '处理失败',
       detail: summarizeOutput(payload.output),
-      meta: `${payload.duration_ms || 0}ms`,
     }
   }
 
@@ -352,8 +380,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       id: event.id,
       kind: 'approval',
       title: '等待确认',
-      detail: payload.reason || 'Waiting for user decision.',
-      meta,
+      detail: payload.reason || '需要你确认后继续',
     }
   }
 
@@ -361,9 +388,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'ask',
-      title: '需要补充',
+      title: '等待回应',
       detail: payload.question || 'Moke 需要更多信息',
-      meta,
     }
   }
 
@@ -372,8 +398,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       id: event.id,
       kind: 'final',
       title: '回复完成',
-      detail: payload.message?.content || '已完成回复',
-      meta,
+      detail: '已生成回复',
     }
   }
 
@@ -382,8 +407,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       id: event.id,
       kind: 'done',
       title: '任务完成',
-      detail: `${payload.status || 'completed'} · ${payload.usage?.tool_calls || 0} tool calls`,
-      meta,
+      detail: 'Moke 已经完成这次处理',
     }
   }
 
@@ -393,7 +417,6 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       kind: 'error',
       title: '遇到问题',
       detail: payload.message || '未知问题',
-      meta,
     }
   }
 
@@ -436,6 +459,7 @@ async function createSession() {
   streamingText.value = ''
   pendingApproval.value = null
   pendingAsk.value = null
+  runError.value = ''
   await loadSessions()
 }
 
@@ -458,23 +482,50 @@ async function loadSessionMessages(id: string) {
   messages.value = data.messages || []
   await nextTick()
   resizeComposer()
+  scrollToBottom()
   return true
 }
 
 async function selectSession(id: string) {
   if (id === sessionId.value || isRunning.value) return
 
+  autoScroll.value = true
   if (!(await loadSessionMessages(id))) return
 
   events.value = []
   streamingText.value = ''
   pendingApproval.value = null
   pendingAsk.value = null
+  runError.value = ''
+  sidebarOpen.value = false
 }
 
 async function startNewSession() {
   if (isRunning.value) return
   await createSession()
+  sidebarOpen.value = false
+}
+
+function openSidebar() {
+  traceCollapsed.value = true
+  sidebarOpen.value = true
+}
+
+function toggleTracePanel() {
+  const willOpenTrace = traceCollapsed.value
+  if (willOpenTrace) sidebarOpen.value = false
+  traceCollapsed.value = !traceCollapsed.value
+}
+
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+
+  if (sidebarOpen.value) {
+    sidebarOpen.value = false
+    return
+  }
+
+  if (!traceCollapsed.value) traceCollapsed.value = true
 }
 
 function sendOnEnter(event: KeyboardEvent) {
@@ -485,6 +536,32 @@ function sendOnEnter(event: KeyboardEvent) {
 
 function handleInput() {
   resizeComposer()
+}
+
+function applySuggestion(prompt: string) {
+  input.value = prompt
+  void nextTick(() => {
+    resizeComposer()
+    composerBox.value?.focus()
+  })
+}
+
+async function copyMessage(key: string, content: string) {
+  try {
+    await navigator.clipboard.writeText(content)
+  } catch {
+    const helper = document.createElement('textarea')
+    helper.value = content
+    document.body.appendChild(helper)
+    helper.select()
+    document.execCommand('copy')
+    helper.remove()
+  }
+
+  copiedKey.value = key
+  window.setTimeout(() => {
+    if (copiedKey.value === key) copiedKey.value = ''
+  }, 1500)
 }
 
 function handlePrimaryAction() {
@@ -512,23 +589,54 @@ async function sendMessage() {
   streamingText.value = ''
   pendingApproval.value = null
   pendingAsk.value = null
+  runError.value = ''
   isRunning.value = true
 
-  const response = await fetch(`${apiBase}/api/sessions/${sessionId.value}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: { role: 'user', content },
-      options: { stream: true, max_steps: 6 },
-    }),
-  })
-  const data = await response.json()
-  runId.value = data.run_id
-  subscribe(data.events_url)
+  try {
+    const response = await fetch(`${apiBase}/api/sessions/${sessionId.value}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: { role: 'user', content },
+        options: { stream: true },
+      }),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    if (!data.run_id || !data.events_url) throw new Error('Invalid run response')
+
+    runId.value = data.run_id
+    subscribe(data.events_url)
+  } catch {
+    isRunning.value = false
+    runError.value = '发送失败，请确认 Moke 已连接后重试'
+    messages.value.pop()
+    input.value = content
+    await nextTick()
+    resizeComposer()
+    void checkServer()
+  }
+}
+
+function closeEventSource() {
+  eventSource?.close()
+  eventSource = null
+}
+
+function finishRun() {
+  isRunning.value = false
+  pendingAsk.value = null
+  pendingApproval.value = null
+  closeEventSource()
+  void loadSessions()
+  void loadSessionMessages(sessionId.value)
 }
 
 function subscribe(eventsUrl: string) {
+  closeEventSource()
   const source = new EventSource(`${apiBase}${eventsUrl}`)
+  eventSource = source
   const eventTypes = [
     'agent.started',
     'agent.plan',
@@ -573,13 +681,20 @@ function subscribe(eventsUrl: string) {
       }
 
       if (event.type === 'agent.done' || event.type === 'agent.error') {
-        isRunning.value = false
-        pendingAsk.value = null
-        source.close()
-        void loadSessions()
-        void loadSessionMessages(sessionId.value)
+        finishRun()
       }
     })
+  }
+
+  source.onerror = () => {
+    if (eventSource !== source || !isRunning.value) {
+      source.close()
+      return
+    }
+
+    runError.value = '与 Moke 的连接中断，本次运行已停止'
+    finishRun()
+    void checkServer()
   }
 }
 
@@ -634,6 +749,8 @@ async function cancelRun() {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+
   if (await checkServer()) {
     await loadSessions()
     const latestSession = sortedSessions.value[0]
@@ -644,60 +761,66 @@ onMounted(async () => {
     }
   }
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  closeEventSource()
+})
 </script>
 
 <template>
-  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed }">
-    <aside class="sidebar">
-      <section class="brand">
-        <p>AI Assistant</p>
-        <h1>Moke</h1>
-        <span>{{ sortedSessions.length }} 个最近对话</span>
-      </section>
-
-      <button class="new-session" type="button" :disabled="serverStatus !== 'online' || isRunning"
-        @click="startNewSession">
-        <Plus :size="17" stroke-width="2.2" />
-        新建会话
-      </button>
-
-      <section class="session-list">
-        <p>最近对话</p>
-        <button v-for="session in sortedSessions" :key="session.id" class="session"
-          :class="{ active: session.id === sessionId }" type="button" :disabled="isRunning"
-          @click="selectSession(session.id)">
-          <span>{{ sessionLabel(session) }}</span>
-          <small>{{ sessionMeta(session) }}</small>
-        </button>
-      </section>
-    </aside>
+  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen }">
+    <button
+      v-if="sidebarOpen"
+      class="sidebar-scrim"
+      type="button"
+      aria-label="关闭会话列表"
+      @click="sidebarOpen = false"
+    ></button>
+    <SidebarPanel
+      :sessions="sortedSessions"
+      :active-session-id="sessionId"
+      :disabled="serverStatus !== 'online' || isRunning"
+      :is-running="isRunning"
+      :session-label="sessionLabel"
+      :session-meta="sessionMeta"
+      @close="sidebarOpen = false"
+      @new-session="startNewSession"
+      @select-session="selectSession"
+    />
 
     <section class="chat">
       <header class="topbar">
+        <button
+          class="sidebar-toggle"
+          type="button"
+          aria-label="显示会话列表"
+          title="显示会话列表"
+          @click="openSidebar"
+        >
+          <Menu :size="17" stroke-width="2.2" />
+        </button>
         <div>
           <h2>{{ currentTitle }}</h2>
-          <p>{{ sessionSubtitle }}</p>
+          <p v-if="sessionSubtitle">{{ sessionSubtitle }}</p>
         </div>
         <button class="trace-summary" type="button" :class="{ attention: pendingApproval || pendingAsk }"
           :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
-          @click="traceCollapsed = !traceCollapsed">
+          @click="toggleTracePanel">
           {{ runSummary }}
+          <PanelRightOpen v-if="traceCollapsed" :size="14" stroke-width="2.2" />
+          <PanelRightClose v-else :size="14" stroke-width="2.2" />
         </button>
-        <span class="server-pill" :class="serverStatus">
+        <span v-if="serverStatus !== 'online'" class="server-pill" :class="serverStatus">
           <i aria-hidden="true"></i>
           {{ serverStatusLabel }}
         </span>
-        <button class="ghost icon-button" type="button" :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
-          :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" @click="traceCollapsed = !traceCollapsed">
-          <PanelRightOpen v-if="traceCollapsed" :size="18" stroke-width="2.2" />
-          <PanelRightClose v-else :size="18" stroke-width="2.2" />
-        </button>
       </header>
 
       <section v-if="pendingApproval" class="approval approval-banner">
         <div>
           <p>{{ pendingApproval.reason }}</p>
-          <span>{{ approvalTool }} · {{ approvalRisk }}</span>
+          <span>{{ approvalToolLabel }} · 需要确认</span>
         </div>
         <menu>
           <button type="button" @click="decideApproval('approved')">允许</button>
@@ -705,8 +828,20 @@ onMounted(async () => {
         </menu>
       </section>
 
-      <div class="conversation">
+      <div class="conversation" ref="conversationEl" @scroll.passive="handleConversationScroll">
         <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
+
+        <div v-if="showEmptyState" class="empty-state">
+          <h3>你好，我是 Moke</h3>
+          <p>整理文件、查找内容、总结项目都可以交给我。</p>
+          <div class="suggestion-grid">
+            <button v-for="suggestion in suggestions" :key="suggestion.title" type="button"
+              @click="applySuggestion(suggestion.prompt)">
+              <span>{{ suggestion.title }}</span>
+              <small>{{ suggestion.prompt }}</small>
+            </button>
+          </div>
+        </div>
 
         <template v-for="item in displayItems" :key="item.id">
           <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
@@ -716,57 +851,43 @@ onMounted(async () => {
                 v-html="renderMarkdown(item.message.content)"></div>
               <template v-else>{{ item.message.content }}</template>
             </div>
+            <button v-if="item.message.role === 'assistant'" class="copy-button" type="button"
+              :aria-label="copiedKey === item.id ? '已复制' : '复制内容'" :title="copiedKey === item.id ? '已复制' : '复制内容'"
+              @click="copyMessage(item.id, item.message.content)">
+              <Check v-if="copiedKey === item.id" :size="14" stroke-width="2.2" />
+              <Copy v-else :size="14" stroke-width="2.2" />
+            </button>
           </article>
         </template>
 
         <div v-if="streamingText" class="message-row assistant">
-          <article class="bubble assistant live">
-            <div class="markdown" v-html="renderMarkdown(streamingText)"></div>
+          <article class="bubble assistant">
+            <div class="markdown streaming" v-html="renderMarkdown(streamingText)"></div>
+          </article>
+        </div>
+        <div v-else-if="showThinking" class="message-row assistant">
+          <article class="bubble assistant thinking" aria-label="Moke 正在思考">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
           </article>
         </div>
       </div>
 
-      <form class="composer" @submit.prevent="handlePrimaryAction">
-        <div class="composer-panel" :class="{ 'input-mode': !pendingAsk }">
-          <div v-if="pendingAsk" class="ask-prompt">
-            <span>需要补充</span>
-            <p>{{ pendingAsk.question }}</p>
-            <div class="ask-options">
-              <button v-for="option in pendingAsk.options" :key="option.id" type="button"
-                @click="selectAskOption(option)">
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-          <textarea v-else v-model="input" ref="composerInput" rows="1" placeholder="今天想让 Moke 帮你做什么？"
-            @input="handleInput" @keydown.enter="sendOnEnter"></textarea>
-          <div v-if="!pendingAsk" class="composer-toolbar">
-            <span class="composer-hint">Enter 发送 · Shift Enter 换行</span>
-            <button class="primary-action" type="submit" :class="{ stop: primaryIsStop }" :disabled="primaryDisabled"
-              :aria-label="primaryIsStop ? '停止运行' : '发送消息'" :title="primaryIsStop ? '停止运行' : '发送消息'">
-              <Square v-if="primaryIsStop" :size="16" fill="currentColor" stroke-width="2.2" />
-              <SendHorizontal v-else :size="18" stroke-width="2.2" />
-            </button>
-          </div>
-        </div>
-      </form>
+      <ComposerBox
+        ref="composerBox"
+        :input-value="input"
+        :pending-ask="pendingAsk"
+        :primary-disabled="primaryDisabled"
+        :primary-is-stop="primaryIsStop"
+        @update:input-value="input = $event"
+        @input="handleInput"
+        @enter="sendOnEnter"
+        @submit="handlePrimaryAction"
+        @select-ask-option="selectAskOption"
+      />
     </section>
 
-    <aside class="trace">
-      <header>
-        <p>动态</p>
-        <strong>{{ toolSummary || '暂无动态' }}</strong>
-      </header>
-
-      <ol class="events">
-        <li v-for="step in traceSteps" :key="step.id" :class="step.kind">
-          <div>
-            <span>{{ step.title }}</span>
-            <p>{{ step.detail }}</p>
-          </div>
-          <code>{{ step.meta }}</code>
-        </li>
-      </ol>
-    </aside>
+    <ActivityPanel :steps="traceSteps" :summary="progressPanelSummary" />
   </main>
 </template>
