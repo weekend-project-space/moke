@@ -5,5 +5,7 @@ export { createGrepTool } from './grep.js';
 export { createLsTool } from './ls.js';
 export { LocalSystemBackend } from './local-system-backend.js';
 export { createReadFileTool } from './read-file.js';
+export { registerAgentTools } from './register-tools.js';
+export type { AgentToolsSystemBackend } from './register-tools.js';
 export { createSearchTool } from './search.js';
 export { createWriteFileTool } from './write-file.js';

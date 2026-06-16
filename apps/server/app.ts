@@ -2,23 +2,8 @@ import { existsSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 
-import {
-  type ExecutableSystemBackend,
-  ReactAgent,
-  RunManager,
-  ToolRegistry,
-} from '../../packages/agent-runtime/src/index.js';
-import {
-  createEditFileTool,
-  createExecuteTool,
-  createGlobTool,
-  createGrepTool,
-  createLsTool,
-  createReadFileTool,
-  createSearchTool,
-  createWriteFileTool,
-  LocalSystemBackend,
-} from '../../packages/agent-tools/src/index.js';
+import { ReactAgent, RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
+import { LocalSystemBackend, registerAgentTools } from '../../packages/agent-tools/src/index.js';
 import {
   ContentManager,
   createListSkillsTool,
@@ -54,17 +39,8 @@ export async function createApp(): Promise<ServerApp> {
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const toolRegistry = new ToolRegistry()
     .register(createListSkillsTool(skillLoader))
-    .register(createReadSkillTool(skillLoader))
-    .register(createLsTool(system))
-    .register(createGlobTool(system))
-    .register(createGrepTool(system))
-    .register(createSearchTool(system))
-    .register(createReadFileTool(system))
-    .register(createWriteFileTool(system))
-    .register(createEditFileTool(system));
-  if (isExecutableSystemBackend(system)) {
-    toolRegistry.register(createExecuteTool(system));
-  }
+    .register(createReadSkillTool(skillLoader));
+  registerAgentTools(toolRegistry, system);
 
   loadState({ statePath, sessions, runs });
 
@@ -96,8 +72,4 @@ export async function createApp(): Promise<ServerApp> {
       await mcpManager?.close();
     },
   };
-}
-
-function isExecutableSystemBackend(system: unknown): system is ExecutableSystemBackend {
-  return typeof system === 'object' && system !== null && 'execute' in system;
 }
