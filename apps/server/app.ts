@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 
-import { ReactAgent, RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
+import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
+import { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
 import { LocalSystemBackend, registerAgentTools } from '../../packages/agent-tools/src/index.js';
 import {
   ContentManager,
@@ -48,7 +49,7 @@ export async function createApp(): Promise<ServerApp> {
   const runManager = new RunManager({
     sessions,
     runs,
-    agent: new ReactAgent(),
+    agent: new ReActAgent(),
     toolRegistry,
     workspace,
     createSkillContentManager: () => new ContentManager(),

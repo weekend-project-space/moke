@@ -6,6 +6,7 @@ export type RuntimeContentManager = {
 
 export type ToolContext = {
   workspace: string;
+  abortSignal?: AbortSignal;
   contentManager?: RuntimeContentManager;
   askUser?: (input: {
     callId: string;

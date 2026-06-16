@@ -1,0 +1,230 @@
+import { randomUUID } from 'node:crypto';
+
+import { HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { tool } from 'langchain';
+
+import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
+import { ToolExecutionError } from '../../agent-runtime/src/index.js';
+import {
+  ASK_USER_TOOL_NAME,
+  FINISH_TOOL_NAME,
+  askUserTool,
+  createStepLimitContent,
+  finishTool,
+  isControlTool,
+  normalizeAskOptions,
+  readFinishContent,
+  type AgentToolSpec,
+} from './control-tools.js';
+import {
+  createFinalMessage,
+  createFinishReminder,
+  createHistoryMessages,
+  createSystemMessage,
+  getMessageText,
+  isAI,
+} from './messages.js';
+import { createChatModel, withTimeout } from './llm-client.js';
+
+function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
+  return {
+    max_steps: Math.max(1, Math.min(Math.trunc(limits.max_steps || 1), 1000)),
+    max_tool_calls: Math.max(0, Math.min(Math.trunc(limits.max_tool_calls ?? 0), 200)),
+    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 300000)),
+  };
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw new Error('Run cancelled');
+}
+
+function createModelTool(runtimeTool: AgentToolSpec) {
+  return tool(
+    async () => {
+      throw new Error(`Tool ${runtimeTool.name} is executed by the ReAct runtime loop.`);
+    },
+    {
+      name: runtimeTool.name,
+      description: runtimeTool.description,
+      schema: runtimeTool.schema,
+    },
+  );
+}
+
+function createToolErrorOutput(error: unknown, toolName: string) {
+  if (error instanceof ToolExecutionError) return error.output;
+
+  return {
+    error: {
+      code: 'TOOL_FAILED',
+      message: error instanceof Error ? error.message : String(error),
+      tool: toolName,
+    },
+  };
+}
+
+export class ReActAgent {
+  async run({ input, history = [], eventBus, toolRegistry, context, limits: rawLimits }: AgentRunInput): Promise<AgentRunResult> {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
+    }
+
+    const limits = normalizeLimits(rawLimits);
+    const model = createChatModel();
+    const timeoutMs = limits.timeout_ms;
+    const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
+    const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
+    const tools = runtimeTools.map(createModelTool);
+    const modelWithTools = tools.length > 0 ? model.bindTools(tools) : model;
+    const messages: BaseMessage[] = [
+      createSystemMessage(runtimeTools, context),
+      ...createHistoryMessages(history),
+      new HumanMessage(input),
+    ];
+    let toolCalls = 0;
+    let finalContent = '';
+    let hasObservation = false;
+
+    eventBus.emit('agent.started', { input });
+    eventBus.emit('agent.plan', {
+      mode: 'react',
+      planner: 'manual-model-loop',
+      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      tools: runtimeTools.map((tool) => tool.name),
+    });
+
+    for (let step = 0; step < limits.max_steps; step++) {
+      throwIfAborted(context.abortSignal);
+      eventBus.emit('agent.state', { state: 'reason' });
+      messages[0] = createSystemMessage(runtimeTools, context);
+
+      const aiMessage = await withTimeout(modelWithTools.invoke(messages, { signal: context.abortSignal }), timeoutMs, context.abortSignal);
+      throwIfAborted(context.abortSignal);
+      messages.push(aiMessage);
+
+      const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
+      if (calls.length === 0) {
+        const content = getMessageText(aiMessage).trim();
+        if (!hasObservation) {
+          finalContent = content || '我暂时没有更多可补充的信息。';
+          break;
+        }
+
+        messages.push(createFinishReminder(aiMessage));
+        continue;
+      }
+
+      eventBus.emit('agent.state', { state: 'act' });
+      for (const call of calls) {
+        throwIfAborted(context.abortSignal);
+        const isFinishCall = call.name === FINISH_TOOL_NAME;
+        const isControlCall = isControlTool(call.name);
+        if (!isControlCall && toolCalls >= limits.max_tool_calls) {
+          throw new Error('Maximum tool calls exceeded');
+        }
+
+        if (!isControlCall) toolCalls++;
+        const callId = call.id || `call_${randomUUID().slice(0, 8)}`;
+        const runtimeTool = toolSpecs.get(call.name);
+        eventBus.emit('tool.call', {
+          call_id: callId,
+          tool: call.name,
+          input: call.args || {},
+          risk: runtimeTool?.risk || 'safe',
+          source: runtimeTool?.source || { type: 'local' },
+        });
+
+        const startedAt = Date.now();
+        try {
+          if (isFinishCall) {
+            finalContent = readFinishContent(call.args || {});
+            const output = {
+              status: 'finished',
+              content: finalContent,
+            };
+
+            eventBus.emit('tool.result', {
+              call_id: callId,
+              status: 'ok',
+              duration_ms: Date.now() - startedAt,
+              output,
+            });
+            messages.push(
+              new ToolMessage({
+                content: JSON.stringify(output),
+                tool_call_id: callId,
+              }),
+            );
+            break;
+          }
+
+          const output =
+            call.name === ASK_USER_TOOL_NAME
+              ? await this.askUser(call.args || {}, callId, context)
+              : await toolRegistry.execute(call.name, call.args || {}, context);
+          throwIfAborted(context.abortSignal);
+          hasObservation = true;
+
+          eventBus.emit('tool.result', {
+            call_id: callId,
+            status: 'ok',
+            duration_ms: Date.now() - startedAt,
+            output,
+          });
+          messages.push(
+            new ToolMessage({
+              content: JSON.stringify(output),
+              tool_call_id: callId,
+            }),
+          );
+        } catch (error) {
+          throwIfAborted(context.abortSignal);
+          const output = createToolErrorOutput(error, call.name);
+          eventBus.emit('tool.result', {
+            call_id: callId,
+            status: 'error',
+            duration_ms: Date.now() - startedAt,
+            output,
+          });
+          messages.push(
+            new ToolMessage({
+              content: JSON.stringify(output),
+              tool_call_id: callId,
+              status: 'error',
+            }),
+          );
+        }
+      }
+
+      if (finalContent) break;
+    }
+
+    if (!finalContent) {
+      finalContent = createStepLimitContent(hasObservation);
+    }
+
+    const content = finalContent;
+    const message = createFinalMessage(content);
+    eventBus.emit('agent.state', { state: 'respond' });
+    eventBus.emit('agent.message.delta', { content });
+    eventBus.emit('agent.message.done', { message });
+
+    return { toolCalls, message };
+  }
+
+  private async askUser(input: Record<string, unknown>, callId: string, context: AgentRunInput['context']) {
+    if (!context.askUser) {
+      throw new Error('ask_user is not available in this runtime context');
+    }
+
+    const question = typeof input.question === 'string' && input.question.trim() ? input.question.trim() : '请选择下一步。';
+    const options = normalizeAskOptions(input.options);
+    const selected = await context.askUser({ callId, question, options });
+
+    return {
+      question,
+      selected,
+      status: 'answered',
+    };
+  }
+}

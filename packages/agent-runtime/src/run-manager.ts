@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AgentEvent, Message, Run, Session } from '../../protocol/src/index.js';
+import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { ReactAgent } from './react-agent.js';
 import type { RuntimeContentManager } from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';
 
@@ -13,7 +13,7 @@ function id(prefix: string) {
 type RunManagerConfig = {
   sessions: Map<string, Session>;
   runs: Map<string, Run>;
-  agent: ReactAgent;
+  agent: Agent;
   toolRegistry: ToolRegistry;
   workspace: string;
   createSkillContentManager?: () => RuntimeContentManager;
@@ -37,6 +37,7 @@ function readAssistantMessage(event: AgentEvent) {
 }
 
 export class RunManager {
+  private readonly abortControllers = new Map<string, AbortController>();
   private readonly pendingAsks = new Map<
     string,
     {
@@ -68,6 +69,8 @@ export class RunManager {
 
   private async execute(run: Run, session: Session, content: string, options: RunOptions) {
     let assistantMessageSaved = false;
+    const abortController = new AbortController();
+    this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
       if (event.type !== 'agent.message.done') {
         this.config.onChange?.();
@@ -101,6 +104,7 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: this.config.workspace,
+          abortSignal: abortController.signal,
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
         },
@@ -140,6 +144,8 @@ export class RunManager {
         code: 'RUNTIME_ERROR',
         message,
       });
+    } finally {
+      this.abortControllers.delete(run.id);
     }
   }
 
@@ -216,6 +222,8 @@ export class RunManager {
     if (!run) return null;
     run.abort = true;
     run.status = 'cancelled';
+    this.abortControllers.get(runId)?.abort();
+    this.abortControllers.delete(runId);
 
     if (run.pending_ask) {
       const pending = this.pendingAsks.get(run.pending_ask.ask_id);

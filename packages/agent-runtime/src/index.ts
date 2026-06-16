@@ -1,5 +1,5 @@
+export type { Agent, AgentRunInput, AgentRunResult } from './agent.js';
 export { EventBus } from './event-bus.js';
-export { ReactAgent } from './react-agent.js';
 export { RunManager } from './run-manager.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
 export type { RuntimeContentManager, ToolContext } from './tool-context.js';
