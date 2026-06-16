@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Check, Copy, Menu, PanelRightClose, PanelRightOpen } from 'lucide-vue-next'
+import { Check, Copy, Menu, PanelRightClose, PanelRightOpen, RotateCcw, Search } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
@@ -58,6 +58,12 @@ type TraceStep = {
   detail: string
 }
 
+type TaskTemplate = {
+  title: string
+  description: string
+  prompt: string
+}
+
 type DisplayItem =
   | {
     type: 'time'
@@ -91,11 +97,27 @@ const autoScroll = ref(true)
 const runError = ref('')
 const copiedKey = ref('')
 let eventSource: EventSource | null = null
-const suggestions = [
-  { title: '整理下载文件夹', prompt: '帮我看看下载文件夹里哪些文件可以整理' },
-  { title: '找一份文档', prompt: '帮我在电脑里找和报销相关的文档' },
-  { title: '收拾桌面', prompt: '看看桌面上有哪些文件，并建议怎么整理' },
-  { title: '总结项目', prompt: '阅读当前目录，告诉我这个项目是做什么的' },
+const taskTemplates: TaskTemplate[] = [
+  {
+    title: '整理文件',
+    description: '先看一眼，再给出安全整理建议',
+    prompt: '帮我看看下载文件夹里哪些文件可以整理。先给建议，不要直接删除或移动文件。',
+  },
+  {
+    title: '查找内容',
+    description: '帮你在电脑或项目里找到相关文件',
+    prompt: '帮我查找和报销相关的文件，只列出可能相关的位置和文件名。',
+  },
+  {
+    title: '阅读总结',
+    description: '读文档或项目，整理重点和下一步',
+    prompt: '阅读当前目录，告诉我这个项目是做什么的，并列出我接下来最该看的文件。',
+  },
+  {
+    title: '帮我操作',
+    description: '执行前先确认，保留可控感',
+    prompt: '帮我完成一个电脑任务。请先说明你准备怎么做，需要修改文件前先问我。',
+  },
 ]
 const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
 const sortedSessions = computed(() =>
@@ -176,13 +198,16 @@ const progressPanelSummary = computed(() => {
   if (isRunning.value) return '处理中'
   return '待命'
 })
+const visibleMessages = computed(() => messages.value.filter(isVisibleMessage))
+const lastAssistantMessage = computed(() =>
+  [...visibleMessages.value].reverse().find((message) => message.role === 'assistant' && message.content.trim()),
+)
+const showResultActions = computed(() => Boolean(lastAssistantMessage.value) && !isRunning.value && !pendingAsk.value && !pendingApproval.value)
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
   let lastTime = 0
 
-  const visibleMessages = messages.value.filter(isVisibleMessage)
-
-  visibleMessages.forEach((message, index) => {
+  visibleMessages.value.forEach((message, index) => {
     const time = parseMessageTime(message)
     if (time && (lastTime === 0 || time - lastTime >= MESSAGE_TIME_GAP_MS)) {
       items.push({
@@ -215,7 +240,7 @@ const showThinking = computed(
   () => isRunning.value && !streamingText.value && !pendingAsk.value && !pendingApproval.value,
 )
 const showEmptyState = computed(
-  () => serverStatus.value === 'online' && messages.value.filter(isVisibleMessage).length === 0 && !isRunning.value,
+  () => serverStatus.value === 'online' && visibleMessages.value.length === 0 && !isRunning.value,
 )
 const primaryDisabled = computed(() => {
   if (isRunning.value) return !runId.value
@@ -248,7 +273,11 @@ function renderMarkdown(content: string) {
 }
 
 function isVisibleMessage(message: Message) {
-  return message.role !== 'tool' && message.content
+  return message.role !== 'tool' && !message.tool_calls?.length && Boolean(message.content.trim())
+}
+
+function isFinalAssistantMessage(message: Message | undefined) {
+  return message?.role === 'assistant' && isVisibleMessage(message)
 }
 
 function sessionLabel(session: SessionSummary) {
@@ -341,8 +370,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'input',
-      title: '开始处理',
-      detail: payload.input || 'Moke 已开始处理',
+      title: '理解任务',
+      detail: payload.input || 'Moke 正在理解你的任务',
     }
   }
 
@@ -350,22 +379,22 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'plan',
-      title: '整理步骤',
-      detail: 'Moke 正在安排接下来的处理步骤',
+      title: '安排步骤',
+      detail: 'Moke 正在决定先看哪里、后做什么',
     }
   }
 
   if (event.type === 'agent.state') {
     const labels: Record<string, string> = {
-      reason: '正在判断下一步',
-      act: '正在处理',
-      respond: '正在整理回复',
+      reason: '判断下一步',
+      act: '执行一步',
+      respond: '整理结果',
     }
     return {
       id: event.id,
       kind: payload.state || 'state',
       title: labels[payload.state] || '继续处理',
-      detail: labels[payload.state] || 'Moke 正在继续处理',
+      detail: payload.state === 'respond' ? 'Moke 正在把结果整理成你能直接看的内容' : labels[payload.state] || 'Moke 正在继续处理',
     }
   }
 
@@ -376,7 +405,7 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
       id: event.id,
       kind: 'tool',
       title,
-      detail: `正在${title}`,
+      detail: `正在${title}，不会在未确认时做高风险改动`,
     }
   }
 
@@ -408,11 +437,14 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
   }
 
   if (event.type === 'agent.message.done') {
+    const message = payload.message as Message | undefined
+    if (!isFinalAssistantMessage(message)) return null
+
     return {
       id: event.id,
       kind: 'final',
-      title: '回复完成',
-      detail: '已生成回复',
+      title: '交付结果',
+      detail: '已经把结果整理到对话里',
     }
   }
 
@@ -420,8 +452,8 @@ function toTraceStep(event: AgentEvent): TraceStep | null {
     return {
       id: event.id,
       kind: 'done',
-      title: '任务完成',
-      detail: 'Moke 已经完成这次处理',
+      title: '完成',
+      detail: '这次任务已结束，可以继续追问或复制结果',
     }
   }
 
@@ -690,8 +722,11 @@ function subscribe(eventsUrl: string) {
       }
 
       if (event.type === 'agent.message.done') {
-        messages.value.push(event.payload.message)
-        streamingText.value = ''
+        const doneMessage = event.payload.message as Message | undefined
+        if (doneMessage) {
+          messages.value.push(doneMessage)
+          if (isFinalAssistantMessage(doneMessage)) streamingText.value = ''
+        }
       }
 
       if (event.type === 'agent.done' || event.type === 'agent.error') {
@@ -828,13 +863,14 @@ onUnmounted(() => {
         <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
         <div v-if="showEmptyState" class="empty-state">
-          <h3>你好，我是 Moke</h3>
-          <p>整理文件、查找内容、总结项目都可以交给我。</p>
+          <div class="empty-kicker">你的电脑任务助手</div>
+          <h3>想让 Moke 帮你做什么？</h3>
+          <p>先查看、再建议；需要改动时会等你确认。</p>
           <div class="suggestion-grid">
-            <button v-for="suggestion in suggestions" :key="suggestion.title" type="button"
-              @click="applySuggestion(suggestion.prompt)">
-              <span>{{ suggestion.title }}</span>
-              <small>{{ suggestion.prompt }}</small>
+            <button v-for="template in taskTemplates" :key="template.title" type="button"
+              @click="applySuggestion(template.prompt)">
+              <span>{{ template.title }}</span>
+              <small>{{ template.description }}</small>
             </button>
           </div>
         </div>
@@ -868,11 +904,25 @@ onUnmounted(() => {
             <span class="dot"></span>
           </article>
         </div>
+        <div v-if="showResultActions" class="result-actions">
+          <button type="button" @click="copyMessage('latest-result', lastAssistantMessage?.content || '')">
+            <Copy :size="14" stroke-width="2.2" />
+            {{ copiedKey === 'latest-result' ? '已复制' : '复制结果' }}
+          </button>
+          <button type="button" @click="applySuggestion('基于上面的结果，继续帮我整理成更清晰的下一步。')">
+            <RotateCcw :size="14" stroke-width="2.2" />
+            继续整理
+          </button>
+          <button type="button" @click="toggleTracePanel">
+            <Search :size="14" stroke-width="2.2" />
+            查看过程
+          </button>
+        </div>
       </div>
 
       <ComposerBox ref="composerBox" :input-value="input" :pending-ask="pendingAsk" :primary-disabled="primaryDisabled"
-        :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput" @enter="sendOnEnter"
-        @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
+        :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
+        @enter="sendOnEnter" @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
     </section>
 
     <ActivityPanel :steps="traceSteps" :summary="progressPanelSummary" />

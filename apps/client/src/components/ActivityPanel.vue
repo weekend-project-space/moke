@@ -31,23 +31,28 @@ const statusTitle = computed(() => currentStep.value?.title || '等待开始')
 const statusDetail = computed(
   () => currentStep.value?.detail || 'Moke 开始处理后，会在这里显示当前状态。',
 )
+const stepSummary = computed(() => {
+  if (usedTools.value.length > 0) return `已经经过 ${usedTools.value.length} 步`
+  if (props.steps.length > 0) return '正在推进'
+  return '还没有开始'
+})
 </script>
 
 <template>
   <aside class="trace">
     <header>
-      <p>进展</p>
+      <p>任务进度</p>
       <strong>{{ summary || '待命' }}</strong>
     </header>
 
     <section class="progress-card" :class="currentStep?.kind">
-      <span>当前状态</span>
+      <span>{{ stepSummary }}</span>
       <strong>{{ statusTitle }}</strong>
       <p>{{ statusDetail }}</p>
     </section>
 
     <section class="inspector-group">
-      <p>已使用</p>
+      <p>已完成动作</p>
       <div v-if="usedTools.length > 0" class="tool-chips">
         <span v-for="tool in usedTools" :key="tool">{{ tool }}</span>
       </div>
@@ -55,7 +60,7 @@ const statusDetail = computed(
     </section>
 
     <section class="inspector-group" :class="{ attention: needsStep }">
-      <p>需要你处理</p>
+      <p>需要你确认</p>
       <template v-if="needsStep">
         <strong v-if="needsStep.kind !== 'ask'">{{ needsStep.title }}</strong>
         <span>{{ needsStep.detail }}</span>
