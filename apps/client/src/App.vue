@@ -248,7 +248,7 @@ function renderMarkdown(content: string) {
 }
 
 function isVisibleMessage(message: Message) {
-  return message.role !== 'tool' && !message.tool_calls?.length
+  return message.role !== 'tool' && message.content
 }
 
 function sessionLabel(session: SessionSummary) {
@@ -784,34 +784,16 @@ onUnmounted(() => {
 
 <template>
   <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen }">
-    <button
-      v-if="sidebarOpen"
-      class="sidebar-scrim"
-      type="button"
-      aria-label="关闭会话列表"
-      @click="sidebarOpen = false"
-    ></button>
-    <SidebarPanel
-      :sessions="sortedSessions"
-      :active-session-id="sessionId"
-      :disabled="serverStatus !== 'online' || isRunning"
-      :is-running="isRunning"
-      :session-label="sessionLabel"
-      :session-meta="sessionMeta"
-      @close="sidebarOpen = false"
-      @new-session="startNewSession"
-      @select-session="selectSession"
-    />
+    <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
+      @click="sidebarOpen = false"></button>
+    <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
+      :disabled="serverStatus !== 'online' || isRunning" :is-running="isRunning" :session-label="sessionLabel"
+      :session-meta="sessionMeta" @close="sidebarOpen = false" @new-session="startNewSession"
+      @select-session="selectSession" />
 
     <section class="chat">
       <header class="topbar">
-        <button
-          class="sidebar-toggle"
-          type="button"
-          aria-label="显示会话列表"
-          title="显示会话列表"
-          @click="openSidebar"
-        >
+        <button class="sidebar-toggle" type="button" aria-label="显示会话列表" title="显示会话列表" @click="openSidebar">
           <Menu :size="17" stroke-width="2.2" />
         </button>
         <div>
@@ -888,18 +870,9 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <ComposerBox
-        ref="composerBox"
-        :input-value="input"
-        :pending-ask="pendingAsk"
-        :primary-disabled="primaryDisabled"
-        :primary-is-stop="primaryIsStop"
-        @update:input-value="input = $event"
-        @input="handleInput"
-        @enter="sendOnEnter"
-        @submit="handlePrimaryAction"
-        @select-ask-option="selectAskOption"
-      />
+      <ComposerBox ref="composerBox" :input-value="input" :pending-ask="pendingAsk" :primary-disabled="primaryDisabled"
+        :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput" @enter="sendOnEnter"
+        @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
     </section>
 
     <ActivityPanel :steps="traceSteps" :summary="progressPanelSummary" />
