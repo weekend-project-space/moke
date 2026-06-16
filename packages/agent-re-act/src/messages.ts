@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
 import type { Message } from '../../protocol/src/index.js';
 import type { ToolContext } from '../../agent-runtime/src/index.js';
@@ -53,9 +53,67 @@ export function createFinalMessage(content: string): Message {
 }
 
 export function createHistoryMessages(history: Message[]) {
-  return history.map((message) =>
-    message.role === 'assistant' ? new AIMessage(message.content) : new HumanMessage(message.content),
-  );
+  const messages: BaseMessage[] = [];
+
+  for (let index = 0; index < history.length; index++) {
+    const message = history[index];
+    const content = message.content.trim();
+    if (!content && message.role !== 'assistant') continue;
+
+    if (message.role === 'user') {
+      messages.push(new HumanMessage(content));
+      continue;
+    }
+
+    if (message.role === 'assistant') {
+      const toolCalls = message.tool_calls?.filter((call) => call.id && call.name) || [];
+      if (toolCalls.length > 0) {
+        const toolMessages: ToolMessage[] = [];
+        const pendingIds = new Set(toolCalls.map((call) => call.id));
+        let cursor = index + 1;
+
+        while (cursor < history.length && pendingIds.size > 0) {
+          const toolResult = history[cursor];
+          if (toolResult.role !== 'tool' || !pendingIds.has(toolResult.tool_call_id)) break;
+
+          toolMessages.push(
+            new ToolMessage({
+              content: toolResult.content.trim(),
+              tool_call_id: toolResult.tool_call_id,
+              name: toolResult.name,
+              status: toolResult.status,
+            }),
+          );
+          pendingIds.delete(toolResult.tool_call_id);
+          cursor++;
+        }
+
+        if (pendingIds.size === 0) {
+          messages.push(
+            new AIMessage({
+              content,
+              tool_calls: toolCalls.map((call) => ({
+                id: call.id,
+                name: call.name,
+                args: call.args,
+              })),
+            }),
+            ...toolMessages,
+          );
+          index = cursor - 1;
+          continue;
+        }
+      }
+
+      messages.push(
+        new AIMessage({
+          content,
+        }),
+      );
+    }
+  }
+
+  return messages;
 }
 
 export function getMessageText(message: BaseMessage) {

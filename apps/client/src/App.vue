@@ -16,9 +16,17 @@ type AgentEvent = {
 }
 
 type Message = {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'tool'
   content: string
   created_at?: string
+  tool_calls?: Array<{
+    id: string
+    name: string
+    args: Record<string, unknown>
+  }>
+  tool_call_id?: string
+  name?: string
+  status?: 'success' | 'error'
 }
 
 type SessionSummary = {
@@ -172,7 +180,9 @@ const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
   let lastTime = 0
 
-  messages.value.forEach((message, index) => {
+  const visibleMessages = messages.value.filter(isVisibleMessage)
+
+  visibleMessages.forEach((message, index) => {
     const time = parseMessageTime(message)
     if (time && (lastTime === 0 || time - lastTime >= MESSAGE_TIME_GAP_MS)) {
       items.push({
@@ -205,7 +215,7 @@ const showThinking = computed(
   () => isRunning.value && !streamingText.value && !pendingAsk.value && !pendingApproval.value,
 )
 const showEmptyState = computed(
-  () => serverStatus.value === 'online' && messages.value.length === 0 && !isRunning.value,
+  () => serverStatus.value === 'online' && messages.value.filter(isVisibleMessage).length === 0 && !isRunning.value,
 )
 const primaryDisabled = computed(() => {
   if (isRunning.value) return !runId.value
@@ -235,6 +245,10 @@ markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
 
 function renderMarkdown(content: string) {
   return DOMPurify.sanitize(markdown.render(content))
+}
+
+function isVisibleMessage(message: Message) {
+  return message.role !== 'tool' && !message.tool_calls?.length
 }
 
 function sessionLabel(session: SessionSummary) {

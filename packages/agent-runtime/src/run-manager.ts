@@ -26,12 +26,18 @@ type RunOptions = {
   timeout_ms?: number;
 };
 
-function readAssistantMessage(event: AgentEvent) {
+function readSessionMessage(event: AgentEvent) {
   const message = event.payload.message;
   if (!message || typeof message !== 'object') return null;
 
   const candidate = message as Partial<Message>;
-  if (candidate.role !== 'assistant' || typeof candidate.content !== 'string') return null;
+  if (
+    (candidate.role !== 'user' && candidate.role !== 'assistant' && candidate.role !== 'tool') ||
+    typeof candidate.content !== 'string' ||
+    typeof candidate.created_at !== 'string'
+  ) {
+    return null;
+  }
 
   return candidate as Message;
 }
@@ -77,7 +83,7 @@ export class RunManager {
         return;
       }
 
-      const message = readAssistantMessage(event);
+      const message = readSessionMessage(event);
       if (!message) {
         this.config.onChange?.();
         return;

@@ -5,6 +5,7 @@ import { tool } from 'langchain';
 
 import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
 import { ToolExecutionError } from '../../agent-runtime/src/index.js';
+import type { ToolCall } from '../../protocol/src/index.js';
 import {
   ASK_USER_TOOL_NAME,
   FINISH_TOOL_NAME,
@@ -63,6 +64,18 @@ function createToolErrorOutput(error: unknown, toolName: string) {
   };
 }
 
+function now() {
+  return new Date().toISOString();
+}
+
+function messageId() {
+  return `msg_${Date.now()}_${randomUUID().slice(0, 8)}`;
+}
+
+function toToolCallArgs(args: unknown): Record<string, unknown> {
+  return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
+}
+
 export class ReActAgent {
   async run({ input, history = [], eventBus, toolRegistry, context, limits: rawLimits }: AgentRunInput): Promise<AgentRunResult> {
     if (!process.env.OPENAI_API_KEY) {
@@ -114,8 +127,31 @@ export class ReActAgent {
         continue;
       }
 
+      const callEntries = calls.map((call) => ({
+        call,
+        callId: call.id || `call_${randomUUID().slice(0, 8)}`,
+      }));
+      const persistedToolCalls: ToolCall[] = callEntries
+        .filter(({ call }) => !isControlTool(call.name))
+        .map(({ call, callId }) => ({
+          id: callId,
+          name: call.name,
+          args: toToolCallArgs(call.args),
+        }));
+      if (persistedToolCalls.length > 0) {
+        eventBus.emit('agent.message.done', {
+          message: {
+            id: messageId(),
+            role: 'assistant',
+            content: getMessageText(aiMessage).trim(),
+            created_at: now(),
+            tool_calls: persistedToolCalls,
+          },
+        });
+      }
+
       eventBus.emit('agent.state', { state: 'act' });
-      for (const call of calls) {
+      for (const { call, callId } of callEntries) {
         throwIfAborted(context.abortSignal);
         const isFinishCall = call.name === FINISH_TOOL_NAME;
         const isControlCall = isControlTool(call.name);
@@ -124,7 +160,6 @@ export class ReActAgent {
         }
 
         if (!isControlCall) toolCalls++;
-        const callId = call.id || `call_${randomUUID().slice(0, 8)}`;
         const runtimeTool = toolSpecs.get(call.name);
         eventBus.emit('tool.call', {
           call_id: callId,
@@ -171,6 +206,19 @@ export class ReActAgent {
             duration_ms: Date.now() - startedAt,
             output,
           });
+          if (!isControlCall) {
+            eventBus.emit('agent.message.done', {
+              message: {
+                id: messageId(),
+                role: 'tool',
+                content: JSON.stringify(output),
+                created_at: now(),
+                tool_call_id: callId,
+                name: call.name,
+                status: 'success',
+              },
+            });
+          }
           messages.push(
             new ToolMessage({
               content: JSON.stringify(output),
@@ -186,6 +234,19 @@ export class ReActAgent {
             duration_ms: Date.now() - startedAt,
             output,
           });
+          if (!isControlCall) {
+            eventBus.emit('agent.message.done', {
+              message: {
+                id: messageId(),
+                role: 'tool',
+                content: JSON.stringify(output),
+                created_at: now(),
+                tool_call_id: callId,
+                name: call.name,
+                status: 'error',
+              },
+            });
+          }
           messages.push(
             new ToolMessage({
               content: JSON.stringify(output),

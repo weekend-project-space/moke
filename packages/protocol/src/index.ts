@@ -22,12 +22,38 @@ export type AgentEvent = {
   payload: Record<string, unknown>;
 };
 
-export type Message = {
+export type ToolCall = {
   id: string;
-  role: 'user' | 'assistant';
+  name: string;
+  args: Record<string, unknown>;
+};
+
+export type UserMessage = {
+  id: string;
+  role: 'user';
   content: string;
   created_at: string;
 };
+
+export type AssistantMessage = {
+  id: string;
+  role: 'assistant';
+  content: string;
+  created_at: string;
+  tool_calls?: ToolCall[];
+};
+
+export type ToolMessage = {
+  id: string;
+  role: 'tool';
+  content: string;
+  created_at: string;
+  tool_call_id: string;
+  name: string;
+  status?: 'success' | 'error';
+};
+
+export type Message = UserMessage | AssistantMessage | ToolMessage;
 
 export type Session = {
   id: string;
