@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Check, Copy, Menu, PanelRightClose, PanelRightOpen, RotateCcw, Search } from 'lucide-vue-next'
+import { Check, Copy, Globe2, Menu, PanelRightClose, PanelRightOpen, RotateCcw, Search } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
+import BrowserPanel from './components/BrowserPanel.vue'
 import ComposerBox from './components/ComposerBox.vue'
 import SidebarPanel from './components/SidebarPanel.vue'
 
@@ -89,6 +90,7 @@ const pendingApproval = ref<any | null>(null)
 const pendingAsk = ref<PendingAsk | null>(null)
 const isRunning = ref(false)
 const traceCollapsed = ref(true)
+const workspaceView = ref<'activity' | 'browser'>('activity')
 const sidebarOpen = ref(false)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
@@ -188,7 +190,7 @@ const toolSummary = computed(() => {
 })
 const runSummary = computed(() => {
   if (pendingApproval.value || pendingAsk.value) return '需要处理'
-  return '进展'
+  return workspaceView.value === 'browser' ? '浏览器' : '进展'
 })
 const progressPanelSummary = computed(() => {
   if (pendingApproval.value) return '需要确认'
@@ -557,10 +559,19 @@ function openSidebar() {
   sidebarOpen.value = true
 }
 
-function toggleTracePanel() {
-  const willOpenTrace = traceCollapsed.value
-  if (willOpenTrace) sidebarOpen.value = false
-  traceCollapsed.value = !traceCollapsed.value
+function openWorkspace(view: 'activity' | 'browser') {
+  sidebarOpen.value = false
+  workspaceView.value = view
+  traceCollapsed.value = false
+}
+
+function toggleWorkspace() {
+  if (traceCollapsed.value) {
+    openWorkspace(workspaceView.value)
+    return
+  }
+
+  traceCollapsed.value = true
 }
 
 function handleGlobalKeydown(event: KeyboardEvent) {
@@ -836,8 +847,8 @@ onUnmounted(() => {
           <p v-if="sessionSubtitle">{{ sessionSubtitle }}</p>
         </div>
         <button class="trace-summary" type="button" :class="{ attention: pendingApproval || pendingAsk }"
-          :aria-label="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'" :title="traceCollapsed ? '显示运行轨迹' : '收起运行轨迹'"
-          @click="toggleTracePanel">
+          :aria-label="traceCollapsed ? '显示工作区' : '收起工作区'" :title="traceCollapsed ? '显示工作区' : '收起工作区'"
+          @click="toggleWorkspace">
           {{ runSummary }}
           <PanelRightOpen v-if="traceCollapsed" :size="14" stroke-width="2.2" />
           <PanelRightClose v-else :size="14" stroke-width="2.2" />
@@ -913,9 +924,13 @@ onUnmounted(() => {
             <RotateCcw :size="14" stroke-width="2.2" />
             继续整理
           </button>
-          <button type="button" @click="toggleTracePanel">
+          <button type="button" @click="openWorkspace('activity')">
             <Search :size="14" stroke-width="2.2" />
             查看过程
+          </button>
+          <button type="button" @click="openWorkspace('browser')">
+            <Globe2 :size="14" stroke-width="2.2" />
+            打开浏览器
           </button>
         </div>
       </div>
@@ -925,6 +940,19 @@ onUnmounted(() => {
         @enter="sendOnEnter" @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
     </section>
 
-    <ActivityPanel :steps="traceSteps" :summary="progressPanelSummary" />
+    <aside class="workspace">
+      <header class="workspace-tabs" aria-label="工作区视图">
+        <button type="button" :class="{ active: workspaceView === 'activity' }" @click="workspaceView = 'activity'">
+          <Search :size="14" stroke-width="2.2" />
+          进度
+        </button>
+        <button type="button" :class="{ active: workspaceView === 'browser' }" @click="workspaceView = 'browser'">
+          <Globe2 :size="14" stroke-width="2.2" />
+          浏览器
+        </button>
+      </header>
+      <ActivityPanel v-show="workspaceView === 'activity'" :steps="traceSteps" :summary="progressPanelSummary" />
+      <BrowserPanel v-show="workspaceView === 'browser'" :active="!traceCollapsed && workspaceView === 'browser'" />
+    </aside>
   </main>
 </template>
