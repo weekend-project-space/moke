@@ -1,34 +1,47 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   ArrowLeft,
   ArrowRight,
-  Eye,
-  EyeOff,
   Globe2,
   Plus,
   RefreshCw,
-  RotateCw,
   X,
 } from 'lucide-vue-next'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { browserApi, isNativeBrowserAvailable, type BrowserPage } from '../api/browser'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
 
 const props = defineProps<{
   active: boolean
 }>()
 
-const pages = ref<BrowserPage[]>([])
-const activePageId = ref<number | null>(null)
+const MAX_TABS = 8
+
+const page = ref<BrowserPage | null>(null)
+const tabs = ref<BrowserPage[]>([])
+const activeTabKey = ref<string | null>(null)
 const address = ref('')
+const isEditingAddress = ref(false)
 const errorMessage = ref('')
 const isBusy = ref(false)
 const nativeAvailable = ref(false)
+const windowElement = ref<HTMLElement | null>(null)
+const viewportElement = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
 let refreshTimer = 0
+let syncTimer = 0
+let unlistenBrowserState: (() => void) | null = null
 
-const activePage = computed(() => pages.value.find((page) => page.pageId === activePageId.value) || null)
-const pageTitle = computed(() => activePage.value?.title || '未打开页面')
-const pageUrl = computed(() => activePage.value?.url || '')
+const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
+const activePage = computed(() => activeTab.value)
 const canUseBrowser = computed(() => nativeAvailable.value)
+const canCreateTab = computed(() => canUseBrowser.value && !isBusy.value && tabs.value.length < MAX_TABS)
+const canGoBack = computed(() => Boolean(activePage.value?.canGoBack && !isBusy.value))
+const canGoForward = computed(() => Boolean(activePage.value?.canGoForward && !isBusy.value))
+const canReload = computed(() => Boolean(activePage.value && !isBusy.value))
+
+function tabKey(tab: BrowserPage) {
+  return `page-${tab.pageId}`
+}
 
 function normalizeInput(value: string) {
   const trimmed = value.trim()
@@ -36,12 +49,95 @@ function normalizeInput(value: string) {
   return trimmed.includes('://') ? trimmed : `https://${trimmed}`
 }
 
-function applyState(result: { pages: BrowserPage[]; activePageId: number | null }) {
-  pages.value = result.pages
-  activePageId.value = result.activePageId
+function formatAddress(url?: string) {
+  if (!url || url === 'about:blank') return ''
+  return url
+}
 
-  const page = result.pages.find((item) => item.pageId === result.activePageId)
-  if (page?.url) address.value = page.url
+function syncAddressFromPage(targetPage = activePage.value) {
+  address.value = formatAddress(targetPage?.url)
+}
+
+function applyState(result: { page: BrowserPage | null; pages?: BrowserPage[]; activePageId?: number | null }) {
+  page.value = result.page
+  tabs.value = result.pages || []
+  activeTabKey.value = result.activePageId ? `page-${result.activePageId}` : activeTabKey.value
+  if (!isEditingAddress.value && result.page && activeTabKey.value === `page-${result.page.pageId}`) {
+    syncAddressFromPage(result.page)
+  } else if (!isEditingAddress.value && !result.page) {
+    address.value = ''
+  }
+}
+
+function beginAddressEdit() {
+  isEditingAddress.value = true
+}
+
+function endAddressEdit() {
+  isEditingAddress.value = false
+  syncAddressFromPage()
+}
+
+function getViewportBounds(): BrowserBounds {
+  const rect = (viewportElement.value || windowElement.value)?.getBoundingClientRect()
+
+  if (!rect) {
+    return { x: 0, y: 0, width: 1, height: 1 }
+  }
+
+  return {
+    x: Math.round(rect.left),
+    y: Math.round(rect.top),
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height)),
+  }
+}
+
+async function syncBrowserBounds() {
+  if (!nativeAvailable.value || !activePage.value || !props.active) return
+
+  try {
+    await browserApi.resize(activePage.value.pageId, getViewportBounds())
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function scheduleStateRefresh() {
+  if (refreshTimer) window.clearTimeout(refreshTimer)
+
+  refreshTimer = window.setTimeout(async () => {
+    refreshTimer = 0
+    if (!nativeAvailable.value || !activePage.value) return
+
+    try {
+      applyState(await browserApi.state())
+    } catch {
+      // The next explicit browser action will surface any persistent error.
+    }
+  }, 900)
+}
+
+function stopStateSync() {
+  if (!syncTimer) return
+
+  window.clearInterval(syncTimer)
+  syncTimer = 0
+}
+
+function startStateSync() {
+  stopStateSync()
+  if (!nativeAvailable.value || !props.active || !activePage.value) return
+
+  syncTimer = window.setInterval(async () => {
+    if (!nativeAvailable.value || !props.active || !activePage.value) return
+
+    try {
+      applyState(await browserApi.refreshState(activePage.value.pageId))
+    } catch {
+      // Native page-load events and explicit browser actions still surface persistent errors.
+    }
+  }, 800)
 }
 
 async function withBusy(action: () => Promise<void>) {
@@ -58,84 +154,99 @@ async function withBusy(action: () => Promise<void>) {
   }
 }
 
-async function refreshState() {
-  if (!nativeAvailable.value) return
-
-  try {
-    applyState(await browserApi.listPages())
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function ensurePage(url = address.value) {
-  if (!activePage.value) {
-    applyState(await browserApi.createPage({
-      url: normalizeInput(url),
-      visible: true,
-    }))
-    return
-  }
-
-  await browserApi.showBrowser(activePage.value.pageId)
-}
-
 async function submitAddress() {
   await withBusy(async () => {
     const url = normalizeInput(address.value)
-    if (!activePage.value) {
-      await ensurePage(url)
+    const tab = activePage.value
+    isEditingAddress.value = false
+
+    if (!tab) {
+      applyState(await browserApi.open({
+        url,
+        visible: true,
+        bounds: getViewportBounds(),
+      }))
+      scheduleStateRefresh()
       return
     }
 
-    applyState(await browserApi.navigatePage({
-      pageId: activePage.value.pageId,
+    applyState(await browserApi.navigate({
+      pageId: tab.pageId,
       type: 'url',
       url,
     }))
+    scheduleStateRefresh()
   })
 }
 
-async function createPage() {
+async function createTab() {
+  if (!canCreateTab.value) return
+
   await withBusy(async () => {
-    applyState(await browserApi.createPage({
-      url: normalizeInput(address.value),
+    applyState(await browserApi.open({
+      url: 'about:blank',
       visible: true,
+      bounds: getViewportBounds(),
     }))
+    syncAddressFromPage()
+    await nextTick()
+    await syncBrowserBounds()
+    scheduleStateRefresh()
   })
 }
 
-async function selectPage(pageId: number) {
+async function selectTab(tab: BrowserPage) {
+  if (tabKey(tab) === activeTabKey.value) return
+
   await withBusy(async () => {
-    applyState(await browserApi.selectPage(pageId))
+    applyState(await browserApi.show(tab.pageId, getViewportBounds()))
+    scheduleStateRefresh()
   })
 }
 
-async function closePage(pageId: number) {
+async function closeTab(tab: BrowserPage) {
   await withBusy(async () => {
-    applyState(await browserApi.closePage(pageId))
+    applyState(await browserApi.close(tab.pageId))
+    if (!activePage.value) address.value = ''
   })
 }
 
 async function reloadPage(ignoreCache = false) {
-  if (!activePage.value) return
+  const currentPage = activePage.value
+  if (!currentPage) return
 
   await withBusy(async () => {
-    applyState(await browserApi.navigatePage({
-      pageId: activePage.value?.pageId,
+    applyState(await browserApi.navigate({
+      pageId: currentPage.pageId,
       type: 'reload',
       ignoreCache,
     }))
+    scheduleStateRefresh()
+  })
+}
+
+async function navigateHistory(type: 'back' | 'forward') {
+  const currentPage = activePage.value
+  if (!currentPage) return
+
+  await withBusy(async () => {
+    applyState(await browserApi.navigate({
+      pageId: currentPage.pageId,
+      type,
+    }))
+    scheduleStateRefresh()
   })
 }
 
 async function syncVisibility() {
-  if (!nativeAvailable.value) return
+  if (!nativeAvailable.value || !activePage.value) return
 
   try {
     if (props.active) {
-      if (!activePage.value) return
-      applyState(await browserApi.showBrowser(activePage.value.pageId))
+      await nextTick()
+      applyState(await browserApi.show(activePage.value.pageId, getViewportBounds()))
+    } else {
+      applyState(await browserApi.hide())
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -148,22 +259,62 @@ onMounted(async () => {
   if (!nativeAvailable.value) return
 
   await withBusy(async () => {
-    const state = await browserApi.listPages()
-    applyState(state)
+    applyState(await browserApi.state())
     if (props.active) await syncVisibility()
   })
 
-  refreshTimer = window.setInterval(refreshState, 1200)
+  try {
+    unlistenBrowserState = await browserApi.listenStateChanged((result) => {
+      applyState(result)
+    })
+  } catch {
+    unlistenBrowserState = null
+  }
+
+  startStateSync()
+  window.addEventListener('resize', syncBrowserBounds)
 })
 
 onUnmounted(() => {
-  if (refreshTimer) window.clearInterval(refreshTimer)
+  if (refreshTimer) window.clearTimeout(refreshTimer)
+  stopStateSync()
+  unlistenBrowserState?.()
+  unlistenBrowserState = null
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', syncBrowserBounds)
+  if (activePage.value) void browserApi.hide()
 })
 
 watch(
   () => props.active,
   () => {
     void syncVisibility()
+    startStateSync()
+  },
+  { flush: 'post' },
+)
+
+watch(
+  activeTabKey,
+  () => {
+    startStateSync()
+  },
+  { flush: 'post' },
+)
+
+watch(
+  windowElement,
+  (element) => {
+    resizeObserver?.disconnect()
+    resizeObserver = null
+
+    if (!element) return
+
+    resizeObserver = new ResizeObserver(() => {
+      void syncBrowserBounds()
+    })
+    resizeObserver.observe(element)
+    void syncBrowserBounds()
   },
   { flush: 'post' },
 )
@@ -171,72 +322,55 @@ watch(
 
 <template>
   <section class="browser-panel">
-    <header class="browser-header">
-      <div>
-        <p>浏览器</p>
-        <strong>{{ pageTitle }}</strong>
-      </div>
-      <button type="button" :disabled="!canUseBrowser || isBusy" aria-label="新建页面" title="新建页面" @click="createPage">
-        <Plus :size="15" stroke-width="2.2" />
-      </button>
-    </header>
-
     <nav class="browser-tabs" aria-label="浏览器页面">
       <div
-        v-for="page in pages"
-        :key="page.pageId"
+        v-for="tab in tabs"
+        :key="tabKey(tab)"
         class="browser-tab"
-        :class="{ active: page.pageId === activePageId }"
+        :class="{ active: tabKey(tab) === activeTabKey }"
       >
-        <button type="button" class="browser-tab-select" @click="selectPage(page.pageId)">
+        <button type="button" class="browser-tab-select" @click="selectTab(tab)">
           <Globe2 :size="13" stroke-width="2.2" />
-          <span>{{ page.title || page.url || '新页面' }}</span>
+          <span>{{ tab.title || (tab.url === 'about:blank' ? '新页面' : tab.url) || '新页面' }}</span>
         </button>
-        <i v-if="page.isLoading" aria-hidden="true"></i>
-        <button type="button" class="browser-tab-close" aria-label="关闭页面" title="关闭页面" @click="closePage(page.pageId)">
+        <i v-if="tab.isLoading" aria-hidden="true"></i>
+        <button type="button" class="browser-tab-close" aria-label="关闭页面" title="关闭页面" @click="closeTab(tab)">
           <X :size="12" stroke-width="2.3" />
         </button>
       </div>
-      <span v-if="pages.length === 0">暂无页面</span>
+      <button type="button" class="browser-tab-add" :disabled="!canCreateTab" aria-label="新建页面" title="新建页面" @click="createTab">
+        <Plus :size="14" stroke-width="2.2" />
+      </button>
     </nav>
 
     <form class="browser-toolbar" @submit.prevent="submitAddress">
-      <button type="button" :disabled="true" aria-label="后退" title="后退">
+      <button type="button" :disabled="!canGoBack" aria-label="后退" title="后退" @click="navigateHistory('back')">
         <ArrowLeft :size="15" stroke-width="2.2" />
       </button>
-      <button type="button" :disabled="true" aria-label="前进" title="前进">
+      <button type="button" :disabled="!canGoForward" aria-label="前进" title="前进" @click="navigateHistory('forward')">
         <ArrowRight :size="15" stroke-width="2.2" />
       </button>
-      <button type="button" :disabled="!activePage || isBusy" aria-label="刷新" title="刷新" @click="reloadPage(false)">
+      <button type="button" :disabled="!canReload" aria-label="刷新" title="刷新" @click="reloadPage(false)">
         <RefreshCw :size="15" stroke-width="2.2" />
       </button>
       <label>
         <Globe2 :size="14" stroke-width="2.2" />
-        <input v-model="address" type="text" spellcheck="false" placeholder="输入网址" />
+        <input
+          v-model="address"
+          type="text"
+          spellcheck="false"
+          placeholder="输入网址"
+          @focus="beginAddressEdit"
+          @blur="endAddressEdit"
+        />
       </label>
-      <button type="submit" :disabled="!canUseBrowser || isBusy" aria-label="访问" title="访问">
-        <RotateCw :size="15" stroke-width="2.2" />
-      </button>
     </form>
 
-    <div class="browser-meta">
-      <span>{{ pageUrl || '等待打开页面' }}</span>
-      <strong v-if="activePage?.isLoading">加载中</strong>
-      <strong v-else-if="activePage?.visible">
-        <Eye :size="12" stroke-width="2.2" />
-        显示中
-      </strong>
-      <strong v-else>
-        <EyeOff :size="12" stroke-width="2.2" />
-        已隐藏
-      </strong>
-    </div>
-
-    <div class="browser-window-state">
+    <div ref="windowElement" class="browser-window-state">
       <div v-if="!nativeAvailable" class="browser-placeholder">
         <Globe2 :size="24" stroke-width="2" />
         <strong>需要在 Tauri 桌面壳中使用</strong>
-        <span>网页会在独立的原生浏览器窗口中打开。</span>
+        <span>网页会嵌入到右侧浏览区域中。</span>
       </div>
       <div v-else-if="errorMessage" class="browser-placeholder error">
         <strong>{{ errorMessage }}</strong>
@@ -244,17 +378,15 @@ watch(
       <div v-else-if="!activePage" class="browser-placeholder">
         <Globe2 :size="24" stroke-width="2" />
         <strong>输入网址后访问</strong>
-        <span>页面会在独立窗口中打开，右侧保留控制和状态。</span>
+        <span>页面会嵌入到下方区域，工具栏保留控制和状态。</span>
       </div>
-      <div v-else class="browser-window-card">
-        <Globe2 :size="22" stroke-width="2" />
-        <strong>{{ activePage.title || '浏览器窗口已打开' }}</strong>
-        <span>{{ activePage.url }}</span>
-        <button type="button" :disabled="isBusy" @click="syncVisibility">
-          <Eye :size="14" stroke-width="2.2" />
-          显示窗口
-        </button>
+      <div v-else ref="viewportElement" class="browser-viewport">
+        <div v-if="activePage.isLoading" class="browser-loading">
+          <Globe2 :size="18" stroke-width="2" />
+          <span>加载中</span>
+        </div>
       </div>
     </div>
   </section>
 </template>
+

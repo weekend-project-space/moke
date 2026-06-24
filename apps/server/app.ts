@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
@@ -23,7 +24,7 @@ export type ServerApp = {
 };
 
 export async function createApp(): Promise<ServerApp> {
-  const root = new URL('../..', import.meta.url).pathname;
+  const root = fileURLToPath(new URL('../..', import.meta.url));
   const envPath = join(root, '.env');
   if (existsSync(envPath)) {
     process.loadEnvFile(envPath);

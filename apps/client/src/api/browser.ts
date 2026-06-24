@@ -9,14 +9,25 @@ export type BrowserPage = {
   visible: boolean
 }
 
-export type BrowserListResult = {
+export type BrowserResult = {
+  page: BrowserPage | null
   pages: BrowserPage[]
   activePageId: number | null
+}
+
+export type BrowserBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 type TauriGlobal = {
   core?: {
     invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
+  }
+  event?: {
+    listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<() => void>
   }
 }
 
@@ -45,39 +56,45 @@ export function isNativeBrowserAvailable() {
 }
 
 export const browserApi = {
-  listPages() {
-    return tauriInvoke<BrowserListResult>('browser_list_pages')
+  listenStateChanged(handler: (result: BrowserResult) => void) {
+    const listen = window.__TAURI__?.event?.listen
+    if (!listen) return Promise.resolve(() => undefined)
+
+    return listen<BrowserResult>('browser_state_changed', (event) => handler(event.payload))
   },
 
-  createPage(options: { url?: string; visible?: boolean }) {
-    return tauriInvoke<BrowserListResult>('browser_create_page', { options })
+  state() {
+    return tauriInvoke<BrowserResult>('browser_state')
   },
 
-  navigatePage(options: NavigateOptions) {
-    return tauriInvoke<BrowserListResult>('browser_navigate_page', { options })
+  refreshState(pageId?: number) {
+    return tauriInvoke<BrowserResult>('browser_refresh_state', { pageId })
   },
 
-  selectPage(pageId: number) {
-    return tauriInvoke<BrowserListResult>('browser_select_page', { pageId })
+  open(options: { pageId?: number; url?: string; visible?: boolean; bounds?: BrowserBounds }) {
+    return tauriInvoke<BrowserResult>('browser_open', { options })
   },
 
-  closePage(pageId: number) {
-    return tauriInvoke<BrowserListResult>('browser_close_page', { pageId })
+  navigate(options: NavigateOptions) {
+    return tauriInvoke<BrowserResult>('browser_navigate', { options })
   },
 
-  resizePage(pageId: number | null, width?: number, height?: number) {
-    return tauriInvoke<BrowserListResult>('browser_resize_page', {
+  resize(pageId: number | null, bounds: BrowserBounds) {
+    return tauriInvoke<void>('browser_resize', {
       pageId: pageId ?? undefined,
-      width,
-      height,
+      ...bounds,
     })
   },
 
-  showBrowser(pageId?: number) {
-    return tauriInvoke<BrowserListResult>('browser_show', { pageId })
+  show(pageId?: number, bounds?: BrowserBounds) {
+    return tauriInvoke<BrowserResult>('browser_show', { pageId, bounds })
   },
 
-  hideBrowser(pageId?: number) {
-    return tauriInvoke<BrowserListResult>('browser_hide', { pageId })
+  hide() {
+    return tauriInvoke<BrowserResult>('browser_hide')
+  },
+
+  close(pageId: number) {
+    return tauriInvoke<BrowserResult>('browser_close', { pageId })
   },
 }

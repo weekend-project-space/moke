@@ -98,7 +98,17 @@ const conversationEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 const runError = ref('')
 const copiedKey = ref('')
+const sidebarWidth = ref(268)
+const sidebarResizing = ref(false)
+const workspaceWidth = ref(288)
+const workspaceResizing = ref(false)
 let eventSource: EventSource | null = null
+const SIDEBAR_WIDTH_KEY = 'moke.sidebar.width'
+const SIDEBAR_MIN_WIDTH = 220
+const SIDEBAR_MAX_WIDTH = 420
+const WORKSPACE_WIDTH_KEY = 'moke.workspace.width'
+const WORKSPACE_MIN_WIDTH = 260
+const WORKSPACE_MAX_WIDTH = 760
 const taskTemplates: TaskTemplate[] = [
   {
     title: '整理文件',
@@ -244,6 +254,10 @@ const showThinking = computed(
 const showEmptyState = computed(
   () => serverStatus.value === 'online' && visibleMessages.value.length === 0 && !isRunning.value,
 )
+const shellStyle = computed(() => ({
+  '--sidebar-width': `${sidebarWidth.value}px`,
+  '--workspace-width': `${workspaceWidth.value}px`,
+}))
 const primaryDisabled = computed(() => {
   if (isRunning.value) return !runId.value
   return serverStatus.value !== 'online' || !input.value.trim()
@@ -585,6 +599,98 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   if (!traceCollapsed.value) traceCollapsed.value = true
 }
 
+function clampSidebarWidth(width: number) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)))
+}
+
+function setSidebarWidth(width: number, persist = false) {
+  sidebarWidth.value = clampSidebarWidth(width)
+  if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+}
+
+function stopSidebarResize() {
+  if (!sidebarResizing.value) return
+
+  sidebarResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', handleSidebarResize)
+  window.removeEventListener('pointerup', stopSidebarResize)
+  window.removeEventListener('pointercancel', stopSidebarResize)
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+}
+
+function handleSidebarResize(event: PointerEvent) {
+  if (!sidebarResizing.value) return
+  setSidebarWidth(event.clientX)
+}
+
+function startSidebarResize(event: PointerEvent) {
+  if (window.matchMedia('(max-width: 980px)').matches) return
+
+  event.preventDefault()
+  sidebarResizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', handleSidebarResize)
+  window.addEventListener('pointerup', stopSidebarResize)
+  window.addEventListener('pointercancel', stopSidebarResize)
+}
+
+function handleSidebarResizeKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+  event.preventDefault()
+  const step = event.shiftKey ? 24 : 8
+  setSidebarWidth(sidebarWidth.value + (event.key === 'ArrowRight' ? step : -step), true)
+}
+
+function clampWorkspaceWidth(width: number) {
+  return Math.min(WORKSPACE_MAX_WIDTH, Math.max(WORKSPACE_MIN_WIDTH, Math.round(width)))
+}
+
+function setWorkspaceWidth(width: number, persist = false) {
+  workspaceWidth.value = clampWorkspaceWidth(width)
+  if (persist) localStorage.setItem(WORKSPACE_WIDTH_KEY, String(workspaceWidth.value))
+}
+
+function stopWorkspaceResize() {
+  if (!workspaceResizing.value) return
+
+  workspaceResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', handleWorkspaceResize)
+  window.removeEventListener('pointerup', stopWorkspaceResize)
+  window.removeEventListener('pointercancel', stopWorkspaceResize)
+  localStorage.setItem(WORKSPACE_WIDTH_KEY, String(workspaceWidth.value))
+}
+
+function handleWorkspaceResize(event: PointerEvent) {
+  if (!workspaceResizing.value) return
+  setWorkspaceWidth(window.innerWidth - event.clientX)
+}
+
+function startWorkspaceResize(event: PointerEvent) {
+  if (traceCollapsed.value || window.matchMedia('(max-width: 980px)').matches) return
+
+  event.preventDefault()
+  workspaceResizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', handleWorkspaceResize)
+  window.addEventListener('pointerup', stopWorkspaceResize)
+  window.addEventListener('pointercancel', stopWorkspaceResize)
+}
+
+function handleWorkspaceResizeKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+  event.preventDefault()
+  const step = event.shiftKey ? 24 : 8
+  setWorkspaceWidth(workspaceWidth.value + (event.key === 'ArrowLeft' ? step : -step), true)
+}
+
 function sendOnEnter(event: KeyboardEvent) {
   if (event.shiftKey || isRunning.value) return
   event.preventDefault()
@@ -810,6 +916,10 @@ async function cancelRun() {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  const savedSidebarWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+  if (Number.isFinite(savedSidebarWidth)) setSidebarWidth(savedSidebarWidth)
+  const savedWorkspaceWidth = Number(localStorage.getItem(WORKSPACE_WIDTH_KEY))
+  if (Number.isFinite(savedWorkspaceWidth)) setWorkspaceWidth(savedWorkspaceWidth)
 
   if (await checkServer()) {
     await loadSessions()
@@ -824,18 +934,29 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
+  stopSidebarResize()
+  stopWorkspaceResize()
   closeEventSource()
 })
 </script>
 
 <template>
-  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen }">
+  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
       @click="sidebarOpen = false"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online' || isRunning" :is-running="isRunning" :session-label="sessionLabel"
       :session-meta="sessionMeta" @close="sidebarOpen = false" @new-session="startNewSession"
       @select-session="selectSession" />
+    <div
+      class="sidebar-resizer"
+      role="separator"
+      aria-label="调整会话列表宽度"
+      aria-orientation="vertical"
+      tabindex="0"
+      @keydown="handleSidebarResizeKeydown"
+      @pointerdown="startSidebarResize"
+    ></div>
 
     <section class="chat">
       <header class="topbar">
@@ -939,6 +1060,16 @@ onUnmounted(() => {
         :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
         @enter="sendOnEnter" @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
     </section>
+
+    <div
+      class="workspace-resizer"
+      role="separator"
+      aria-label="调整工作区宽度"
+      aria-orientation="vertical"
+      tabindex="0"
+      @keydown="handleWorkspaceResizeKeydown"
+      @pointerdown="startWorkspaceResize"
+    ></div>
 
     <aside class="workspace">
       <header class="workspace-tabs" aria-label="工作区视图">
