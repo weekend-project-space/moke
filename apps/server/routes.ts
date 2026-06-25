@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { Run, Session } from '../../packages/protocol/src/index.js';
 import type { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
+import type { BrowserBridge } from './browser-bridge.js';
 import { json, readJson, route } from './http.js';
 
 type RoutesContext = {
@@ -10,6 +11,7 @@ type RoutesContext = {
   runs: Map<string, Run>;
   runManager: RunManager;
   toolRegistry: ToolRegistry;
+  browserBridge: BrowserBridge;
   onChange: () => void;
 };
 
@@ -34,7 +36,7 @@ function summarizeSession(session: Session) {
   };
 }
 
-export function createRoutes({ sessions, runs, runManager, toolRegistry, onChange }: RoutesContext) {
+export function createRoutes({ sessions, runs, runManager, toolRegistry, browserBridge, onChange }: RoutesContext) {
   return async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     try {
       if (req.method === 'OPTIONS') return json(res, 204, {});
@@ -53,6 +55,32 @@ export function createRoutes({ sessions, runs, runManager, toolRegistry, onChang
       if (method === 'GET' && url.pathname === '/api/tools') {
         return json(res, 200, {
           tools: toolRegistry.list().map(({ schema, ...tool }) => tool),
+        });
+      }
+
+      if (method === 'GET' && url.pathname === '/api/browser/connect') {
+        browserBridge.connect(res);
+        req.on('close', () => browserBridge.disconnect(res));
+        return;
+      }
+
+      if (method === 'POST' && url.pathname === '/api/browser/respond') {
+        const body = await readJson(req);
+        const id = typeof body.id === 'string' ? body.id : '';
+        if (!id) {
+          return json(res, 400, {
+            error: { code: 'BAD_REQUEST', message: 'id is required' },
+          });
+        }
+
+        const accepted = browserBridge.respond(id, {
+          ok: body.ok !== false,
+          result: typeof body.result === 'object' && body.result !== null ? body.result : {},
+          error: typeof body.error === 'string' ? body.error : undefined,
+        });
+
+        return json(res, accepted ? 200 : 404, {
+          accepted,
         });
       }
 

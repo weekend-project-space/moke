@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Search, X } from 'lucide-vue-next'
+import { PanelLeftClose, Plus, Search } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 type SessionSummary = {
@@ -37,33 +37,34 @@ const filteredSessions = computed(() => {
     return label.includes(query) || preview.includes(query)
   })
 })
+
+function clearSearch() {
+  searchQuery.value = ''
+}
 </script>
 
 <template>
   <aside class="sidebar">
     <section class="brand">
       <div class="brand-header">
-        <div>
-          <h1>Moke</h1>
-        </div>
         <div class="brand-actions">
           <button class="new-session" type="button" :disabled="disabled" aria-label="新建会话" title="新建会话" @click="$emit('newSession')">
             <Plus :size="17" stroke-width="2.2" />
           </button>
-          <button class="close-sidebar" type="button" aria-label="关闭会话列表" title="关闭会话列表" @click="$emit('close')">
-            <X :size="17" stroke-width="2.2" />
+          <button class="close-sidebar" type="button" aria-label="收起会话列表" title="收起会话列表" @click="$emit('close')">
+            <PanelLeftClose :size="17" stroke-width="2.1" />
           </button>
         </div>
       </div>
       <label class="session-search">
         <Search :size="14" stroke-width="2.2" />
-        <input v-model="searchQuery" type="search" placeholder="搜索" />
+        <input v-model="searchQuery" type="search" placeholder="搜索会话" @keydown.esc.prevent="clearSearch" />
       </label>
     </section>
 
     <section class="session-list">
       <div v-if="sessions.length === 0" class="sidebar-empty">
-        <strong>还没有对话</strong>
+        <strong>还没有会话</strong>
         <span>点右上角 + 开始一次新的对话。</span>
       </div>
       <div v-else-if="filteredSessions.length === 0" class="sidebar-empty">
@@ -80,13 +81,12 @@ const filteredSessions = computed(() => {
         @click="$emit('selectSession', session.id)"
       >
         <span class="session-line">
-          <span class="session-title">
-            {{ sessionLabel(session) }}
+          <small>
+            {{ session.preview || '新会话' }}
             <i v-if="isRunning && session.id === activeSessionId" aria-hidden="true"></i>
-          </span>
+          </small>
           <time>{{ sessionMeta(session) }}</time>
         </span>
-        <small>{{ session.preview || '新会话' }}</small>
       </button>
     </section>
   </aside>

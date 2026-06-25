@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
 import { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
 import { LocalSystemBackend, registerAgentTools } from '../../packages/agent-tools/src/index.js';
+import { registerBrowserTools } from '../../packages/browser-tools/src/index.js';
 import {
   ContentManager,
   createListSkillsTool,
@@ -13,6 +14,7 @@ import {
   SkillLoader,
 } from '../../packages/agent-skills/src/index.js';
 import type { Run, Session } from '../../packages/protocol/src/index.js';
+import { BrowserBridge, BrowserBridgeBackend } from './browser-bridge.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { createRoutes } from './routes.js';
 import { createStateSaver, loadState } from './state.js';
@@ -37,12 +39,15 @@ export async function createApp(): Promise<ServerApp> {
   const runs = new Map<string, Run>();
   const workspace = root;
   const system = new LocalSystemBackend(workspace);
+  const browserBridge = new BrowserBridge();
+  const browserBackend = new BrowserBridgeBackend(browserBridge);
   const skillLoader = new SkillLoader(workspace);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const toolRegistry = new ToolRegistry()
     .register(createListSkillsTool(skillLoader))
     .register(createReadSkillTool(skillLoader));
   registerAgentTools(toolRegistry, system);
+  registerBrowserTools(toolRegistry, browserBackend);
 
   loadState({ statePath, sessions, runs });
 
@@ -62,6 +67,7 @@ export async function createApp(): Promise<ServerApp> {
       runs,
       runManager,
       toolRegistry,
+      browserBridge,
       onChange: stateSaver.saveStateSoon,
     }),
   );

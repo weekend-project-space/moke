@@ -1,0 +1,115 @@
+import type { ServerResponse } from 'node:http';
+
+import type {
+  BrowserBackend,
+  BrowserResult,
+  ClosePageInput,
+  CreatePageInput,
+  NavigatePageInput,
+  SelectPageInput,
+} from '../../packages/browser-tools/src/index.js';
+
+type BrowserRequest = {
+  id: string;
+  method: string;
+  params: Record<string, unknown>;
+};
+
+type PendingRequest = {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+};
+
+const DEFAULT_TIMEOUT_MS = 30000;
+
+export class BrowserBridge {
+  private client: ServerResponse | null = null;
+  private requestSeq = 0;
+  private readonly pending = new Map<string, PendingRequest>();
+
+  connect(res: ServerResponse) {
+    this.client = res;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.write(`event: ready\ndata: ${JSON.stringify({ status: 'connected' })}\n\n`);
+  }
+
+  disconnect(res: ServerResponse) {
+    if (this.client === res) this.client = null;
+  }
+
+  async request(method: string, params: Record<string, unknown> = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+    if (!this.client) throw new Error('In-app browser is not connected');
+
+    const id = `browser_req_${++this.requestSeq}`;
+    const request: BrowserRequest = { id, method, params };
+
+    const result = new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Browser request timed out: ${method}`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+    });
+
+    this.client.write(`event: browser_request\ndata: ${JSON.stringify(request)}\n\n`);
+    return result;
+  }
+
+  respond(id: string, response: { ok?: boolean; result?: Record<string, unknown>; error?: string }) {
+    const pending = this.pending.get(id);
+    if (!pending) return false;
+
+    clearTimeout(pending.timer);
+    this.pending.delete(id);
+
+    if (response.ok === false) {
+      pending.reject(new Error(response.error || 'Browser request failed'));
+    } else {
+      pending.resolve(response.result || {});
+    }
+
+    return true;
+  }
+}
+
+export class BrowserBridgeBackend implements BrowserBackend {
+  constructor(private readonly bridge: BrowserBridge) {}
+
+  async listPages(): Promise<BrowserResult> {
+    return this.callBrowser('list_pages');
+  }
+
+  async createPage(input: CreatePageInput): Promise<BrowserResult> {
+    return this.callBrowser('create_page', input);
+  }
+
+  async selectPage(input: SelectPageInput): Promise<BrowserResult> {
+    return this.callBrowser('select_page', input);
+  }
+
+  async closePage(input: ClosePageInput): Promise<BrowserResult> {
+    return this.callBrowser('close_page', input);
+  }
+
+  async navigatePage(input: NavigatePageInput): Promise<BrowserResult> {
+    return this.callBrowser('navigate_page', input, input.timeout);
+  }
+
+  async showBrowser(): Promise<BrowserResult> {
+    return this.callBrowser('show_browser');
+  }
+
+  async hideBrowser(): Promise<BrowserResult> {
+    return this.callBrowser('hide_browser');
+  }
+
+  private async callBrowser(method: string, params: Record<string, unknown> = {}, timeoutMs?: number) {
+    return this.bridge.request(method, params, timeoutMs) as Promise<BrowserResult>;
+  }
+}

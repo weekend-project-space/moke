@@ -172,16 +172,24 @@ fn apply_webview_bounds<R: Runtime>(
 }
 
 fn is_trackable_url(url: &str) -> bool {
-    !url.trim().is_empty()
+    let url = url.trim();
+    !url.is_empty() && url != "about:blank"
 }
 
 fn refresh_history_flags(page: &mut BrowserPageState) {
-    page.can_go_back = page.history_index > 0;
-    page.can_go_forward = page.history_index + 1 < page.history.len();
+    page.can_go_back = !page.history.is_empty() && page.history_index > 0;
+    page.can_go_forward = !page.history.is_empty() && page.history_index + 1 < page.history.len();
 }
 
 fn push_history_entry(page: &mut BrowserPageState, url: String) {
     if !is_trackable_url(&url) {
+        return;
+    }
+
+    if page.history.is_empty() {
+        page.history.push(url);
+        page.history_index = 0;
+        refresh_history_flags(page);
         return;
     }
 
@@ -493,6 +501,12 @@ fn create_browser_page(
         webview.hide().map_err(|error| error.to_string())?;
     }
 
+    let initial_history = if is_trackable_url(url.as_str()) {
+        vec![url.to_string()]
+    } else {
+        Vec::new()
+    };
+
     {
         let mut pages = state
             .pages
@@ -507,7 +521,7 @@ fn create_browser_page(
             can_go_forward: false,
             is_loading: true,
             visible,
-            history: vec![url.to_string()],
+            history: initial_history,
             history_index: 0,
         });
     }
@@ -574,7 +588,6 @@ async fn browser_navigate(
             webview.navigate(url.clone()).map_err(|error| error.to_string())?;
             update_browser_page(&state, page_id, |page| {
                 page.url = url.to_string();
-                push_history_entry(page, url.to_string());
                 page.is_loading = true;
             })?;
         }

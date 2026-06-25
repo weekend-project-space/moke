@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Check, Copy, Globe2, Menu, PanelRightClose, PanelRightOpen, RotateCcw, Search } from 'lucide-vue-next'
+import { Check, Copy, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { connectBrowserBridge } from './api/browserBridge'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrowserPanel from './components/BrowserPanel.vue'
 import ComposerBox from './components/ComposerBox.vue'
@@ -90,8 +91,8 @@ const pendingApproval = ref<any | null>(null)
 const pendingAsk = ref<PendingAsk | null>(null)
 const isRunning = ref(false)
 const traceCollapsed = ref(true)
-const workspaceView = ref<'activity' | 'browser'>('activity')
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
 const conversationEl = ref<HTMLElement | null>(null)
@@ -100,15 +101,21 @@ const runError = ref('')
 const copiedKey = ref('')
 const sidebarWidth = ref(268)
 const sidebarResizing = ref(false)
-const workspaceWidth = ref(288)
+const workspaceWidth = ref(560)
 const workspaceResizing = ref(false)
 let eventSource: EventSource | null = null
+let disconnectBrowserBridge: (() => void) | null = null
 const SIDEBAR_WIDTH_KEY = 'moke.sidebar.width'
+const SIDEBAR_COLLAPSED_KEY = 'moke.sidebar.collapsed'
 const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 420
 const WORKSPACE_WIDTH_KEY = 'moke.workspace.width'
-const WORKSPACE_MIN_WIDTH = 260
-const WORKSPACE_MAX_WIDTH = 760
+const WORKSPACE_COLLAPSED_KEY = 'moke.workspace.collapsed'
+const WORKSPACE_MIN_WIDTH = 360
+const WORKSPACE_MAX_WIDTH = 1040
+const DESKTOP_BREAKPOINT = 980
+const CHAT_MIN_WIDTH = 420
+const LAYOUT_GUTTER_WIDTH = 12
 const taskTemplates: TaskTemplate[] = [
   {
     title: '整理文件',
@@ -136,7 +143,7 @@ const sortedSessions = computed(() =>
   [...sessions.value].sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)),
 )
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
-const currentTitle = computed(() => currentSession.value?.title || currentSession.value?.preview || '新会话')
+const currentTitle = computed(() => currentSession.value?.preview || '新会话')
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value) return '等待回应'
   if (pendingApproval.value) return '等待确认'
@@ -197,10 +204,6 @@ const toolSummary = computed(() => {
   if (!name) return ''
 
   return progressLabels[name] || name
-})
-const runSummary = computed(() => {
-  if (pendingApproval.value || pendingAsk.value) return '需要处理'
-  return workspaceView.value === 'browser' ? '浏览器' : '进展'
 })
 const progressPanelSummary = computed(() => {
   if (pendingApproval.value) return '需要确认'
@@ -569,23 +572,46 @@ async function startNewSession() {
 }
 
 function openSidebar() {
-  traceCollapsed.value = true
-  sidebarOpen.value = true
-}
-
-function openWorkspace(view: 'activity' | 'browser') {
-  sidebarOpen.value = false
-  workspaceView.value = view
-  traceCollapsed.value = false
-}
-
-function toggleWorkspace() {
-  if (traceCollapsed.value) {
-    openWorkspace(workspaceView.value)
+  if (isDesktopLayout()) {
+    sidebarCollapsed.value = false
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false')
+    fitPanelWidths('window')
     return
   }
 
   traceCollapsed.value = true
+  sidebarOpen.value = true
+}
+
+function closeSidebar() {
+  if (isDesktopLayout()) {
+    sidebarCollapsed.value = true
+    sidebarOpen.value = false
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true')
+    stopSidebarResize()
+    fitPanelWidths('window')
+    return
+  }
+
+  sidebarOpen.value = false
+}
+
+function openWorkspace() {
+  sidebarOpen.value = false
+  traceCollapsed.value = false
+  localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'false')
+  fitPanelWidths('window')
+}
+
+function toggleWorkspace() {
+  if (traceCollapsed.value) {
+    openWorkspace()
+    return
+  }
+
+  traceCollapsed.value = true
+  localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+  fitPanelWidths('window')
 }
 
 function handleGlobalKeydown(event: KeyboardEvent) {
@@ -596,16 +622,56 @@ function handleGlobalKeydown(event: KeyboardEvent) {
     return
   }
 
-  if (!traceCollapsed.value) traceCollapsed.value = true
+  if (!traceCollapsed.value) {
+    traceCollapsed.value = true
+    localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+  }
 }
 
-function clampSidebarWidth(width: number) {
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)))
+function isDesktopLayout() {
+  return window.innerWidth > DESKTOP_BREAKPOINT
+}
+
+function activeWorkspaceWidth() {
+  return traceCollapsed.value ? 0 : workspaceWidth.value
+}
+
+function activeSidebarWidth() {
+  return sidebarCollapsed.value && isDesktopLayout() ? 0 : sidebarWidth.value
+}
+
+function availablePanelWidth(otherPanelWidth: number) {
+  if (!isDesktopLayout()) return Number.POSITIVE_INFINITY
+  return Math.max(0, window.innerWidth - otherPanelWidth - CHAT_MIN_WIDTH - LAYOUT_GUTTER_WIDTH)
+}
+
+function clampWidth(width: number, min: number, max: number) {
+  const rounded = Math.round(width)
+  if (max < min) return Math.max(0, max)
+  return Math.min(max, Math.max(min, rounded))
+}
+
+function clampSidebarWidth(width: number, workspaceTarget = activeWorkspaceWidth()) {
+  const max = Math.min(SIDEBAR_MAX_WIDTH, availablePanelWidth(workspaceTarget))
+  return clampWidth(width, SIDEBAR_MIN_WIDTH, max)
 }
 
 function setSidebarWidth(width: number, persist = false) {
   sidebarWidth.value = clampSidebarWidth(width)
   if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+}
+
+function fitPanelWidths(changed: 'sidebar' | 'workspace' | 'window' = 'window') {
+  if (!isDesktopLayout()) return
+
+  if (changed === 'sidebar') {
+    sidebarWidth.value = clampSidebarWidth(sidebarWidth.value)
+    if (!traceCollapsed.value) workspaceWidth.value = clampWorkspaceWidth(workspaceWidth.value, activeSidebarWidth())
+    return
+  }
+
+  if (!traceCollapsed.value) workspaceWidth.value = clampWorkspaceWidth(workspaceWidth.value, activeSidebarWidth())
+  if (!sidebarCollapsed.value) sidebarWidth.value = clampSidebarWidth(sidebarWidth.value)
 }
 
 function stopSidebarResize() {
@@ -623,9 +689,11 @@ function stopSidebarResize() {
 function handleSidebarResize(event: PointerEvent) {
   if (!sidebarResizing.value) return
   setSidebarWidth(event.clientX)
+  fitPanelWidths('sidebar')
 }
 
 function startSidebarResize(event: PointerEvent) {
+  if (sidebarCollapsed.value) return
   if (window.matchMedia('(max-width: 980px)').matches) return
 
   event.preventDefault()
@@ -638,19 +706,23 @@ function startSidebarResize(event: PointerEvent) {
 }
 
 function handleSidebarResizeKeydown(event: KeyboardEvent) {
+  if (sidebarCollapsed.value) return
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
 
   event.preventDefault()
   const step = event.shiftKey ? 24 : 8
   setSidebarWidth(sidebarWidth.value + (event.key === 'ArrowRight' ? step : -step), true)
+  fitPanelWidths('sidebar')
 }
 
-function clampWorkspaceWidth(width: number) {
-  return Math.min(WORKSPACE_MAX_WIDTH, Math.max(WORKSPACE_MIN_WIDTH, Math.round(width)))
+function clampWorkspaceWidth(width: number, sidebarTarget = activeSidebarWidth()) {
+  const max = Math.min(WORKSPACE_MAX_WIDTH, availablePanelWidth(sidebarTarget))
+  return clampWidth(width, WORKSPACE_MIN_WIDTH, max)
 }
 
 function setWorkspaceWidth(width: number, persist = false) {
   workspaceWidth.value = clampWorkspaceWidth(width)
+  fitPanelWidths('workspace')
   if (persist) localStorage.setItem(WORKSPACE_WIDTH_KEY, String(workspaceWidth.value))
 }
 
@@ -689,6 +761,10 @@ function handleWorkspaceResizeKeydown(event: KeyboardEvent) {
   event.preventDefault()
   const step = event.shiftKey ? 24 : 8
   setWorkspaceWidth(workspaceWidth.value + (event.key === 'ArrowLeft' ? step : -step), true)
+}
+
+function handleWindowResize() {
+  fitPanelWidths('window')
 }
 
 function sendOnEnter(event: KeyboardEvent) {
@@ -916,10 +992,19 @@ async function cancelRun() {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('resize', handleWindowResize)
+  disconnectBrowserBridge = connectBrowserBridge({
+    apiBase,
+    showBrowserPanel: openWorkspace,
+  })
   const savedSidebarWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
-  if (Number.isFinite(savedSidebarWidth)) setSidebarWidth(savedSidebarWidth)
+  if (Number.isFinite(savedSidebarWidth)) setSidebarWidth(savedSidebarWidth, true)
+  sidebarCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
   const savedWorkspaceWidth = Number(localStorage.getItem(WORKSPACE_WIDTH_KEY))
-  if (Number.isFinite(savedWorkspaceWidth)) setWorkspaceWidth(savedWorkspaceWidth)
+  if (Number.isFinite(savedWorkspaceWidth)) setWorkspaceWidth(savedWorkspaceWidth, true)
+  const savedWorkspaceCollapsed = localStorage.getItem(WORKSPACE_COLLAPSED_KEY)
+  if (savedWorkspaceCollapsed !== null) traceCollapsed.value = savedWorkspaceCollapsed === 'true'
+  fitPanelWidths('window')
 
   if (await checkServer()) {
     await loadSessions()
@@ -934,6 +1019,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('resize', handleWindowResize)
+  disconnectBrowserBridge?.()
+  disconnectBrowserBridge = null
   stopSidebarResize()
   stopWorkspaceResize()
   closeEventSource()
@@ -941,12 +1029,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
+  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
-      @click="sidebarOpen = false"></button>
+      @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online' || isRunning" :is-running="isRunning" :session-label="sessionLabel"
-      :session-meta="sessionMeta" @close="sidebarOpen = false" @new-session="startNewSession"
+      :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
       @select-session="selectSession" />
     <div
       class="sidebar-resizer"
@@ -960,17 +1048,17 @@ onUnmounted(() => {
 
     <section class="chat">
       <header class="topbar">
-        <button class="sidebar-toggle" type="button" aria-label="显示会话列表" title="显示会话列表" @click="openSidebar">
-          <Menu :size="17" stroke-width="2.2" />
+        <button class="sidebar-toggle" type="button" aria-label="展开会话列表" title="展开会话列表" @click="openSidebar">
+          <PanelLeftOpen :size="17" stroke-width="2.1" />
         </button>
         <div>
           <h2>{{ currentTitle }}</h2>
           <p v-if="sessionSubtitle">{{ sessionSubtitle }}</p>
         </div>
-        <button class="trace-summary" type="button" :class="{ attention: pendingApproval || pendingAsk }"
-          :aria-label="traceCollapsed ? '显示工作区' : '收起工作区'" :title="traceCollapsed ? '显示工作区' : '收起工作区'"
+        <button class="trace-summary" type="button"
+          :aria-label="traceCollapsed ? '显示浏览器' : '隐藏浏览器'" :title="traceCollapsed ? '显示浏览器' : '隐藏浏览器'"
           @click="toggleWorkspace">
-          {{ runSummary }}
+          {{ traceCollapsed ? '显示浏览器' : '隐藏浏览器' }}
           <PanelRightOpen v-if="traceCollapsed" :size="14" stroke-width="2.2" />
           <PanelRightClose v-else :size="14" stroke-width="2.2" />
         </button>
@@ -1045,14 +1133,6 @@ onUnmounted(() => {
             <RotateCcw :size="14" stroke-width="2.2" />
             继续整理
           </button>
-          <button type="button" @click="openWorkspace('activity')">
-            <Search :size="14" stroke-width="2.2" />
-            查看过程
-          </button>
-          <button type="button" @click="openWorkspace('browser')">
-            <Globe2 :size="14" stroke-width="2.2" />
-            打开浏览器
-          </button>
         </div>
       </div>
 
@@ -1072,18 +1152,9 @@ onUnmounted(() => {
     ></div>
 
     <aside class="workspace">
-      <header class="workspace-tabs" aria-label="工作区视图">
-        <button type="button" :class="{ active: workspaceView === 'activity' }" @click="workspaceView = 'activity'">
-          <Search :size="14" stroke-width="2.2" />
-          进度
-        </button>
-        <button type="button" :class="{ active: workspaceView === 'browser' }" @click="workspaceView = 'browser'">
-          <Globe2 :size="14" stroke-width="2.2" />
-          浏览器
-        </button>
-      </header>
-      <ActivityPanel v-show="workspaceView === 'activity'" :steps="traceSteps" :summary="progressPanelSummary" />
-      <BrowserPanel v-show="workspaceView === 'browser'" :active="!traceCollapsed && workspaceView === 'browser'" />
+      <!-- Progress panel switching is disabled for now; the right workspace only hosts the browser. -->
+      <ActivityPanel v-if="false" :steps="traceSteps" :summary="progressPanelSummary" />
+      <BrowserPanel :active="!traceCollapsed" />
     </aside>
   </main>
 </template>

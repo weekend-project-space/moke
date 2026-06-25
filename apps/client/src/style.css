@@ -90,6 +90,18 @@ button:disabled {
   grid-template-columns: var(--sidebar-width, 268px) 6px minmax(420px, 1fr) 0 0;
 }
 
+.shell.sidebar-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 6px var(--workspace-width, 288px);
+}
+
+.shell.sidebar-collapsed.trace-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
+}
+
+.sidebar-collapsed .topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
 .sidebar,
 .workspace,
 .topbar,
@@ -100,6 +112,7 @@ button:disabled {
 }
 
 .sidebar {
+  container-type: inline-size;
   display: flex;
   min-height: 0;
   flex-direction: column;
@@ -121,10 +134,20 @@ button:disabled {
 .sidebar-resizer::before,
 .workspace-resizer::before {
   position: absolute;
-  inset: 0 2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
   content: "";
   background: transparent;
   transition: background 0.14s ease;
+}
+
+.sidebar-resizer::before {
+  left: 0;
+}
+
+.workspace-resizer::before {
+  right: 0;
 }
 
 .sidebar-resizer:hover::before,
@@ -137,12 +160,47 @@ button:disabled {
 }
 
 .trace-collapsed .workspace-resizer {
+  min-width: 0;
+  pointer-events: none;
+}
+
+.trace-collapsed .workspace-resizer::before,
+.sidebar-collapsed .sidebar-resizer::before {
   display: none;
+}
+
+.sidebar-collapsed .sidebar {
+  padding-right: 0;
+  padding-left: 0;
+  border-right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-collapsed .sidebar-resizer {
+  min-width: 0;
+  pointer-events: none;
 }
 
 .sidebar-toggle,
 .sidebar-scrim {
   display: none;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+.sidebar-collapsed .sidebar-toggle:hover {
+  background: rgba(118, 118, 128, 0.11);
 }
 
 .brand {
@@ -153,13 +211,9 @@ button:disabled {
 .brand-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   min-height: 34px;
-}
-
-.brand-header > div {
-  min-width: 0;
 }
 
 .brand-actions {
@@ -185,16 +239,11 @@ button:disabled {
   text-transform: none;
 }
 
-.brand h1,
 .topbar h2 {
   margin: 0;
   color: var(--ink);
   font-weight: 720;
   letter-spacing: -0.03em;
-}
-
-.brand h1 {
-  font-size: 21px;
 }
 
 .session-search {
@@ -245,12 +294,17 @@ button:disabled {
 }
 
 .close-sidebar {
-  display: none;
+  border-color: transparent;
+  background: transparent;
 }
 
 .new-session:hover,
 .close-sidebar:hover {
   color: var(--ink);
+  background: rgba(118, 118, 128, 0.11);
+}
+
+.new-session:hover {
   border-color: rgba(255, 255, 255, 0.86);
   background: rgba(255, 255, 255, 0.9);
 }
@@ -290,7 +344,7 @@ button:disabled {
   position: relative;
   width: 100%;
   margin-top: 3px;
-  padding: 9px 10px;
+  padding: 9px 10px 9px 12px;
   border: 1px solid transparent;
   border-radius: 9px;
   text-align: left;
@@ -309,30 +363,15 @@ button:disabled {
 
 .session.active {
   border-color: transparent;
-  background: rgba(0, 122, 255, 0.16);
+  background: rgba(118, 118, 128, 0.13);
   box-shadow: none;
 }
 
 .session-line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-}
-
-.session-title {
-  display: block;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 560;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session.active .session-title {
-  font-weight: 620;
 }
 
 .session time {
@@ -341,7 +380,7 @@ button:disabled {
   font-weight: 400;
 }
 
-.session-title i {
+.session small i {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -355,11 +394,10 @@ button:disabled {
 .session small {
   display: block;
   overflow: hidden;
-  margin-top: 4px;
-  color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.25;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -369,6 +407,7 @@ button:disabled {
   min-height: 0;
   min-width: 0;
   flex-direction: column;
+  --content-width: min(760px, calc(100% - 44px));
   background: rgba(251, 251, 253, 0.92);
 }
 
@@ -378,8 +417,8 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 9px;
-  min-height: 54px;
-  padding: 8px 16px;
+  min-height: 48px;
+  padding: 7px 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -392,15 +431,15 @@ button:disabled {
   max-width: min(620px, 48vw);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 17px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .trace-summary,
 .server-pill {
   display: inline-flex;
   min-width: 0;
-  height: 30px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -408,7 +447,7 @@ button:disabled {
   background: transparent;
   box-shadow: none;
   color: var(--ink-soft);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -420,12 +459,6 @@ button:disabled {
 
 .trace-summary:hover {
   background: rgba(118, 118, 128, 0.11);
-}
-
-.trace-summary.attention {
-  border-color: color-mix(in srgb, var(--warning), white 58%);
-  color: var(--warning);
-  background: rgba(255, 245, 229, 0.78);
 }
 
 .server-pill {
@@ -457,9 +490,9 @@ button:disabled {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
-  padding: 22px clamp(22px, 4vw, 58px);
+  padding: 14px 0 16px;
   overflow-y: auto;
   scroll-padding-bottom: 18px;
   background: #fbfbfd;
@@ -490,13 +523,13 @@ button:disabled {
 .timeline-note {
   align-self: center;
   max-width: min(520px, 82%);
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  padding: 3px 8px;
+  border: 0;
   border-radius: 999px;
-  color: var(--ink-muted);
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  font-size: 12px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 18%);
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -504,8 +537,9 @@ button:disabled {
   display: flex;
   align-items: flex-end;
   gap: 9px;
-  width: 100%;
+  width: var(--content-width);
   min-width: 0;
+  align-self: center;
 }
 
 .message-row.user {
@@ -521,30 +555,32 @@ button:disabled {
 }
 
 .bubble {
-  max-width: min(780px, 92%);
-  padding: 11px 14px;
+  max-width: 100%;
+  padding: 9px 12px;
   border: 1px solid rgba(60, 60, 67, 0.12);
-  border-radius: 20px;
+  border-radius: 14px;
+  font-size: 14px;
   line-height: 1.5;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
 }
 
 .bubble.user {
-  max-width: min(640px, 78%);
-  border-color: rgba(0, 105, 230, 0.14);
+  max-width: min(560px, 76%);
+  border-color: rgba(0, 105, 230, 0.1);
   color: #fff;
-  background: var(--accent);
+  background: color-mix(in srgb, var(--accent), #2f6fd9 20%);
   border-bottom-right-radius: 7px;
   box-shadow: none;
 }
 
 .bubble.assistant {
-  max-width: min(820px, 94%);
+  max-width: min(760px, 100%);
+  padding: 0;
   color: var(--ink);
   border-color: transparent;
-  background: #f2f3f5;
-  border-bottom-left-radius: 7px;
-  box-shadow: inset 0 0 0 0.5px rgba(60, 60, 67, 0.09);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .bubble.thinking {
@@ -635,9 +671,9 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: auto 0;
-  padding: 12px 0 24px;
+  padding: 8px 0 18px;
   text-align: center;
 }
 
@@ -656,9 +692,9 @@ button:disabled {
 .empty-state h3 {
   margin: 0;
   color: var(--ink);
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: 0;
 }
 
 .empty-state > p {
@@ -670,15 +706,15 @@ button:disabled {
 .suggestion-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  width: min(560px, 100%);
+  gap: 8px;
+  width: min(520px, var(--content-width));
 }
 
 .suggestion-grid button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: 12px;
   text-align: left;
@@ -712,7 +748,9 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 auto 4px 0;
+  width: var(--content-width);
+  align-self: center;
+  margin: -2px auto 4px;
 }
 
 .result-actions button {
@@ -738,6 +776,8 @@ button:disabled {
 
 .markdown {
   overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.52;
 }
 
 .markdown > :first-child {
@@ -749,24 +789,24 @@ button:disabled {
 }
 
 .markdown p {
-  margin: 0 0 9px;
+  margin: 0 0 8px;
 }
 
 .markdown h1,
 .markdown h2,
 .markdown h3 {
-  margin: 14px 0 7px;
+  margin: 12px 0 6px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.3;
 }
 
 .markdown h1 {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .markdown h2 {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .markdown ul,
@@ -904,12 +944,15 @@ button:disabled {
 
 .composer {
   flex: 0 0 auto;
-  padding: 8px clamp(22px, 4vw, 58px) 18px;
+  display: flex;
+  justify-content: center;
+  padding: 7px 0 12px;
   background: linear-gradient(180deg, rgba(251, 251, 253, 0), rgba(251, 251, 253, 0.92) 48%);
 }
 
 .composer-panel {
   display: flex;
+  width: var(--content-width);
   min-height: 46px;
   flex-direction: column;
   justify-content: center;
@@ -927,10 +970,10 @@ button:disabled {
   gap: 8px;
   min-height: 46px;
   padding: 5px 6px 5px 14px;
-  border: 1px solid rgba(60, 60, 67, 0.13);
+  border: 1px solid rgba(60, 60, 67, 0.1);
   border-radius: 19px;
   background: rgba(255, 255, 255, 0.82);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.8);
+  box-shadow: none;
 }
 
 .composer textarea {
@@ -943,7 +986,7 @@ button:disabled {
   outline: none;
   color: var(--ink);
   background: transparent;
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.35;
   resize: none;
   overflow-y: auto;
@@ -1273,8 +1316,8 @@ button:disabled {
 
 .browser-tab-select > span {
   overflow: hidden;
-  font-size: 11.5px;
-  font-weight: 560;
+  font-size: 12px;
+  font-weight: 400;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1447,6 +1490,11 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .shell.sidebar-collapsed,
+  .shell.sidebar-collapsed.trace-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .sidebar-resizer,
   .workspace-resizer {
     display: none;
@@ -1472,6 +1520,14 @@ button:disabled {
     transition: transform 0.22s ease;
   }
 
+  .sidebar-collapsed .sidebar {
+    width: min(292px, calc(100vw - 42px));
+    padding: 14px 10px;
+    border-right: 1px solid var(--line);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
   .sidebar-open .sidebar {
     transform: translateX(0);
   }
@@ -1491,17 +1547,9 @@ button:disabled {
     padding: 0 6px 10px;
   }
 
-  .brand h1 {
-    width: auto;
-    height: auto;
-    margin: 0;
-    color: var(--ink);
-    background: transparent;
-    font-size: 21px;
-  }
-
   .brand-header {
     flex-direction: row;
+    justify-content: flex-end;
     gap: 12px;
     min-height: 34px;
   }
@@ -1551,24 +1599,14 @@ button:disabled {
   }
 
   .session.active {
-    background: rgba(0, 122, 255, 0.16);
+    background: rgba(118, 118, 128, 0.13);
   }
 
   .session-line {
     display: grid;
   }
 
-  .session-title {
-    width: auto;
-    max-width: none;
-    color: var(--ink);
-    font-size: 12px;
-    font-weight: 560;
-    text-align: left;
-    text-overflow: ellipsis;
-  }
-
-  .session-title i {
+  .session small i {
     position: static;
     margin-left: 6px;
   }
@@ -1584,6 +1622,10 @@ button:disabled {
   .topbar {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     padding: 9px 12px;
+  }
+
+  .chat {
+    --content-width: calc(100% - 24px);
   }
 
   .sidebar-toggle {
@@ -1604,7 +1646,7 @@ button:disabled {
 
   .topbar h2 {
     max-width: 100%;
-    font-size: 16px;
+    font-size: 13px;
   }
 
   .server-pill {
@@ -1633,24 +1675,23 @@ button:disabled {
   }
 
   .conversation {
-    padding: 16px 12px;
+    padding: 16px 0;
   }
 
   .suggestion-grid {
     grid-template-columns: 1fr;
   }
 
-  .bubble,
   .bubble.user {
     max-width: 96%;
   }
 
   .composer {
-    padding: 10px 12px 16px;
+    padding: 10px 0 16px;
   }
 
   .result-actions {
-    padding-left: 2px;
+    padding-left: 0;
   }
 
   .workspace {
