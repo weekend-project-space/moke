@@ -47,6 +47,7 @@ function clearSearch() {
   <aside class="sidebar">
     <section class="brand">
       <div class="brand-header">
+        <span class="brand-title">会话</span>
         <div class="brand-actions">
           <button class="new-session" type="button" :disabled="disabled" aria-label="新建会话" title="新建会话" @click="$emit('newSession')">
             <Plus :size="17" stroke-width="2.2" />

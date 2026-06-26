@@ -168,24 +168,24 @@ const CHAT_MIN_WIDTH = 420
 const LAYOUT_GUTTER_WIDTH = 12
 const taskTemplates: TaskTemplate[] = [
   {
-    title: '整理文件',
-    description: '先看一眼，再给出安全整理建议',
-    prompt: '帮我看看下载文件夹里哪些文件可以整理。先给建议，不要直接删除或移动文件。',
+    title: '看看当前项目结构',
+    description: '了解项目组成和关键文件',
+    prompt: '帮我看看当前项目结构，先总结它是做什么的，再列出我接下来最该看的文件。',
   },
   {
-    title: '查找内容',
-    description: '帮你在电脑或项目里找到相关文件',
-    prompt: '帮我查找和报销相关的文件，只列出可能相关的位置和文件名。',
+    title: '打开网页并总结重点',
+    description: '读取当前浏览器页面',
+    prompt: '打开当前浏览器页面，帮我总结重点内容。',
   },
   {
-    title: '阅读总结',
-    description: '读文档或项目，整理重点和下一步',
-    prompt: '阅读当前目录，告诉我这个项目是做什么的，并列出我接下来最该看的文件。',
+    title: '找一下最近改过的文件',
+    description: '辅助定位变更影响',
+    prompt: '帮我找一下项目里最近改过的文件，并简要说明可能影响了哪些功能。',
   },
   {
-    title: '帮我操作',
-    description: '执行前先确认，保留可控感',
-    prompt: '帮我完成一个电脑任务。请先说明你准备怎么做，需要修改文件前先问我。',
+    title: '帮我检查这段报错',
+    description: '分析原因和最小修复',
+    prompt: '帮我检查这段报错，先分析原因，再给出最小修复方案。',
   },
 ]
 const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
@@ -501,7 +501,26 @@ function formatSessionTime(value: string) {
   const time = Date.parse(value)
   if (Number.isNaN(time)) return '刚刚'
 
-  return formatTimelineTime(time)
+  const date = new Date(time)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+
+  if (targetDay === today) {
+    return new Intl.DateTimeFormat('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date)
+  }
+
+  const dateLabel = new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  }).format(date)
+
+  if (date.getFullYear() === now.getFullYear()) return dateLabel
+
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
 
 function parseMessageTime(message: Message) {
@@ -1576,9 +1595,7 @@ onUnmounted(() => {
         <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
         <div v-if="showEmptyState" class="empty-state">
-          <div class="empty-kicker">你的电脑任务助手</div>
           <h3>想让 Moke 帮你做什么？</h3>
-          <p>先查看、再建议；需要改动时会等你确认。</p>
           <div class="suggestion-grid">
             <button v-for="template in taskTemplates" :key="template.title" type="button"
               @click="applySuggestion(template.prompt)">
