@@ -61,6 +61,24 @@ type TraceStep = {
   detail: string
 }
 
+type ProcessTone = 'neutral' | 'error' | 'ask'
+
+type ProcessNote = {
+  id: string
+  label: string
+  tone: ProcessTone
+  time: number
+}
+
+type ProcessItem = {
+  id: string
+  kind: 'assistant' | 'tool-call' | 'tool-result' | 'event'
+  title: string
+  detail: string
+  tone: ProcessTone
+  raw?: string
+}
+
 type TaskTemplate = {
   title: string
   description: string
@@ -77,6 +95,14 @@ type DisplayItem =
     type: 'message'
     id: string
     message: Message
+  }
+  | {
+    type: 'process-group'
+    id: string
+    label: string
+    items: ProcessItem[]
+    collapsed: boolean
+    hasError: boolean
   }
 
 const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
@@ -100,6 +126,7 @@ const conversationEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 const runError = ref('')
 const copiedKey = ref('')
+const processCollapsed = ref<Record<string, boolean>>({})
 const sidebarWidth = ref(268)
 const sidebarResizing = ref(false)
 const workspaceWidth = ref(560)
@@ -220,12 +247,67 @@ const lastAssistantMessage = computed(() =>
 )
 const showResultActions = computed(() => Boolean(lastAssistantMessage.value) && !isRunning.value && !pendingAsk.value && !pendingApproval.value)
 const showJumpToBottom = ref(false)
+const processNotes = computed<ProcessNote[]>(() => {
+  const notes: ProcessNote[] = []
+  const callsById = new Map<string, AgentEvent>()
+  let completedTools = 0
+  let latestToolTime = 0
+
+  for (const event of events.value) {
+    if (event.type === 'tool.call') {
+      callsById.set(String(event.payload.call_id || event.id), event)
+      latestToolTime = parseEventTime(event) || latestToolTime
+      continue
+    }
+
+    if (event.type === 'tool.result') {
+      latestToolTime = parseEventTime(event) || latestToolTime
+      if (event.payload.status === 'ok') completedTools += 1
+      if (event.payload.status !== 'error') continue
+
+      const call = callsById.get(String(event.payload.call_id || ''))
+      const toolName = formatToolName(call?.payload.tool)
+      notes.push({
+        id: `process-${event.id}`,
+        label: `工具执行失败：${toolName} · ${shortText(summarizeOutput(event.payload.output), 72)}`,
+        tone: 'error',
+        time: parseEventTime(event),
+      })
+    }
+
+    if (event.type === 'approval.required') {
+      notes.push({
+        id: `process-${event.id}`,
+        label: `等待确认：${shortText(String(event.payload.reason || '需要确认后继续执行'), 72)}`,
+        tone: 'ask',
+        time: parseEventTime(event),
+      })
+    }
+
+    if (event.type === 'agent.error') {
+      notes.push({
+        id: `process-${event.id}`,
+        label: `运行失败：${shortText(String(event.payload.message || '未知错误'), 72)}`,
+        tone: 'error',
+        time: parseEventTime(event),
+      })
+    }
+  }
+
+  const latestActivity = latestProcessActivity(callsById, completedTools, latestToolTime)
+  if (latestActivity) notes.push(latestActivity)
+
+  return notes.slice(-4)
+})
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
+  const sourceMessages = messages.value.filter((message) => message.role !== 'tool' || Boolean(message.content.trim()))
   let lastTime = 0
+  let turnIndex = 0
+  let processItems: ProcessItem[] = []
+  let pendingFinalMessage: { id: string; message: Message } | null = null
 
-  visibleMessages.value.forEach((message, index) => {
-    const time = parseMessageTime(message)
+  function pushTime(time: number, index: number) {
     if (time && (lastTime === 0 || time - lastTime >= MESSAGE_TIME_GAP_MS)) {
       items.push({
         type: 'time',
@@ -234,13 +316,93 @@ const displayItems = computed<DisplayItem[]>(() => {
       })
       lastTime = time
     }
+  }
 
-    items.push({
-      type: 'message',
-      id: `message-${index}`,
-      message,
-    })
+  function flushAssistantTurn(nextTime = 0) {
+    if (!processItems.length && !pendingFinalMessage) return
+
+    if (processItems.length) {
+      const groupId = `process-turn-${turnIndex}`
+      items.push({
+        type: 'process-group',
+        id: groupId,
+        label: processGroupLabel(processItems),
+        items: processItems,
+        collapsed: processCollapsed.value[groupId] ?? true,
+        hasError: processItems.some((item) => item.tone === 'error'),
+      })
+    }
+
+    if (pendingFinalMessage && pendingFinalMessage.message.content.trim()) {
+      pushTime(parseMessageTime(pendingFinalMessage.message) || nextTime, turnIndex)
+      items.push({
+        type: 'message',
+        id: pendingFinalMessage.id,
+        message: pendingFinalMessage.message,
+      })
+    }
+
+    turnIndex += 1
+    processItems = []
+    pendingFinalMessage = null
+  }
+
+  function movePendingFinalToProcess() {
+    if (!pendingFinalMessage) return
+
+    processItems.push(createAssistantProcessItem(pendingFinalMessage.message, pendingFinalMessage.id))
+    pendingFinalMessage = null
+  }
+
+  sourceMessages.forEach((message, index) => {
+    const time = parseMessageTime(message)
+
+    if (message.role === 'user') {
+      flushAssistantTurn(time)
+      pushTime(time, index)
+      items.push({
+        type: 'message',
+        id: `message-${index}`,
+        message,
+      })
+      return
+    }
+
+    if (message.role === 'tool') {
+      movePendingFinalToProcess()
+      processItems.push(createToolResultProcessItem(message, `message-${index}`))
+      return
+    }
+
+    if (message.tool_calls?.length) {
+      movePendingFinalToProcess()
+      if (message.content.trim()) processItems.push(createAssistantProcessItem(message, `message-${index}`))
+      for (const toolCall of message.tool_calls) {
+        processItems.push(createToolCallProcessItem(toolCall, `message-${index}-${toolCall.id}`))
+      }
+      return
+    }
+
+    if (message.content.trim()) {
+      movePendingFinalToProcess()
+      pendingFinalMessage = { id: `message-${index}`, message }
+    }
   })
+
+  flushAssistantTurn()
+
+  if ((isRunning.value || pendingAsk.value || pendingApproval.value || runError.value) && processNotes.value.length) {
+    const groupId = 'process-current-events'
+    const itemsFromEvents = processNotes.value.map(createEventProcessItem)
+    items.push({
+      type: 'process-group',
+      id: groupId,
+      label: processGroupLabel(itemsFromEvents),
+      items: itemsFromEvents,
+      collapsed: processCollapsed.value[groupId] ?? true,
+      hasError: itemsFromEvents.some((item) => item.tone === 'error'),
+    })
+  }
 
   return items
 })
@@ -296,7 +458,7 @@ function renderMarkdown(content: string) {
 }
 
 function isVisibleMessage(message: Message) {
-  return message.role !== 'tool' && !message.tool_calls?.length && Boolean(message.content.trim())
+  return message.role !== 'tool' && Boolean(message.content.trim())
 }
 
 function isFinalAssistantMessage(message: Message | undefined) {
@@ -402,7 +564,7 @@ function jumpToBottom() {
 }
 
 watch(
-  () => [messages.value.length, streamingText.value],
+  () => [messages.value.length, events.value.length, streamingText.value],
   () => {
     if (!autoScroll.value) showJumpToBottom.value = true
     void nextTick(() => scrollToBottom())
@@ -424,6 +586,132 @@ function summarizeOutput(output: Record<string, any> | undefined) {
 
 
   return '已完成'
+}
+
+function parseEventTime(event: AgentEvent) {
+  const time = Date.parse(event.ts)
+  return Number.isNaN(time) ? 0 : time
+}
+
+function formatToolName(rawName: unknown) {
+  const name = String(rawName || '').trim()
+  return toolLabels[name] || name || '工具'
+}
+
+function formatJson(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2)
+  } catch {
+    return String(value ?? '')
+  }
+}
+
+function parseToolContent(content: string) {
+  try {
+    return JSON.parse(content)
+  } catch {
+    return content
+  }
+}
+
+function shortText(value: string, maxLength: number) {
+  const text = value.replace(/\s+/g, ' ').trim()
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength - 1)}…`
+}
+
+function createAssistantProcessItem(message: Message, id: string): ProcessItem {
+  return {
+    id: `process-assistant-${id}`,
+    kind: 'assistant',
+    title: '',
+    detail: shortText(message.content, 140),
+    tone: 'neutral',
+    raw: message.content,
+  }
+}
+
+function createToolCallProcessItem(toolCall: NonNullable<Message['tool_calls']>[number], id: string): ProcessItem {
+  return {
+    id: `process-tool-call-${id}`,
+    kind: 'tool-call',
+    title: formatToolName(toolCall.name),
+    detail: shortText(formatJson(toolCall.args), 140),
+    tone: 'neutral',
+    raw: formatJson(toolCall.args),
+  }
+}
+
+function createToolResultProcessItem(message: Message, id: string): ProcessItem {
+  const parsed = parseToolContent(message.content)
+  const detail = typeof parsed === 'string' ? parsed : summarizeOutput(parsed)
+  const raw = typeof parsed === 'string' ? parsed : formatJson(parsed)
+
+  return {
+    id: `process-tool-result-${id}`,
+    kind: 'tool-result',
+    title: `${formatToolName(message.name)}结果`,
+    detail: shortText(detail, 160),
+    tone: message.status === 'error' ? 'error' : 'neutral',
+    raw,
+  }
+}
+
+function createEventProcessItem(note: ProcessNote): ProcessItem {
+  return {
+    id: `process-event-${note.id}`,
+    kind: 'event',
+    title: note.tone === 'error' ? '运行提示' : '执行过程',
+    detail: note.label,
+    tone: note.tone,
+  }
+}
+
+function processGroupLabel(items: ProcessItem[]) {
+  const toolCalls = items.filter((item) => item.kind === 'tool-call').length
+  const toolResults = items.filter((item) => item.kind === 'tool-result').length
+  const errors = items.filter((item) => item.tone === 'error').length
+  const toolSteps = toolCalls + toolResults
+  const parts = ['查看过程']
+
+  if (toolSteps) parts.push(`${toolSteps} 个工具步骤`)
+  if (errors) parts.push(`${errors} 个失败`)
+  if (parts.length === 1) parts.push(`${items.length} 条记录`)
+
+  return parts.join(' · ')
+}
+
+function toggleProcessGroup(id: string) {
+  processCollapsed.value = {
+    ...processCollapsed.value,
+    [id]: !(processCollapsed.value[id] ?? true),
+  }
+}
+
+function latestProcessActivity(callsById: Map<string, AgentEvent>, completedTools: number, time: number): ProcessNote | null {
+  const calls = [...callsById.values()]
+  const latestCall = calls.at(-1)
+
+  if (isRunning.value && latestCall) {
+    const toolName = formatToolName(latestCall.payload.tool)
+    return {
+      id: `process-active-${latestCall.id}`,
+      label: `正在${toolName}`,
+      tone: 'neutral',
+      time: time || parseEventTime(latestCall),
+    }
+  }
+
+  if (completedTools > 0) {
+    return {
+      id: 'process-completed-tools',
+      label: `已完成 ${completedTools} 个工具步骤`,
+      tone: 'neutral',
+      time,
+    }
+  }
+
+  return null
 }
 
 function toTraceStep(event: AgentEvent): TraceStep | null {
@@ -1141,6 +1429,29 @@ onUnmounted(() => {
 
         <template v-for="item in displayItems" :key="item.id">
           <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
+          <div v-else-if="item.type === 'process-group'" class="process-group" :class="{ error: item.hasError }">
+            <button
+              class="process-toggle"
+              type="button"
+              :aria-expanded="!item.collapsed"
+              @click="toggleProcessGroup(item.id)"
+            >
+              <span class="process-caret" aria-hidden="true">{{ item.collapsed ? '›' : '⌄' }}</span>
+              <span>{{ item.label }}</span>
+            </button>
+            <div v-if="!item.collapsed" class="process-list">
+              <details v-for="processItem in item.items" :key="processItem.id" class="process-item" :class="[processItem.tone, processItem.kind]">
+                <summary v-if="processItem.kind === 'assistant'" class="process-assistant-summary">
+                  <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
+                </summary>
+                <summary v-else>
+                  <span>{{ processItem.title }}</span>
+                  <small>{{ processItem.detail }}</small>
+                </summary>
+                <pre v-if="processItem.raw">{{ processItem.raw }}</pre>
+              </details>
+            </div>
+          </div>
           <article v-else class="message-row" :class="item.message.role">
             <div class="bubble" :class="item.message.role">
               <div v-if="item.message.role === 'assistant'" class="markdown"
