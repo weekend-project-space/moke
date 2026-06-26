@@ -25,6 +25,10 @@ function readString(params: Record<string, unknown>, key: string) {
   return typeof params[key] === 'string' ? params[key] as string : undefined
 }
 
+function readNumber(params: Record<string, unknown>, key: string) {
+  return typeof params[key] === 'number' ? params[key] as number : undefined
+}
+
 async function executeBrowserRequest(
   request: BrowserBridgeRequest,
   options: BrowserBridgeOptions,
@@ -62,6 +66,50 @@ async function executeBrowserRequest(
         type,
         url: readString(params, 'url'),
         ignoreCache: readBool(params, 'ignoreCache'),
+      })
+    }
+    case 'evaluate_script':
+      options.showBrowserPanel()
+      return browserApi.evaluateScript(params)
+    case 'take_snapshot':
+      return browserApi.takeSnapshot(params)
+    case 'take_screenshot':
+      options.showBrowserPanel()
+      return browserApi.takeScreenshot(params)
+    case 'click':
+      options.showBrowserPanel()
+      return browserApi.click(params)
+    case 'hover':
+      options.showBrowserPanel()
+      return browserApi.hover(params)
+    case 'fill':
+      options.showBrowserPanel()
+      return browserApi.fill(params)
+    case 'fill_form':
+      options.showBrowserPanel()
+      return browserApi.fillForm(params)
+    case 'upload_file':
+      options.showBrowserPanel()
+      return browserApi.uploadFile(params)
+    case 'wait_for':
+      return browserApi.waitFor(params)
+    case 'press_key':
+      options.showBrowserPanel()
+      return browserApi.pressKey(params)
+    case 'type_text':
+      options.showBrowserPanel()
+      return browserApi.typeText(params)
+    case 'handle_dialog':
+      return browserApi.handleDialog(params)
+    case 'resize_page': {
+      const width = readNumber(params, 'width')
+      const height = readNumber(params, 'height')
+      if (!width || !height) throw new Error('width and height are required')
+      options.showBrowserPanel()
+      return browserApi.resizePage({
+        pageId: readPageId(params),
+        width,
+        height,
       })
     }
     case 'show_browser':

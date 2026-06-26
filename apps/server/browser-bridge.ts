@@ -3,10 +3,23 @@ import type { ServerResponse } from 'node:http';
 import type {
   BrowserBackend,
   BrowserResult,
+  ClickInput,
   ClosePageInput,
   CreatePageInput,
+  ElementActionInput,
+  EvaluateScriptInput,
+  FillFormInput,
+  FillInput,
+  HandleDialogInput,
   NavigatePageInput,
+  PressKeyInput,
+  ResizePageInput,
   SelectPageInput,
+  TakeScreenshotInput,
+  TakeSnapshotInput,
+  TypeTextInput,
+  UploadFileInput,
+  WaitForInput,
 } from '../../packages/browser-tools/src/index.js';
 
 type BrowserRequest = {
@@ -99,6 +112,58 @@ export class BrowserBridgeBackend implements BrowserBackend {
 
   async navigatePage(input: NavigatePageInput): Promise<BrowserResult> {
     return this.callBrowser('navigate_page', input, input.timeout);
+  }
+
+  async evaluateScript(input: EvaluateScriptInput): Promise<BrowserResult> {
+    return this.callBrowser('evaluate_script', input);
+  }
+
+  async takeSnapshot(input: TakeSnapshotInput): Promise<BrowserResult> {
+    return this.callBrowser('take_snapshot', input);
+  }
+
+  async takeScreenshot(input: TakeScreenshotInput): Promise<BrowserResult> {
+    return this.callBrowser('take_screenshot', input);
+  }
+
+  async click(input: ClickInput): Promise<BrowserResult> {
+    return this.callBrowser('click', input);
+  }
+
+  async hover(input: ElementActionInput): Promise<BrowserResult> {
+    return this.callBrowser('hover', input);
+  }
+
+  async fill(input: FillInput): Promise<BrowserResult> {
+    return this.callBrowser('fill', input);
+  }
+
+  async fillForm(input: FillFormInput): Promise<BrowserResult> {
+    return this.callBrowser('fill_form', input);
+  }
+
+  async uploadFile(input: UploadFileInput): Promise<BrowserResult> {
+    return this.callBrowser('upload_file', input);
+  }
+
+  async waitFor(input: WaitForInput): Promise<BrowserResult> {
+    return this.callBrowser('wait_for', input, input.timeout);
+  }
+
+  async pressKey(input: PressKeyInput): Promise<BrowserResult> {
+    return this.callBrowser('press_key', input);
+  }
+
+  async typeText(input: TypeTextInput): Promise<BrowserResult> {
+    return this.callBrowser('type_text', input);
+  }
+
+  async handleDialog(input: HandleDialogInput): Promise<BrowserResult> {
+    return this.callBrowser('handle_dialog', input);
+  }
+
+  async resizePage(input: ResizePageInput): Promise<BrowserResult> {
+    return this.callBrowser('resize_page', input);
   }
 
   async showBrowser(): Promise<BrowserResult> {

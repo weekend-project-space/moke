@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import { Check, Copy, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { browserApi, isNativeBrowserAvailable } from './api/browser'
 import { connectBrowserBridge } from './api/browserBridge'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrowserPanel from './components/BrowserPanel.vue'
@@ -218,6 +219,7 @@ const lastAssistantMessage = computed(() =>
   [...visibleMessages.value].reverse().find((message) => message.role === 'assistant' && message.content.trim()),
 )
 const showResultActions = computed(() => Boolean(lastAssistantMessage.value) && !isRunning.value && !pendingAsk.value && !pendingApproval.value)
+const showJumpToBottom = ref(false)
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
   let lastTime = 0
@@ -282,7 +284,9 @@ const defaultLinkOpen =
 
 markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
   const token = tokens[index]
-  token.attrSet('target', '_blank')
+  const href = token.attrGet('href')
+  if (href) token.attrSet('data-browser-url', href)
+  token.attrSet('target', '_self')
   token.attrSet('rel', 'noreferrer')
   return defaultLinkOpen(tokens, index, options, env, self)
 }
@@ -349,6 +353,7 @@ function scrollToBottom(force = false) {
   if (!el || (!force && !autoScroll.value)) return
 
   el.scrollTop = el.scrollHeight
+  showJumpToBottom.value = false
 }
 
 function handleConversationScroll() {
@@ -356,11 +361,50 @@ function handleConversationScroll() {
   if (!el) return
 
   autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  if (autoScroll.value) showJumpToBottom.value = false
+}
+
+async function openLinkInBrowser(rawUrl: string) {
+  const url = rawUrl.trim()
+  if (!url || url.startsWith('#')) return
+
+  if (!isNativeBrowserAvailable()) {
+    window.open(url, '_blank', 'noreferrer')
+    return
+  }
+
+  openWorkspace()
+  try {
+    await browserApi.open({ url, visible: true })
+  } catch (error) {
+    console.error('Failed to open link in browser', error)
+    window.open(url, '_blank', 'noreferrer')
+  }
+}
+
+function handleConversationClick(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+
+  const link = target.closest<HTMLAnchorElement>('a[data-browser-url]')
+  if (!link) return
+
+  const url = link.dataset.browserUrl || link.href
+  if (!url) return
+
+  event.preventDefault()
+  void openLinkInBrowser(url)
+}
+
+function jumpToBottom() {
+  autoScroll.value = true
+  void nextTick(() => scrollToBottom(true))
 }
 
 watch(
   () => [messages.value.length, streamingText.value],
   () => {
+    if (!autoScroll.value) showJumpToBottom.value = true
     void nextTick(() => scrollToBottom())
   },
 )
@@ -1079,7 +1123,7 @@ onUnmounted(() => {
         </menu>
       </section>
 
-      <div class="conversation" ref="conversationEl" @scroll.passive="handleConversationScroll">
+      <div class="conversation" ref="conversationEl" @scroll.passive="handleConversationScroll" @click="handleConversationClick">
         <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
         <div v-if="showEmptyState" class="empty-state">
@@ -1135,6 +1179,10 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+
+      <button v-if="showJumpToBottom" class="jump-bottom" type="button" @click="jumpToBottom">
+        跳到底部
+      </button>
 
       <ComposerBox ref="composerBox" :input-value="input" :pending-ask="pendingAsk" :primary-disabled="primaryDisabled"
         :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"

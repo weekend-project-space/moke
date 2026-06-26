@@ -1,7 +1,11 @@
-use std::path::PathBuf;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::fs;
+use std::sync::{mpsc, Mutex};
+use std::time::Duration;
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, Runtime, WebviewUrl};
 use tauri::webview::{NewWindowResponse, WebviewBuilder};
@@ -63,12 +67,133 @@ struct BrowserNavigateOptions {
     ignore_cache: Option<bool>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserEvaluateOptions {
+    page_id: Option<u32>,
+    #[serde(rename = "function")]
+    function_source: String,
+    args: Option<Vec<serde_json::Value>>,
+    dialog_action: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserSnapshotOptions {
+    page_id: Option<u32>,
+    verbose: Option<bool>,
+    file_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserScreenshotOptions {
+    page_id: Option<u32>,
+    path: Option<String>,
+    full_page: Option<bool>,
+    uid: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserClickOptions {
+    page_id: Option<u32>,
+    uid: String,
+    dbl_click: Option<bool>,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserHoverOptions {
+    page_id: Option<u32>,
+    uid: String,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserFillOptions {
+    page_id: Option<u32>,
+    uid: String,
+    value: String,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserFillFormElement {
+    uid: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserFillFormOptions {
+    page_id: Option<u32>,
+    elements: Vec<BrowserFillFormElement>,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserUploadFileOptions {
+    page_id: Option<u32>,
+    uid: String,
+    file_path: String,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserWaitForOptions {
+    page_id: Option<u32>,
+    text: serde_json::Value,
+    timeout: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserPressKeyOptions {
+    page_id: Option<u32>,
+    key: String,
+    include_snapshot: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserTypeTextOptions {
+    page_id: Option<u32>,
+    text: String,
+    submit_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserHandleDialogOptions {
+    page_id: Option<u32>,
+    action: String,
+    prompt_text: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BrowserResult {
     page: Option<BrowserPageState>,
     pages: Vec<BrowserPageState>,
     active_page_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    snapshot: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    matched: Option<String>,
+}
+
+struct CapturedImage {
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
 }
 
 impl AgentServer {
@@ -243,6 +368,318 @@ const BROWSER_STATE_QUERY_SCRIPT: &str = r#"
 }))()
 "#;
 
+const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
+(() => {
+  const verbose = Boolean(__MOKE_VERBOSE__);
+  const interactiveSelector = [
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "[role]",
+    "[contenteditable=true]",
+    "summary",
+    "label"
+  ].join(",");
+  const visible = (el) => {
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const nameFor = (el) => {
+    const direct = el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("placeholder") || el.getAttribute("alt");
+    if (direct) return direct.trim();
+    if (el.labels && el.labels.length) return Array.from(el.labels).map((label) => label.innerText.trim()).filter(Boolean).join(" ");
+    return (el.innerText || el.value || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160);
+  };
+  const roleFor = (el) => {
+    if (el.getAttribute("role")) return el.getAttribute("role");
+    const tag = el.tagName.toLowerCase();
+    if (tag === "a") return "link";
+    if (tag === "button") return "button";
+    if (tag === "input") return el.type || "input";
+    if (tag === "textarea") return "textbox";
+    if (tag === "select") return "combobox";
+    if (el.isContentEditable) return "textbox";
+    return tag;
+  };
+  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+    .filter((el) => verbose || visible(el))
+    .slice(0, verbose ? 300 : 120);
+  const nodes = elements.map((el, index) => {
+    const uid = `e${index + 1}`;
+    el.setAttribute("data-moke-uid", uid);
+    const node = {
+      uid,
+      role: roleFor(el),
+      name: nameFor(el),
+      tag: el.tagName.toLowerCase(),
+      visible: visible(el)
+    };
+    if ("value" in el && typeof el.value === "string") node.value = el.value;
+    if (el.href) node.href = el.href;
+    if (el.disabled) node.disabled = true;
+    const text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ");
+    if (text && text !== node.name) node.text = text.slice(0, verbose ? 500 : 180);
+    return node;
+  });
+  return {
+    url: String(window.location.href || ""),
+    title: String(document.title || ""),
+    nodes
+  };
+})()
+"#;
+
+const BROWSER_ELEMENT_SCRIPT: &str = r#"
+(() => {
+  const action = __MOKE_ACTION__;
+  const uid = __MOKE_UID__;
+  const value = __MOKE_VALUE__;
+  const dblClick = Boolean(__MOKE_DBL_CLICK__);
+  const key = __MOKE_KEY__;
+  const text = __MOKE_TEXT__;
+  const submitKey = __MOKE_SUBMIT_KEY__;
+  const el = uid ? document.querySelector(`[data-moke-uid="${String(uid).replace(/"/g, '\\"')}"]`) : document.activeElement;
+  if (!el) throw new Error(uid ? `Element not found: ${uid}` : "No active element");
+
+  const eventInit = { bubbles: true, cancelable: true, view: window };
+  const dispatchMouse = (type) => el.dispatchEvent(new MouseEvent(type, eventInit));
+  const dispatchPointer = (type) => {
+    if (typeof PointerEvent === "function") {
+      el.dispatchEvent(new PointerEvent(type, { ...eventInit, pointerType: "mouse", isPrimary: true }));
+      return;
+    }
+    dispatchMouse(type.replace(/^pointer/, "mouse"));
+  };
+  const dispatchInput = () => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const setValue = (target, nextValue) => {
+    target.focus();
+    if (target.tagName === "SELECT") {
+      target.value = String(nextValue);
+      dispatchInput();
+      return;
+    }
+    if (target.isContentEditable) {
+      target.textContent = String(nextValue);
+      dispatchInput();
+      return;
+    }
+    if ("value" in target) {
+      target.value = String(nextValue);
+      dispatchInput();
+      return;
+    }
+    throw new Error("Element cannot be filled");
+  };
+  const keyEvent = (type, combo) => {
+    const parts = String(combo).split("+").map((part) => part.trim()).filter(Boolean);
+    const main = parts.pop() || "";
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      key: main,
+      ctrlKey: parts.some((part) => /^ctrl|control$/i.test(part)),
+      shiftKey: parts.some((part) => /^shift$/i.test(part)),
+      altKey: parts.some((part) => /^alt|option$/i.test(part)),
+      metaKey: parts.some((part) => /^meta|cmd|command$/i.test(part))
+    };
+    el.dispatchEvent(new KeyboardEvent(type, init));
+  };
+
+  if (action === "click") {
+    el.focus();
+    dispatchPointer("pointerdown");
+    dispatchMouse("mousedown");
+    dispatchPointer("pointerup");
+    dispatchMouse("mouseup");
+    el.click();
+    if (dblClick) dispatchMouse("dblclick");
+  } else if (action === "hover") {
+    el.scrollIntoView({ block: "center", inline: "center" });
+    dispatchPointer("pointerover");
+    dispatchMouse("mouseover");
+    dispatchPointer("pointerenter");
+    dispatchMouse("mouseenter");
+    dispatchPointer("pointermove");
+    dispatchMouse("mousemove");
+  } else if (action === "fill") {
+    setValue(el, value);
+  } else if (action === "press_key") {
+    el.focus();
+    keyEvent("keydown", key);
+    keyEvent("keyup", key);
+  } else if (action === "type_text") {
+    const current = "value" in el ? el.value : (el.textContent || "");
+    setValue(el, `${current}${text || ""}`);
+    if (submitKey) {
+      keyEvent("keydown", submitKey);
+      keyEvent("keyup", submitKey);
+    }
+  } else {
+    throw new Error(`Unsupported browser action: ${action}`);
+  }
+
+  return { ok: true };
+})()
+"#;
+
+const BROWSER_SCREENSHOT_METRICS_SCRIPT: &str = r#"
+(() => {
+  const doc = document.documentElement;
+  const body = document.body;
+  const scrollX = window.scrollX || window.pageXOffset || 0;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+  const viewportWidth = window.innerWidth || doc.clientWidth || 0;
+  const viewportHeight = window.innerHeight || doc.clientHeight || 0;
+  const scrollWidth = Math.max(
+    doc.scrollWidth || 0,
+    body ? body.scrollWidth || 0 : 0,
+    viewportWidth
+  );
+  const scrollHeight = Math.max(
+    doc.scrollHeight || 0,
+    body ? body.scrollHeight || 0 : 0,
+    viewportHeight
+  );
+  return {
+    scrollX,
+    scrollY,
+    viewportWidth,
+    viewportHeight,
+    scrollWidth,
+    scrollHeight,
+    devicePixelRatio: window.devicePixelRatio || 1
+  };
+})()
+"#;
+
+const BROWSER_ELEMENT_RECT_SCRIPT: &str = r#"
+(() => {
+  const uid = __MOKE_UID__;
+  const el = document.querySelector(`[data-moke-uid="${String(uid).replace(/"/g, '\\"')}"]`);
+  if (!el) throw new Error(`Element not found: ${uid}`);
+  el.scrollIntoView({ block: "center", inline: "nearest" });
+  const rect = el.getBoundingClientRect();
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    scrollX: window.scrollX || window.pageXOffset || 0,
+    scrollY: window.scrollY || window.pageYOffset || 0,
+    viewportWidth: window.innerWidth || document.documentElement.clientWidth || 0,
+    viewportHeight: window.innerHeight || document.documentElement.clientHeight || 0,
+    devicePixelRatio: window.devicePixelRatio || 1
+  };
+})()
+"#;
+
+const BROWSER_UPLOAD_FILE_SCRIPT: &str = r#"
+(() => {
+  const uid = __MOKE_UID__;
+  const fileName = __MOKE_FILE_NAME__;
+  const mimeType = __MOKE_MIME_TYPE__;
+  const base64 = __MOKE_BASE64__;
+  const root = document.querySelector(`[data-moke-uid="${String(uid).replace(/"/g, '\\"')}"]`);
+  if (!root) throw new Error(`Element not found: ${uid}`);
+  const input = root.matches && root.matches('input[type="file"]')
+    ? root
+    : root.querySelector && root.querySelector('input[type="file"]');
+  if (!input) throw new Error(`Element is not a file input: ${uid}`);
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  const file = new File([bytes], fileName, { type: mimeType || "application/octet-stream" });
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return {
+    ok: true,
+    fileName,
+    mimeType: file.type,
+    size: file.size
+  };
+})()
+"#;
+
+fn scroll_script(x: f64, y: f64) -> String {
+    format!(
+        r#"
+new Promise((resolve) => {{
+  window.scrollTo({{ left: {x}, top: {y}, behavior: "instant" }});
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve({{
+    scrollX: window.scrollX || window.pageXOffset || 0,
+    scrollY: window.scrollY || window.pageYOffset || 0
+  }})));
+}})
+"#
+    )
+}
+
+fn element_rect_script(uid: &str) -> Result<String, String> {
+    Ok(BROWSER_ELEMENT_RECT_SCRIPT.replace(
+        "__MOKE_UID__",
+        &js_literal(&serde_json::Value::String(uid.to_string()))?,
+    ))
+}
+
+fn resolve_repo_path(file_path: &str) -> PathBuf {
+    let path = PathBuf::from(file_path);
+    if path.is_absolute() {
+        path
+    } else {
+        repo_dir().join(path)
+    }
+}
+
+fn mime_type_for_path(path: &Path) -> &'static str {
+    match path.extension().and_then(|extension| extension.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+        "txt" | "log" | "md" => "text/plain",
+        "json" => "application/json",
+        "csv" => "text/csv",
+        "html" | "htm" => "text/html",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
+    }
+}
+
+fn upload_file_script(uid: &str, path: &Path, bytes: &[u8]) -> Result<String, String> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "filePath must include a file name".to_string())?;
+    let base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let replacements = [
+        ("__MOKE_UID__", serde_json::Value::String(uid.to_string())),
+        ("__MOKE_FILE_NAME__", serde_json::Value::String(file_name.to_string())),
+        ("__MOKE_MIME_TYPE__", serde_json::Value::String(mime_type_for_path(path).to_string())),
+        ("__MOKE_BASE64__", serde_json::Value::String(base64)),
+    ];
+
+    let mut script = BROWSER_UPLOAD_FILE_SCRIPT.to_string();
+    for (placeholder, value) in replacements {
+        script = script.replace(placeholder, &js_literal(&value)?);
+    }
+    Ok(script)
+}
+
 fn update_browser_page_from_report(
     state: &BrowserState,
     page_id: u32,
@@ -279,6 +716,64 @@ fn refresh_browser_page_state(app: &tauri::AppHandle, state: &BrowserState, page
         .map_err(|error| error.to_string())
 }
 
+fn js_literal(value: &serde_json::Value) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|error| error.to_string())
+}
+
+fn eval_browser_json(
+    app: &tauri::AppHandle,
+    state: &BrowserState,
+    page_id: Option<u32>,
+    script: String,
+    timeout_ms: u64,
+) -> Result<serde_json::Value, String> {
+    let page_id = active_page_id(state, page_id)?;
+    let webview = browser_webview(app, state, page_id)?;
+    let (sender, receiver) = mpsc::channel::<Result<serde_json::Value, String>>();
+
+    webview
+        .eval_with_callback(&script, move |value| {
+            let parsed = serde_json::from_str::<serde_json::Value>(&value)
+                .map_err(|error| format!("Browser script returned invalid JSON: {error}"));
+            let _ = sender.send(parsed);
+        })
+        .map_err(|error| error.to_string())?;
+
+    receiver
+        .recv_timeout(Duration::from_millis(timeout_ms))
+        .map_err(|_| "Browser script timed out".to_string())?
+}
+
+fn snapshot_script(verbose: bool) -> String {
+    BROWSER_SNAPSHOT_SCRIPT.replace("__MOKE_VERBOSE__", if verbose { "true" } else { "false" })
+}
+
+fn element_script(
+    action: &str,
+    uid: Option<&str>,
+    value: Option<&str>,
+    dbl_click: bool,
+    key: Option<&str>,
+    text: Option<&str>,
+    submit_key: Option<&str>,
+) -> Result<String, String> {
+    let replacements = [
+        ("__MOKE_ACTION__", serde_json::Value::String(action.to_string())),
+        ("__MOKE_UID__", uid.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        ("__MOKE_VALUE__", value.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        ("__MOKE_DBL_CLICK__", serde_json::Value::Bool(dbl_click)),
+        ("__MOKE_KEY__", key.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        ("__MOKE_TEXT__", text.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        ("__MOKE_SUBMIT_KEY__", submit_key.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+    ];
+
+    let mut script = BROWSER_ELEMENT_SCRIPT.to_string();
+    for (placeholder, value) in replacements {
+        script = script.replace(placeholder, &js_literal(&value)?);
+    }
+    Ok(script)
+}
+
 fn browser_result(state: &BrowserState) -> Result<BrowserResult, String> {
     let pages = state
         .pages
@@ -295,7 +790,149 @@ fn browser_result(state: &BrowserState) -> Result<BrowserResult, String> {
         page,
         pages,
         active_page_id,
+        snapshot: None,
+        value: None,
+        matched: None,
     })
+}
+
+fn browser_result_with_value(
+    state: &BrowserState,
+    value: Option<serde_json::Value>,
+    snapshot: Option<serde_json::Value>,
+    matched: Option<String>,
+) -> Result<BrowserResult, String> {
+    let mut result = browser_result(state)?;
+    result.value = value;
+    result.snapshot = snapshot;
+    result.matched = matched;
+    Ok(result)
+}
+
+fn repo_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("src-tauri should live under the client app")
+        .parent()
+        .expect("client app should live under apps")
+        .parent()
+        .expect("apps should live under the repository root")
+        .to_path_buf()
+}
+
+fn screenshot_file_path(path: Option<String>) -> PathBuf {
+    if let Some(path) = path {
+        let path = PathBuf::from(path);
+        if path.is_absolute() {
+            return path;
+        }
+        return repo_dir().join(path);
+    }
+
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    repo_dir()
+        .join(".moke")
+        .join("screenshots")
+        .join(format!("browser-{millis}.png"))
+}
+
+fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    let file = fs::File::create(path).map_err(|error| error.to_string())?;
+    let writer = BufWriter::new(file);
+    let mut encoder = png::Encoder::new(writer, image.width, image.height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut png_writer = encoder.write_header().map_err(|error| error.to_string())?;
+    png_writer.write_image_data(&image.rgba).map_err(|error| error.to_string())
+}
+
+fn crop_image(image: &CapturedImage, x: u32, y: u32, width: u32, height: u32) -> Result<CapturedImage, String> {
+    if width == 0 || height == 0 {
+        return Err("Screenshot crop area is empty".to_string());
+    }
+    if x >= image.width || y >= image.height {
+        return Err("Screenshot crop origin is outside the image".to_string());
+    }
+    let width = width.min(image.width - x);
+    let height = height.min(image.height - y);
+    let mut rgba = vec![0_u8; (width as usize) * (height as usize) * 4];
+    for row in 0..height {
+        let source_start = (((y + row) * image.width + x) * 4) as usize;
+        let source_end = source_start + (width as usize) * 4;
+        let target_start = (row * width * 4) as usize;
+        rgba[target_start..target_start + (width as usize) * 4]
+            .copy_from_slice(&image.rgba[source_start..source_end]);
+    }
+    Ok(CapturedImage { width, height, rgba })
+}
+
+fn stitch_vertical(parts: Vec<(CapturedImage, u32)>, width: u32, height: u32) -> Result<CapturedImage, String> {
+    if width == 0 || height == 0 {
+        return Err("Screenshot stitch area is empty".to_string());
+    }
+    let mut rgba = vec![255_u8; (width as usize) * (height as usize) * 4];
+    for (part, target_y) in parts {
+        let copy_width = width.min(part.width);
+        let copy_height = part.height.min(height.saturating_sub(target_y));
+        for row in 0..copy_height {
+            let source_start = (row * part.width * 4) as usize;
+            let target_start = (((target_y + row) * width) * 4) as usize;
+            rgba[target_start..target_start + (copy_width as usize) * 4]
+                .copy_from_slice(&part.rgba[source_start..source_start + (copy_width as usize) * 4]);
+        }
+    }
+    Ok(CapturedImage { width, height, rgba })
+}
+
+fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Result<CapturedImage, String> {
+    let main_window = app
+        .get_window("main")
+        .ok_or_else(|| "Main window was not found".to_string())?;
+    let title = main_window.title().map_err(|error| error.to_string())?;
+    let windows = xcap::Window::all().map_err(|error| error.to_string())?;
+    let captured_window = windows
+        .into_iter()
+        .find(|window| window.title() == title)
+        .ok_or_else(|| format!("Could not find screenshot window for title: {title}"))?;
+    let image = captured_window.capture_image().map_err(|error| error.to_string())?;
+    let image_width = image.width();
+    let image_height = image.height();
+    let rgba = image.into_raw();
+    let window_image = CapturedImage {
+        width: image_width,
+        height: image_height,
+        rgba,
+    };
+    let scale_x = if let Ok(size) = main_window.inner_size() {
+        if size.width > 0 {
+            window_image.width as f64 / size.width as f64
+        } else {
+            main_window.scale_factor().unwrap_or(1.0)
+        }
+    } else {
+        main_window.scale_factor().unwrap_or(1.0)
+    };
+    let scale_y = if let Ok(size) = main_window.inner_size() {
+        if size.height > 0 {
+            window_image.height as f64 / size.height as f64
+        } else {
+            main_window.scale_factor().unwrap_or(1.0)
+        }
+    } else {
+        main_window.scale_factor().unwrap_or(1.0)
+    };
+    let x = (bounds.x * scale_x).round().max(0.0) as u32;
+    let y = (bounds.y * scale_y).round().max(0.0) as u32;
+    let width = (bounds.width * scale_x).round().max(1.0) as u32;
+    let height = (bounds.height * scale_y).round().max(1.0) as u32;
+    crop_image(&window_image, x, y, width, height)
 }
 
 fn emit_browser_state(app: &tauri::AppHandle, state: &BrowserState) {
@@ -630,6 +1267,350 @@ async fn browser_navigate(
 }
 
 #[tauri::command]
+async fn browser_evaluate_script(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserEvaluateOptions,
+) -> Result<BrowserResult, String> {
+    let args = options.args.unwrap_or_default();
+    let args_json = js_literal(&serde_json::Value::Array(args))?;
+    let function_source = options.function_source;
+    let _ = options.dialog_action;
+    let script = format!(
+        r#"
+(async () => {{
+  const fn = ({function_source});
+  const args = {args_json};
+  return await fn(...args);
+}})()
+"#
+    );
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    browser_result_with_value(&state, Some(value), None, None)
+}
+
+#[tauri::command]
+async fn browser_take_snapshot(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserSnapshotOptions,
+) -> Result<BrowserResult, String> {
+    let snapshot = eval_browser_json(
+        &app,
+        &state,
+        options.page_id,
+        snapshot_script(options.verbose.unwrap_or(false)),
+        30000,
+    )?;
+    if let Some(file_path) = options.file_path {
+        let content = serde_json::to_string_pretty(&snapshot).map_err(|error| error.to_string())?;
+        fs::write(file_path, content).map_err(|error| error.to_string())?;
+    }
+    browser_result_with_value(&state, None, Some(snapshot), None)
+}
+
+#[tauri::command]
+async fn browser_take_screenshot(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserScreenshotOptions,
+) -> Result<BrowserResult, String> {
+    let page_id = active_page_id(&state, options.page_id)?;
+    show_browser_page(&app, &state, page_id, None)?;
+    let bounds = resolve_browser_bounds(&state, None)?;
+    let output_path = screenshot_file_path(options.path);
+    let original_metrics = eval_browser_json(
+        &app,
+        &state,
+        Some(page_id),
+        BROWSER_SCREENSHOT_METRICS_SCRIPT.to_string(),
+        30000,
+    )?;
+    let original_x = original_metrics.get("scrollX").and_then(|value| value.as_f64()).unwrap_or(0.0);
+    let original_y = original_metrics.get("scrollY").and_then(|value| value.as_f64()).unwrap_or(0.0);
+
+    let (image, mode) = if let Some(uid) = options.uid {
+        let rect = eval_browser_json(&app, &state, Some(page_id), element_rect_script(&uid)?, 30000)?;
+        let viewport = capture_browser_viewport(&app, bounds)?;
+        let scale_x = viewport.width as f64 / bounds.width.max(1.0);
+        let scale_y = viewport.height as f64 / bounds.height.max(1.0);
+        let x = (rect.get("x").and_then(|value| value.as_f64()).unwrap_or(0.0).max(0.0) * scale_x).round() as u32;
+        let y = (rect.get("y").and_then(|value| value.as_f64()).unwrap_or(0.0).max(0.0) * scale_y).round() as u32;
+        let width = (rect.get("width").and_then(|value| value.as_f64()).unwrap_or(0.0).max(1.0) * scale_x).round() as u32;
+        let height = (rect.get("height").and_then(|value| value.as_f64()).unwrap_or(0.0).max(1.0) * scale_y).round() as u32;
+        (crop_image(&viewport, x, y, width, height)?, "element")
+    } else if options.full_page.unwrap_or(false) {
+        let viewport_height = original_metrics
+            .get("viewportHeight")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(bounds.height)
+            .max(1.0);
+        let scroll_height = original_metrics
+            .get("scrollHeight")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(viewport_height)
+            .max(viewport_height);
+        let mut parts = Vec::new();
+        let mut y = 0.0;
+        while y < scroll_height {
+            let target_y = if y + viewport_height >= scroll_height {
+                (scroll_height - viewport_height).max(0.0)
+            } else {
+                y
+            };
+            let actual = eval_browser_json(&app, &state, Some(page_id), scroll_script(original_x, target_y), 30000)?;
+            let actual_y = actual.get("scrollY").and_then(|value| value.as_f64()).unwrap_or(target_y);
+            let viewport = capture_browser_viewport(&app, bounds)?;
+            let scale_y = viewport.height as f64 / viewport_height;
+            let target_pixel_y = (actual_y * scale_y).round().max(0.0) as u32;
+            parts.push((viewport, target_pixel_y));
+            if target_y + viewport_height >= scroll_height {
+                break;
+            }
+            y = target_y + viewport_height;
+        }
+        let first_width = parts.first().map(|(image, _)| image.width).unwrap_or(bounds.width.max(1.0).round() as u32);
+        let first_height = parts.first().map(|(image, _)| image.height).unwrap_or(bounds.height.max(1.0).round() as u32);
+        let scale_y = first_height as f64 / viewport_height;
+        let output_height = (scroll_height * scale_y).ceil().max(first_height as f64) as u32;
+        (stitch_vertical(parts, first_width, output_height)?, "fullPage")
+    } else {
+        (capture_browser_viewport(&app, bounds)?, "viewport")
+    };
+
+    let _ = eval_browser_json(&app, &state, Some(page_id), scroll_script(original_x, original_y), 30000);
+    write_png(&output_path, &image)?;
+    browser_result_with_value(
+        &state,
+        Some(serde_json::json!({
+            "filePath": output_path.to_string_lossy(),
+            "width": image.width,
+            "height": image.height,
+            "mode": mode,
+        })),
+        None,
+        None,
+    )
+}
+
+#[tauri::command]
+async fn browser_click(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserClickOptions,
+) -> Result<BrowserResult, String> {
+    let script = element_script("click", Some(&options.uid), None, options.dbl_click.unwrap_or(false), None, None, None)?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(value), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_hover(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserHoverOptions,
+) -> Result<BrowserResult, String> {
+    let script = element_script("hover", Some(&options.uid), None, false, None, None, None)?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(value), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_fill(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserFillOptions,
+) -> Result<BrowserResult, String> {
+    let script = element_script("fill", Some(&options.uid), Some(&options.value), false, None, None, None)?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(value), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_fill_form(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserFillFormOptions,
+) -> Result<BrowserResult, String> {
+    for element in &options.elements {
+        let script = element_script("fill", Some(&element.uid), Some(&element.value), false, None, None, None)?;
+        let _ = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    }
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(serde_json::json!({ "ok": true })), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_upload_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserUploadFileOptions,
+) -> Result<BrowserResult, String> {
+    let file_path = resolve_repo_path(&options.file_path);
+    let metadata = fs::metadata(&file_path).map_err(|error| format!("Failed to read upload file metadata: {error}"))?;
+    if !metadata.is_file() {
+        return Err("filePath must point to a file".to_string());
+    }
+    let bytes = fs::read(&file_path).map_err(|error| format!("Failed to read upload file: {error}"))?;
+    let script = upload_file_script(&options.uid, &file_path, &bytes)?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(value), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_wait_for(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserWaitForOptions,
+) -> Result<BrowserResult, String> {
+    let targets = match options.text {
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .filter_map(|value| value.as_str().map(|text| text.to_string()))
+            .collect::<Vec<_>>(),
+        serde_json::Value::String(value) => vec![value],
+        _ => return Err("text must be a string or string array".to_string()),
+    };
+    if targets.is_empty() {
+        return Err("text must not be empty".to_string());
+    }
+    let timeout = options.timeout.unwrap_or(30000);
+    let targets_json = js_literal(&serde_json::to_value(&targets).map_err(|error| error.to_string())?)?;
+    let script = format!(
+        r#"
+new Promise((resolve, reject) => {{
+  const targets = {targets_json};
+  const deadline = Date.now() + {timeout};
+  const check = () => {{
+    const text = document.body ? document.body.innerText || "" : "";
+    const matched = targets.find((target) => text.includes(target));
+    if (matched) {{
+      resolve({{ matched }});
+      return;
+    }}
+    if (Date.now() > deadline) {{
+      reject(new Error("Timed out waiting for text"));
+      return;
+    }}
+    setTimeout(check, 250);
+  }};
+  check();
+}})
+"#
+    );
+    let value = eval_browser_json(&app, &state, options.page_id, script, timeout + 1000)?;
+    let matched = value.get("matched").and_then(|value| value.as_str()).map(|value| value.to_string());
+    browser_result_with_value(&state, Some(value), None, matched)
+}
+
+#[tauri::command]
+async fn browser_press_key(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserPressKeyOptions,
+) -> Result<BrowserResult, String> {
+    let script = element_script("press_key", None, None, false, Some(&options.key), None, None)?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let snapshot = if options.include_snapshot.unwrap_or(false) {
+        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+    } else {
+        None
+    };
+    browser_result_with_value(&state, Some(value), snapshot, None)
+}
+
+#[tauri::command]
+async fn browser_type_text(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserTypeTextOptions,
+) -> Result<BrowserResult, String> {
+    let script = element_script("type_text", None, None, false, None, Some(&options.text), options.submit_key.as_deref())?;
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    browser_result_with_value(&state, Some(value), None, None)
+}
+
+#[tauri::command]
+async fn browser_handle_dialog(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    options: BrowserHandleDialogOptions,
+) -> Result<BrowserResult, String> {
+    if options.action != "accept" && options.action != "dismiss" {
+        return Err("action must be accept or dismiss".to_string());
+    }
+
+    let action = js_literal(&serde_json::Value::String(options.action))?;
+    let prompt_text = js_literal(
+        &options
+            .prompt_text
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    )?;
+    let script = format!(
+        r#"
+(() => {{
+  const action = {action};
+  const promptText = {prompt_text};
+  window.__mokeDialogPolicy = {{ action, promptText }};
+  if (!window.__mokeDialogPatched) {{
+    const nativeAlert = window.alert.bind(window);
+    const nativeConfirm = window.confirm.bind(window);
+    const nativePrompt = window.prompt.bind(window);
+    Object.defineProperty(window, "__mokeDialogNative", {{
+      value: {{ alert: nativeAlert, confirm: nativeConfirm, prompt: nativePrompt }},
+      configurable: false
+    }});
+    window.alert = (message) => {{
+      window.__mokeLastDialog = {{ type: "alert", message: String(message ?? ""), action: window.__mokeDialogPolicy?.action || "accept" }};
+      return undefined;
+    }};
+    window.confirm = (message) => {{
+      const currentAction = window.__mokeDialogPolicy?.action || "accept";
+      window.__mokeLastDialog = {{ type: "confirm", message: String(message ?? ""), action: currentAction }};
+      return currentAction === "accept";
+    }};
+    window.prompt = (message, defaultValue) => {{
+      const policy = window.__mokeDialogPolicy || {{ action: "accept", promptText: null }};
+      window.__mokeLastDialog = {{ type: "prompt", message: String(message ?? ""), defaultValue: String(defaultValue ?? ""), action: policy.action }};
+      if (policy.action !== "accept") return null;
+      return policy.promptText == null ? String(defaultValue ?? "") : String(policy.promptText);
+    }};
+    window.__mokeDialogPatched = true;
+  }}
+  return {{ handled: true, action, promptText, lastDialog: window.__mokeLastDialog || null }};
+}})()
+"#
+    );
+    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    browser_result_with_value(&state, Some(value), None, None)
+}
+
+#[tauri::command]
 async fn list_pages(state: tauri::State<'_, BrowserState>) -> Result<BrowserResult, String> {
     browser_result(&state)
 }
@@ -819,6 +1800,18 @@ pub fn run() {
             browser_refresh_state,
             browser_open,
             browser_navigate,
+            browser_evaluate_script,
+            browser_take_snapshot,
+            browser_take_screenshot,
+            browser_click,
+            browser_hover,
+            browser_fill,
+            browser_fill_form,
+            browser_upload_file,
+            browser_wait_for,
+            browser_press_key,
+            browser_type_text,
+            browser_handle_dialog,
             browser_resize,
             browser_show,
             browser_hide,
