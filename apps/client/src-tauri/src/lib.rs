@@ -197,25 +197,8 @@ struct CapturedImage {
 }
 
 impl AgentServer {
-    fn start() -> Self {
-        let repo_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("src-tauri should live under the client app")
-            .parent()
-            .expect("client app should live under apps")
-            .parent()
-            .expect("apps should live under the repository root")
-            .to_path_buf();
-
-        let child = Command::new("npx")
-            .arg("tsx")
-            .arg("apps/server/server.ts")
-            .current_dir(repo_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .ok();
+    fn start(app: &tauri::App) -> Self {
+        let child = start_agent_server(app).ok();
 
         Self {
             child: Mutex::new(child),
@@ -231,6 +214,122 @@ impl AgentServer {
             *child = None;
         }
     }
+}
+
+fn app_data_moke_dir(app: &tauri::App) -> PathBuf {
+    if tauri::is_dev() {
+        return repo_dir().join(".moke");
+    }
+
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_else(|_| repo_dir().join(".moke")))
+        .join("Moke")
+}
+
+fn append_agent_server_log(app: &tauri::App, message: &str) {
+    let log_dir = app_data_moke_dir(app).join("logs");
+    let _ = fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join("agent-server.log");
+    let _ = fs::write(log_path, format!("{message}\n"));
+}
+
+fn agent_server_log_file(app: &tauri::App) -> Option<fs::File> {
+    let log_dir = app_data_moke_dir(app).join("logs");
+    fs::create_dir_all(&log_dir).ok()?;
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_dir.join("agent-server.log"))
+        .ok()
+}
+
+fn ensure_user_env_file(app: &tauri::App, env_path: &Path) {
+    if tauri::is_dev() || env_path.exists() {
+        return;
+    }
+
+    if let Some(parent) = env_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let template = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|resource_dir| resource_dir.join(".env.example"))
+        .filter(|path| path.exists());
+
+    if let Some(template) = template {
+        let _ = fs::copy(template, env_path);
+    } else {
+        let _ = fs::write(
+            env_path,
+            "PORT=4010\nOPENAI_API_KEY=\nOPENAI_MODEL=gpt-4.1-mini\nOPENAI_BASE_URL=https://api.openai.com/v1\nOPENAI_TIMEOUT_MS=15000\nMOKE_MCP_CONFIG=.moke/mcp.json\n",
+        );
+    }
+}
+
+fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
+    let data_dir = app_data_moke_dir(app);
+    fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
+    let state_path = data_dir.join("state.json");
+    let mcp_config_path = data_dir.join("mcp.json");
+
+    let (program, args, current_dir, workspace_dir, env_path) = if tauri::is_dev() {
+        let repo_dir = repo_dir();
+        (
+            PathBuf::from("npx"),
+            vec!["tsx".to_string(), "apps/server/server.ts".to_string()],
+            repo_dir.clone(),
+            repo_dir.clone(),
+            repo_dir.join(".env"),
+        )
+    } else {
+        let resource_dir = app.path().resource_dir().map_err(|error| error.to_string())?;
+        let server_dir = resource_dir.join("server");
+        (
+            server_dir.join("node.exe"),
+            vec!["server.cjs".to_string()],
+            server_dir,
+            data_dir.clone(),
+            data_dir.join(".env"),
+        )
+    };
+
+    ensure_user_env_file(app, &env_path);
+
+    let stdout = agent_server_log_file(app).map(Stdio::from).unwrap_or_else(Stdio::null);
+    let stderr = agent_server_log_file(app).map(Stdio::from).unwrap_or_else(Stdio::null);
+    let mut command = Command::new(&program);
+    command
+        .args(args)
+        .current_dir(current_dir)
+        .env("PORT", "4010")
+        .env("MOKE_WORKSPACE", &workspace_dir)
+        .env("MOKE_ENV_PATH", &env_path)
+        .env("MOKE_STATE_PATH", &state_path)
+        .env("MOKE_MCP_CONFIG", &mcp_config_path)
+        .stdin(Stdio::null())
+        .stdout(stdout)
+        .stderr(stderr);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        command.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
+    }
+
+    command.spawn().map_err(|error| {
+        let message = format!(
+            "Failed to start agent server with {}: {error}",
+            program.to_string_lossy()
+        );
+        append_agent_server_log(app, &message);
+        message
+    })
 }
 
 fn normalize_url(value: Option<&str>) -> Result<Url, String> {
@@ -1826,7 +1925,7 @@ pub fn run() {
             close_page,
         ])
         .setup(|app| {
-            app.manage(AgentServer::start());
+            app.manage(AgentServer::start(app));
             Ok(())
         })
         .build(tauri::generate_context!())

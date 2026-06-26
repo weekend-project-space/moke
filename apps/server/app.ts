@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import http from 'node:http';
-import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
@@ -26,10 +25,16 @@ export type ServerApp = {
 };
 
 export async function createApp(): Promise<ServerApp> {
-  const root = fileURLToPath(new URL('../..', import.meta.url));
-  const envPath = join(root, '.env');
-  if (existsSync(envPath)) {
-    process.loadEnvFile(envPath);
+  const root = process.env.MOKE_WORKSPACE || process.cwd();
+  const envPaths = [
+    process.env.MOKE_ENV_PATH,
+    join(root, '.env'),
+  ].filter((path): path is string => Boolean(path));
+  for (const envPath of envPaths) {
+    if (existsSync(envPath)) {
+      process.loadEnvFile(envPath);
+      break;
+    }
   }
 
   const port = Number(process.env.PORT || 4010);

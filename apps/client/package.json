@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:server": "npm --prefix ../.. run build:server",
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop": "tauri dev"
