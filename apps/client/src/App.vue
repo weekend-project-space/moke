@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Check, Copy, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronRight, Copy, Globe, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw, Terminal } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { browserApi, isNativeBrowserAvailable } from './api/browser'
@@ -77,6 +77,28 @@ type ProcessItem = {
   detail: string
   tone: ProcessTone
   raw?: string
+  toolCallId?: string
+}
+
+type ToolStepViewItem = {
+  id: string
+  kind: 'tool-step'
+  title: string
+  detail: string
+  tone: ProcessTone
+  toolName: string
+  inputRaw?: string
+  outputRaw?: string
+}
+
+type ProcessViewItem =
+  | ProcessItem
+  | ToolStepViewItem
+
+type ProcessGroupView = {
+  label: string
+  items: ProcessViewItem[]
+  hasError: boolean
 }
 
 type TaskTemplate = {
@@ -100,7 +122,7 @@ type DisplayItem =
     type: 'process-group'
     id: string
     label: string
-    items: ProcessItem[]
+    items: ProcessViewItem[]
     collapsed: boolean
     hasError: boolean
   }
@@ -323,13 +345,14 @@ const displayItems = computed<DisplayItem[]>(() => {
 
     if (processItems.length) {
       const groupId = `process-turn-${turnIndex}`
+      const processGroup = createProcessGroupView(processItems)
       items.push({
         type: 'process-group',
         id: groupId,
-        label: processGroupLabel(processItems),
-        items: processItems,
+        label: processGroup.label,
+        items: processGroup.items,
         collapsed: processCollapsed.value[groupId] ?? true,
-        hasError: processItems.some((item) => item.tone === 'error'),
+        hasError: processGroup.hasError,
       })
     }
 
@@ -394,13 +417,14 @@ const displayItems = computed<DisplayItem[]>(() => {
   if ((isRunning.value || pendingAsk.value || pendingApproval.value || runError.value) && processNotes.value.length) {
     const groupId = 'process-current-events'
     const itemsFromEvents = processNotes.value.map(createEventProcessItem)
+    const processGroup = createProcessGroupView(itemsFromEvents)
     items.push({
       type: 'process-group',
       id: groupId,
-      label: processGroupLabel(itemsFromEvents),
-      items: itemsFromEvents,
+      label: processGroup.label,
+      items: processGroup.items,
       collapsed: processCollapsed.value[groupId] ?? true,
-      hasError: itemsFromEvents.some((item) => item.tone === 'error'),
+      hasError: processGroup.hasError,
     })
   }
 
@@ -620,6 +644,55 @@ function shortText(value: string, maxLength: number) {
   return `${text.slice(0, maxLength - 1)}…`
 }
 
+function summarizeToolCall(name: string, args: Record<string, unknown>) {
+  const pageId = typeof args.pageId === 'number' || typeof args.pageId === 'string' ? `页面 ${args.pageId}` : ''
+  const uid = typeof args.uid === 'string' || typeof args.uid === 'number' ? `元素 ${args.uid}` : ''
+  const url = typeof args.url === 'string' ? args.url : ''
+  const text = typeof args.text === 'string' ? args.text : ''
+  const value = typeof args.value === 'string' ? args.value : ''
+  const key = typeof args.key === 'string' ? args.key : ''
+  const selector = typeof args.selector === 'string' ? args.selector : ''
+
+  switch (name) {
+    case 'navigate_page': {
+      const type = typeof args.type === 'string' ? args.type : ''
+      if (type === 'url' && url) return `打开页面 ${shortText(url, 96)}`
+      if (type === 'back') return '返回上一页'
+      if (type === 'forward') return '前进到下一页'
+      if (type === 'reload') return '刷新页面'
+      return '导航页面'
+    }
+    case 'take_snapshot':
+      return pageId ? `获取${pageId}快照` : '获取页面快照'
+    case 'take_screenshot':
+      return args.fullPage ? '截取完整页面' : '截取当前页面'
+    case 'click':
+      return uid ? `点击${uid}` : '点击页面元素'
+    case 'hover':
+      return uid ? `悬停${uid}` : '悬停页面元素'
+    case 'fill':
+      return uid ? `填写${uid}${value ? `：${shortText(value, 48)}` : ''}` : '填写输入框'
+    case 'fill_form':
+      return '填写表单'
+    case 'upload_file':
+      return uid ? `上传文件到${uid}` : '上传文件'
+    case 'wait_for':
+      return text ? `等待出现：${shortText(text, 72)}` : '等待页面变化'
+    case 'press_key':
+      return key ? `按下 ${key}` : '发送按键'
+    case 'type_text':
+      return text ? `输入文本：${shortText(text, 72)}` : '输入文本'
+    case 'evaluate_script':
+      return selector ? `在 ${selector} 执行脚本` : '执行页面脚本'
+    case 'show_browser':
+      return '显示浏览器'
+    case 'hide_browser':
+      return '隐藏浏览器'
+    default:
+      return `使用 ${formatToolName(name)}`
+  }
+}
+
 function createAssistantProcessItem(message: Message, id: string): ProcessItem {
   return {
     id: `process-assistant-${id}`,
@@ -635,10 +708,11 @@ function createToolCallProcessItem(toolCall: NonNullable<Message['tool_calls']>[
   return {
     id: `process-tool-call-${id}`,
     kind: 'tool-call',
-    title: formatToolName(toolCall.name),
-    detail: shortText(formatJson(toolCall.args), 140),
+    title: toolCall.name,
+    detail: summarizeToolCall(toolCall.name, toolCall.args),
     tone: 'neutral',
     raw: formatJson(toolCall.args),
+    toolCallId: toolCall.id,
   }
 }
 
@@ -650,10 +724,11 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   return {
     id: `process-tool-result-${id}`,
     kind: 'tool-result',
-    title: `${formatToolName(message.name)}结果`,
+    title: message.name || 'tool',
     detail: shortText(detail, 160),
     tone: message.status === 'error' ? 'error' : 'neutral',
     raw,
+    toolCallId: message.tool_call_id,
   }
 }
 
@@ -667,14 +742,100 @@ function createEventProcessItem(note: ProcessNote): ProcessItem {
   }
 }
 
-function processGroupLabel(items: ProcessItem[]) {
-  const toolCalls = items.filter((item) => item.kind === 'tool-call').length
-  const toolResults = items.filter((item) => item.kind === 'tool-result').length
+function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
+  const viewItems = mergeToolSteps(items)
+
+  return {
+    label: processGroupLabel(viewItems),
+    items: viewItems,
+    hasError: viewItems.some((item) => item.tone === 'error'),
+  }
+}
+
+function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
+  const viewItems: ProcessViewItem[] = []
+  const pendingCalls = new Map<string, ProcessItem>()
+  let lastPendingCall: ProcessItem | null = null
+
+  function pushToolCall(call: ProcessItem) {
+    const step = createToolStepView(call)
+    viewItems.push(step)
+    if (call.toolCallId) pendingCalls.set(call.toolCallId, call)
+    lastPendingCall = call
+  }
+
+  function findStep(call: ProcessItem | null) {
+    if (!call) return null
+    return viewItems.find((item): item is ToolStepViewItem => item.kind === 'tool-step' && item.id === `process-tool-step-${call.id}`)
+  }
+
+  for (const item of items) {
+    if (item.kind === 'tool-call') {
+      pushToolCall(item)
+      continue
+    }
+
+    if (item.kind === 'tool-result') {
+      let call: ProcessItem | null = lastPendingCall
+      if (item.toolCallId) call = pendingCalls.get(item.toolCallId) || null
+      const step = findStep(call)
+
+      if (step) {
+        step.tone = item.tone
+        step.outputRaw = item.raw
+        if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
+        if (lastPendingCall === call) lastPendingCall = null
+        continue
+      }
+
+      viewItems.push(item)
+      continue
+    }
+
+    viewItems.push(item)
+  }
+
+  return viewItems
+}
+
+function createToolStepView(call: ProcessItem): ToolStepViewItem {
+  return {
+    id: `process-tool-step-${call.id}`,
+    kind: 'tool-step',
+    title: call.title,
+    detail: call.detail,
+    tone: call.tone,
+    toolName: call.title,
+    inputRaw: call.raw,
+  }
+}
+
+function isBrowserTool(toolName: string) {
+  return [
+    'navigate_page',
+    'take_snapshot',
+    'take_screenshot',
+    'click',
+    'hover',
+    'fill',
+    'fill_form',
+    'upload_file',
+    'wait_for',
+    'press_key',
+    'type_text',
+    'evaluate_script',
+    'show_browser',
+    'hide_browser',
+  ].some((name) => toolName === name || toolName === formatToolName(name))
+}
+
+function processGroupLabel(items: ProcessViewItem[]) {
+  const toolSteps = items.filter((item) => item.kind === 'tool-step').length
+  const fallbackToolItems = items.filter((item) => item.kind === 'tool-call' || item.kind === 'tool-result').length
   const errors = items.filter((item) => item.tone === 'error').length
-  const toolSteps = toolCalls + toolResults
   const parts = ['查看过程']
 
-  if (toolSteps) parts.push(`${toolSteps} 个工具步骤`)
+  if (toolSteps || fallbackToolItems) parts.push(`${toolSteps || fallbackToolItems} 个工具步骤`)
   if (errors) parts.push(`${errors} 个失败`)
   if (parts.length === 1) parts.push(`${items.length} 条记录`)
 
@@ -1436,7 +1597,10 @@ onUnmounted(() => {
               :aria-expanded="!item.collapsed"
               @click="toggleProcessGroup(item.id)"
             >
-              <span class="process-caret" aria-hidden="true">{{ item.collapsed ? '›' : '⌄' }}</span>
+              <span class="process-caret" aria-hidden="true">
+                <ChevronRight v-if="item.collapsed" :size="13" stroke-width="2" />
+                <ChevronDown v-else :size="13" stroke-width="2" />
+              </span>
               <span>{{ item.label }}</span>
             </button>
             <div v-if="!item.collapsed" class="process-list">
@@ -1444,11 +1608,30 @@ onUnmounted(() => {
                 <summary v-if="processItem.kind === 'assistant'" class="process-assistant-summary">
                   <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
                 </summary>
-                <summary v-else>
-                  <span>{{ processItem.title }}</span>
-                  <small>{{ processItem.detail }}</small>
+                <summary v-else-if="processItem.kind === 'tool-step'" class="process-tool-step-summary">
+                  <span class="process-tool-icon" aria-hidden="true">
+                    <Globe v-if="isBrowserTool(processItem.toolName)" :size="14" stroke-width="1.9" />
+                    <Terminal v-else :size="14" stroke-width="1.9" />
+                  </span>
+                  <span class="process-tool-title">{{ processItem.title }}</span>
+                  <span class="process-tool-separator" aria-hidden="true">·</span>
+                  <small class="process-tool-detail">{{ processItem.detail }}</small>
                 </summary>
-                <pre v-if="processItem.raw">{{ processItem.raw }}</pre>
+                <summary v-else>
+                  <span class="process-tool-title">{{ processItem.title }}</span>
+                  <small class="process-tool-detail">{{ processItem.detail }}</small>
+                </summary>
+                <div v-if="processItem.kind === 'tool-step'" class="process-tool-jsons">
+                  <div v-if="processItem.inputRaw" class="process-json-block">
+                    <span>请求参数</span>
+                    <pre>{{ processItem.inputRaw }}</pre>
+                  </div>
+                  <div class="process-json-block">
+                    <span>响应结果</span>
+                    <pre>{{ processItem.outputRaw || '等待返回' }}</pre>
+                  </div>
+                </div>
+                <pre v-else-if="processItem.raw && processItem.kind !== 'assistant'">{{ processItem.raw }}</pre>
               </details>
             </div>
           </div>
