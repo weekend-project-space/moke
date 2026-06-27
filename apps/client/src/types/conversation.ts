@@ -89,7 +89,21 @@ export type ToolStepViewItem = {
   outputRaw?: string
 }
 
-export type ProcessViewItem = ProcessItem | ToolStepViewItem
+export type ToolBatchViewItem = {
+  id: string
+  kind: 'tool-batch'
+  title: string
+  detail: string
+  tone: ProcessTone
+  actionLabel: string
+  objectLabel: string
+  countLabel: string
+  toolCategory: ToolCategory
+  toolRisk: ToolRisk
+  steps: ToolStepViewItem[]
+}
+
+export type ProcessViewItem = ProcessItem | ToolStepViewItem | ToolBatchViewItem
 
 export type ProcessGroupView = {
   label: string

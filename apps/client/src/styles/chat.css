@@ -271,17 +271,28 @@
 }
 
 .process-item.assistant {
-  margin: 4px 0 6px;
+  margin: 6px 0 8px;
+  color: var(--ink);
 }
 
 .process-item.assistant .process-assistant-summary {
   display: block;
-  padding: 4px 0 2px;
+  padding: 5px 0 3px;
   white-space: normal;
 }
 
+.process-item.assistant .markdown {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.52;
+}
+
+.process-item.assistant .markdown p {
+  color: var(--ink);
+}
+
 .process-item.assistant + .process-item:not(.assistant) {
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .process-item.error .process-tool-title,
@@ -292,7 +303,41 @@
 .process-tool-jsons {
   display: grid;
   gap: 8px;
-  margin: 6px 0 8px 22px;
+  margin: 6px 0 8px;
+}
+
+.process-batch-list {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+
+.process-batch-step {
+  min-width: 0;
+}
+
+.process-batch-step summary {
+  display: block;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.process-batch-dot {
+  display: none;
+}
+
+.process-batch-title {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 8%);
+  font-size: 13px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-batch-step:hover .process-batch-title {
+  color: var(--ink-soft);
 }
 
 .process-tool-meta {

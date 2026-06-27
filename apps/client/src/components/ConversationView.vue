@@ -79,10 +79,10 @@ function handleConversationClick(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Element)) return
 
-  const link = target.closest<HTMLAnchorElement>('a[data-browser-url]')
+  const link = target.closest<HTMLAnchorElement>('a[href]')
   if (!link) return
 
-  const url = link.dataset.browserUrl || link.href
+  const url = link.href || link.dataset.browserUrl
   if (!url) return
 
   event.preventDefault()

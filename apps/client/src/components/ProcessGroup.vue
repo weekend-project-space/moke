@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronRight, Code2, FolderSearch, Globe, ShieldAlert, Sparkles, Terminal } from 'lucide-vue-next'
-import type { ProcessViewItem } from '../types/conversation'
+import type { ToolCategory, ToolRisk, ProcessViewItem } from '../types/conversation'
 
 defineProps<{
   label: string
@@ -14,10 +14,14 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-function riskLabel(risk: string) {
+function riskLabel(risk: ToolRisk) {
   if (risk === 'dangerous') return '高风险'
   if (risk === 'write') return '写入'
   return '安全'
+}
+
+function iconCategory(step: { toolCategory: ToolCategory }) {
+  return step.toolCategory
 }
 </script>
 
@@ -38,22 +42,24 @@ function riskLabel(risk: string) {
         :class="[
           processItem.tone,
           processItem.kind,
-          processItem.kind === 'tool-step' ? `category-${processItem.toolCategory}` : '',
-          processItem.kind === 'tool-step' ? `risk-${processItem.toolRisk}` : '',
+          processItem.kind === 'tool-step' || processItem.kind === 'tool-batch' ? `category-${processItem.toolCategory}` : '',
+          processItem.kind === 'tool-step' || processItem.kind === 'tool-batch' ? `risk-${processItem.toolRisk}` : '',
         ]"
       >
         <summary v-if="processItem.kind === 'assistant'" class="process-assistant-summary">
           <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
         </summary>
-        <summary v-else-if="processItem.kind === 'tool-step'" class="process-tool-step-summary">
+        <summary v-else-if="processItem.kind === 'tool-step' || processItem.kind === 'tool-batch'" class="process-tool-step-summary">
           <span class="process-tool-icon" aria-hidden="true">
-            <Globe v-if="processItem.toolCategory === 'browser'" :size="14" stroke-width="1.9" />
-            <FolderSearch v-else-if="processItem.toolCategory === 'workspace'" :size="14" stroke-width="1.9" />
-            <Sparkles v-else-if="processItem.toolCategory === 'skill'" :size="14" stroke-width="1.9" />
-            <Terminal v-else-if="processItem.toolCategory === 'command'" :size="14" stroke-width="1.9" />
+            <Globe v-if="iconCategory(processItem) === 'browser'" :size="14" stroke-width="1.9" />
+            <FolderSearch v-else-if="iconCategory(processItem) === 'workspace'" :size="14" stroke-width="1.9" />
+            <Sparkles v-else-if="iconCategory(processItem) === 'skill'" :size="14" stroke-width="1.9" />
+            <Terminal v-else-if="iconCategory(processItem) === 'command'" :size="14" stroke-width="1.9" />
             <Code2 v-else :size="14" stroke-width="1.9" />
           </span>
-          <span class="process-tool-title">{{ processItem.actionLabel }}</span>
+          <span class="process-tool-title">
+            {{ processItem.kind === 'tool-batch' ? `${processItem.actionLabel} · ${processItem.countLabel}` : processItem.actionLabel }}
+          </span>
           <span class="process-tool-separator" aria-hidden="true">·</span>
           <small class="process-tool-detail">{{ processItem.objectLabel }}</small>
         </summary>
@@ -76,6 +82,35 @@ function riskLabel(risk: string) {
             <span>响应结果</span>
             <pre>{{ processItem.outputRaw || '等待返回' }}</pre>
           </div>
+        </div>
+        <div v-else-if="processItem.kind === 'tool-batch'" class="process-batch-list">
+          <details
+            v-for="step in processItem.steps"
+            :key="step.id"
+            class="process-batch-step"
+            :class="[step.tone, `risk-${step.toolRisk}`]"
+          >
+            <summary>
+              <span class="process-batch-dot" aria-hidden="true"></span>
+              <span class="process-batch-title">{{ step.objectLabel }}</span>
+            </summary>
+            <div class="process-tool-jsons">
+              <div class="process-tool-meta">
+                <span>方法名</span>
+                <code>{{ step.toolName }}</code>
+                <span>{{ riskLabel(step.toolRisk) }}</span>
+                <ShieldAlert v-if="step.toolRisk === 'dangerous'" :size="13" stroke-width="1.9" aria-hidden="true" />
+              </div>
+              <div v-if="step.inputRaw" class="process-json-block">
+                <span>请求参数</span>
+                <pre>{{ step.inputRaw }}</pre>
+              </div>
+              <div class="process-json-block">
+                <span>响应结果</span>
+                <pre>{{ step.outputRaw || '等待返回' }}</pre>
+              </div>
+            </div>
+          </details>
         </div>
         <pre v-else-if="processItem.raw && processItem.kind !== 'assistant'">{{ processItem.raw }}</pre>
       </details>

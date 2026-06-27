@@ -195,6 +195,20 @@ async function createTab() {
   })
 }
 
+async function openUrl(url: string) {
+  await withBusy(async () => {
+    await nextTick()
+    await waitForLayoutFrame()
+    applyState(await browserApi.open({
+      url,
+      visible: true,
+      bounds: getViewportBounds(),
+    }))
+    await syncBrowserBounds()
+    scheduleStateRefresh()
+  })
+}
+
 async function selectTab(tab: BrowserPage) {
   if (tabKey(tab) === activeTabKey.value) return
 
@@ -329,6 +343,10 @@ watch(
   },
   { flush: 'post' },
 )
+
+defineExpose({
+  openUrl,
+})
 </script>
 
 <template>

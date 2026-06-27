@@ -7,7 +7,9 @@ import type {
   ProcessGroupView,
   ProcessItem,
   ProcessNote,
+  ProcessTone,
   ProcessViewItem,
+  ToolBatchViewItem,
   ToolCategory,
   ToolRisk,
   ToolStepViewItem,
@@ -520,6 +522,22 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   }
 }
 
+function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined, tone: ProcessTone) {
+  if (tone === 'error' && outputRaw) return shortText(outputRaw, 120)
+  if (!outputRaw) return inputLabel
+
+  try {
+    const parsed = JSON.parse(outputRaw)
+    const outputSummary = summarizeOutput(parsed)
+    if (outputSummary && outputSummary !== '已完成') return `${inputLabel} · ${outputSummary}`
+  } catch {
+    const text = outputRaw.replace(/\s+/g, ' ').trim()
+    if (text && text !== '已完成') return `${inputLabel} · ${shortText(text, 72)}`
+  }
+
+  return inputLabel
+}
+
 function createEventProcessItem(note: ProcessNote): ProcessItem {
   return {
     id: `process-event-${note.id}`,
@@ -577,6 +595,7 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
       if (step) {
         step.tone = item.tone
         step.outputRaw = item.raw
+        step.objectLabel = combineToolStepDetail(step.objectLabel, item.raw, item.tone)
         if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
         if (lastPendingCall === call) lastPendingCall = null
         continue
@@ -589,7 +608,98 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
     viewItems.push(item)
   }
 
-  return viewItems
+  return mergeAdjacentToolBatches(viewItems)
+}
+
+function mergeAdjacentToolBatches(items: ProcessViewItem[]): ProcessViewItem[] {
+  const merged: ProcessViewItem[] = []
+  let batch: ToolStepViewItem[] = []
+
+  function canBatch(left: ToolStepViewItem, right: ToolStepViewItem) {
+    return (
+      left.actionLabel === right.actionLabel &&
+      left.toolCategory === right.toolCategory &&
+      left.toolRisk === right.toolRisk &&
+      left.tone === right.tone
+    )
+  }
+
+  function flushBatch() {
+    if (batch.length === 0) return
+    if (batch.length === 1) {
+      merged.push(batch[0])
+      batch = []
+      return
+    }
+
+    merged.push(createToolBatchView(batch))
+    batch = []
+  }
+
+  for (const item of items) {
+    if (item.kind !== 'tool-step') {
+      flushBatch()
+      merged.push(item)
+      continue
+    }
+
+    const last = batch.at(-1)
+    if (!last || canBatch(last, item)) {
+      batch.push(item)
+      continue
+    }
+
+    flushBatch()
+    batch.push(item)
+  }
+
+  flushBatch()
+  return merged
+}
+
+function createToolBatchView(steps: ToolStepViewItem[]): ToolBatchViewItem {
+  const first = steps[0]
+  const objectSamples = steps.map((step) => step.objectLabel).filter(Boolean)
+  const uniqueObjects = [...new Set(objectSamples)]
+  const countLabel = toolBatchCountLabel(first, steps.length)
+  const objectLabel = toolBatchObjectLabel(uniqueObjects, countLabel)
+
+  return {
+    id: `process-tool-batch-${first.id}-${steps.length}`,
+    kind: 'tool-batch',
+    title: first.title,
+    detail: objectLabel,
+    tone: steps.some((step) => step.tone === 'error') ? 'error' : first.tone,
+    actionLabel: first.actionLabel,
+    objectLabel,
+    countLabel,
+    toolCategory: first.toolCategory,
+    toolRisk: steps.some((step) => step.toolRisk === 'dangerous')
+      ? 'dangerous'
+      : steps.some((step) => step.toolRisk === 'write')
+        ? 'write'
+        : first.toolRisk,
+    steps,
+  }
+}
+
+function toolBatchCountLabel(step: ToolStepViewItem, count: number) {
+  if (step.actionLabel.includes('目录')) return `${count} 个目录`
+  if (step.actionLabel.includes('文件')) return `${count} 个文件`
+  if (step.toolCategory === 'browser') return `${count} 个页面操作`
+  if (step.toolCategory === 'command') return `${count} 条命令`
+  if (step.toolCategory === 'skill') return `${count} 个能力操作`
+  return `${count} 个步骤`
+}
+
+function toolBatchObjectLabel(uniqueObjects: string[], countLabel: string) {
+  if (uniqueObjects.length === 0) return countLabel
+
+  const cleanObjects = uniqueObjects.map((value) => value.replace(/\s*·\s*已完成$/, '').trim()).filter(Boolean)
+  const samples = cleanObjects.slice(0, 2).join('、')
+  if (!samples) return countLabel
+  if (cleanObjects.length <= 2) return samples
+  return `${samples} 等`
 }
 
 function createToolStepView(call: ProcessItem): ToolStepViewItem {
@@ -609,7 +719,11 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
 }
 
 function processGroupLabel(items: ProcessViewItem[]) {
-  const toolSteps = items.filter((item) => item.kind === 'tool-step').length
+  const toolSteps = items.reduce((count, item) => {
+    if (item.kind === 'tool-step') return count + 1
+    if (item.kind === 'tool-batch') return count + item.steps.length
+    return count
+  }, 0)
   const fallbackToolItems = items.filter((item) => item.kind === 'tool-call' || item.kind === 'tool-result').length
   const errors = items.filter((item) => item.tone === 'error').length
   const parts = ['查看执行过程']

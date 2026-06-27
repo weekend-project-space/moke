@@ -13,6 +13,7 @@ import { useResizablePanels } from './composables/useResizablePanels'
 import type { AgentEvent, Message, SessionSummary, TaskTemplate, TraceStep } from './types/conversation'
 
 const input = ref('')
+const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const copiedKey = ref('')
@@ -81,6 +82,11 @@ const {
   openLinkInBrowser,
 } = useBrowserWorkspace({
   apiBase,
+  openUrl: async (url) => {
+    await nextTick()
+    if (!browserPanel.value) throw new Error('Browser panel is not mounted')
+    await browserPanel.value.openUrl(url)
+  },
   openWorkspace,
 })
 const taskTemplates: TaskTemplate[] = [
@@ -557,7 +563,7 @@ onUnmounted(() => {
     <aside class="workspace">
       <!-- Progress panel switching is disabled for now; the right workspace only hosts the browser. -->
       <ActivityPanel v-if="false" :steps="traceSteps" :summary="progressPanelSummary" />
-      <BrowserPanel :active="!traceCollapsed" />
+      <BrowserPanel ref="browserPanel" :active="!traceCollapsed" />
     </aside>
   </main>
 </template>
