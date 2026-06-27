@@ -2,7 +2,12 @@ export type { Agent, AgentRunInput, AgentRunResult } from './agent.js';
 export { EventBus } from './event-bus.js';
 export { RunManager } from './run-manager.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
-export type { RuntimeContentManager, ToolContext } from './tool-context.js';
+export type {
+  RuntimeContentManager,
+  ToolContext,
+  WorkspacePathApprovalDecision,
+  WorkspacePathApprovalRequest,
+} from './tool-context.js';
 export type { RuntimeTool } from './tool-registry.js';
 export type {
   ExecutableSystemBackend,
@@ -26,3 +31,8 @@ export type {
   SystemWriteResult,
   WritableSystemBackend,
 } from './system-backend.js';
+export {
+  isPathRequiresApprovalError,
+  PathRequiresApprovalError,
+} from './workspace-approval.js';
+export type { PathApprovalDetails } from './workspace-approval.js';

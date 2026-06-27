@@ -1,3 +1,4 @@
+import { lstat, mkdir, writeFile as writeLocalFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -24,6 +25,7 @@ import type {
   SystemReadResult,
   SystemWriteResult,
 } from '../../agent-runtime/src/index.js';
+import { PathRequiresApprovalError } from '../../agent-runtime/src/index.js';
 
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {
   backend?: SandboxBackendProtocolV2;
@@ -37,9 +39,13 @@ const DEFAULT_ROOT = '/';
 export class LocalSystemBackend implements ExecutableSystemBackend {
   readonly rootDir: string;
   private readonly backend: SandboxBackendProtocolV2;
+  private readonly approvedRoots: string[];
+  private readonly useLocalFsWrites: boolean;
 
   constructor(root = DEFAULT_ROOT, options: LocalSystemBackendOptions = {}) {
     this.rootDir = path.resolve(root);
+    this.approvedRoots = [this.rootDir];
+    this.useLocalFsWrites = !options.backend;
 
     if (options.backend) {
       this.backend = options.backend;
@@ -50,8 +56,14 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
       ...options,
       inheritEnv: options.inheritEnv ?? true,
       rootDir: options.rootDir ?? this.rootDir,
-      virtualMode: true,
+      virtualMode: false,
     });
+  }
+
+  approveWorkspaceRoot(root: string) {
+    const fullPath = path.resolve(root);
+    if (!this.isInsideApprovedRoot(fullPath)) this.approvedRoots.push(fullPath);
+    return fullPath;
   }
 
   async ls(requestedPath = '.'): Promise<SystemLsResult> {
@@ -109,7 +121,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   async grep(pattern: string, options?: SystemGrepOptions): Promise<SystemGrepResult> {
     const mode = options?.mode ?? 'content';
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const result = await this.backend.grep(pattern, target, options?.glob ?? null);
     if (result.error) throw new Error(result.error);
 
@@ -120,7 +132,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async glob(pattern: string, options?: SystemGlobOptions): Promise<SystemGlobResult> {
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
     const result = await this.backend.glob(pattern, target);
     if (result.error) throw new Error(result.error);
@@ -132,6 +144,14 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async writeFile(filePath: string, content: string): Promise<SystemWriteResult> {
     const target = this.toBackendPath(filePath);
+    if (this.useLocalFsWrites) {
+      await writeLocalTextFile(target, content);
+      return {
+        path: this.fromBackendPath(target),
+        bytes: Buffer.byteLength(content, 'utf8'),
+      };
+    }
+
     const result = await this.backend.write(target, content);
     if (result.error) throw new Error(result.error);
 
@@ -161,7 +181,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     const startedAt = Date.now();
     const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
     const commandText = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
-    this.assertCommandPathsStayInWorkspace(commandText);
+    this.assertCommandPathsStayInApprovedRoots(commandText);
     const result = await withTimeout(
       this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`),
       options?.timeoutMs,
@@ -177,55 +197,59 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   private toBackendPath(requestedPath: string) {
-    if (path.isAbsolute(requestedPath) && requestedPath.startsWith(this.rootDir)) {
-      return this.toVirtualPath(requestedPath);
-    }
-    return this.toVirtualPath(this.toHostPath(requestedPath));
+    return this.toHostPath(requestedPath);
   }
 
   private toHostPath(requestedPath: string) {
     const fullPath = path.resolve(this.rootDir, requestedPath);
-    if (!this.isInsideWorkspace(fullPath)) {
-      throw new Error('Path escapes workspace');
-    }
+    if (!this.isInsideApprovedRoot(fullPath)) throw this.createPathApprovalError(fullPath);
     return fullPath;
   }
 
-  private isInsideWorkspace(fullPath: string) {
-    const relative = path.relative(this.rootDir, fullPath);
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  private isInsideApprovedRoot(fullPath: string) {
+    return this.approvedRoots.some((root) => isInsideRoot(root, fullPath));
   }
 
-  private assertCommandPathsStayInWorkspace(commandText: string) {
+  private createPathApprovalError(fullPath: string) {
+    return new PathRequiresApprovalError({
+      path: fullPath,
+      suggestedRoot: suggestApprovalRoot(fullPath),
+      reason: `Path requires approval: ${fullPath}`,
+    });
+  }
+
+  private assertCommandPathsStayInApprovedRoots(commandText: string) {
     for (const rawPath of findDriveRelativePathTokens(commandText)) {
-      throw new Error(`Command path is ambiguous outside workspace: ${rawPath}`);
+      throw new PathRequiresApprovalError({
+        path: rawPath,
+        suggestedRoot: this.rootDir,
+        reason: `Command path is ambiguous outside workspace: ${rawPath}`,
+      });
     }
 
     for (const rawPath of findAbsolutePathTokens(commandText)) {
       const fullPath = path.resolve(rawPath);
-      if (!this.isInsideWorkspace(fullPath)) {
-        throw new Error(`Command path escapes workspace: ${rawPath}`);
+      if (!this.isInsideApprovedRoot(fullPath)) {
+        throw new PathRequiresApprovalError({
+          path: fullPath,
+          suggestedRoot: suggestApprovalRoot(fullPath),
+          reason: `Command path requires approval: ${rawPath}`,
+        });
       }
     }
   }
 
-  private toVirtualPath(fullPath: string) {
-    const relative = path.relative(this.rootDir, fullPath).split(path.sep).join('/');
-    return relative ? `/${relative}` : '/';
-  }
-
   private fromBackendPath(filePath: string) {
-    const normalized = filePath.replace(/\\/g, '/').replace(/\/$/, '');
-    if (normalized === '' || normalized === '/') return '.';
-    if (path.isAbsolute(normalized) && normalized.startsWith(this.rootDir)) {
+    const normalized = path.resolve(this.rootDir, filePath);
+    if (isInsideRoot(this.rootDir, normalized)) {
       return path.relative(this.rootDir, normalized) || '.';
     }
-    return normalized.replace(/^\//, '') || '.';
+    return normalized;
   }
 
   private toSystemFileInfo(file: { path: string; is_dir?: boolean; size?: number; modified_at?: string }): SystemFileInfo {
     return {
-      path: this.fromBackendPath(file.path.replace(/\/$/, '')),
+      path: this.fromBackendPath(file.path.replace(/[/\\]$/, '')),
       type: file.is_dir ? 'directory' : 'file',
       size: file.size,
       modified_at: file.modified_at || undefined,
@@ -256,6 +280,18 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
       text: match.text,
     }));
   }
+}
+
+function isInsideRoot(root: string, fullPath: string) {
+  const relative = path.relative(root, fullPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function suggestApprovalRoot(fullPath: string) {
+  const parsed = path.parse(path.resolve(fullPath));
+  const relative = path.relative(parsed.root, fullPath);
+  const [firstSegment] = relative.split(path.sep).filter(Boolean);
+  return firstSegment ? path.join(parsed.root, firstSegment) : parsed.root;
 }
 
 function shellQuote(value: string) {
@@ -296,6 +332,28 @@ function findDriveRelativePathTokens(commandText: string) {
 
 function stripTrailingPunctuation(value: string) {
   return value.replace(/[),\].]+$/, '');
+}
+
+async function writeLocalTextFile(filePath: string, content: string) {
+  try {
+    const stat = await lstat(filePath);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`);
+    }
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    if (code !== 'ENOENT') throw error;
+  }
+
+  const parent = path.dirname(filePath);
+  if (parent !== path.parse(parent).root) {
+    await mkdir(parent, { recursive: true });
+  }
+
+  await writeLocalFile(filePath, content, {
+    flag: 'w',
+    mode: 0o644,
+  });
 }
 
 async function withTimeout<T>(promise: Promise<T> | T, timeoutMs: number | undefined, command: string) {

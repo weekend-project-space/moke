@@ -2,22 +2,8 @@
 import { ArrowUp, Square } from 'lucide-vue-next'
 import { nextTick, ref } from 'vue'
 
-type AskOption = {
-  id: string
-  label: string
-}
-
-type PendingAsk = {
-  ask_id: string
-  call_id: string
-  question: string
-  options: AskOption[]
-  created_at?: string
-}
-
 const props = defineProps<{
   inputValue: string
-  pendingAsk: PendingAsk | null
   primaryDisabled: boolean
   primaryIsStop: boolean
 }>()
@@ -26,7 +12,6 @@ const emit = defineEmits<{
   submit: []
   input: []
   enter: [event: KeyboardEvent]
-  selectAskOption: [option: AskOption]
   'update:inputValue': [value: string]
 }>()
 
@@ -57,21 +42,8 @@ defineExpose({ focus, resize })
 
 <template>
   <form class="composer" @submit.prevent="$emit('submit')">
-    <div class="composer-panel" :class="{ 'input-mode': !pendingAsk }">
-      <div v-if="pendingAsk" class="ask-prompt">
-        <p>{{ pendingAsk.question }}</p>
-        <div class="ask-options">
-          <button
-            v-for="option in pendingAsk.options"
-            :key="option.id"
-            type="button"
-            @click="$emit('selectAskOption', option)"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-      </div>
-      <div v-else class="composer-input-row">
+    <div class="composer-panel input-mode">
+      <div class="composer-input-row">
         <div class="composer-textarea-area">
           <textarea
             ref="textarea"

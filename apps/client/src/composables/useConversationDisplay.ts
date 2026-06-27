@@ -504,7 +504,12 @@ function createToolCallProcessItem(toolCall: NonNullable<Message['tool_calls']>[
 
 function createToolResultProcessItem(message: Message, id: string): ProcessItem {
   const parsed = parseToolContent(message.content)
-  const detail = typeof parsed === 'string' ? parsed : summarizeOutput(parsed)
+  const detail =
+    message.status === 'error'
+      ? summarizeToolFailure(parsed, message.name)
+      : typeof parsed === 'string'
+        ? parsed
+        : summarizeOutput(parsed)
   const raw = typeof parsed === 'string' ? parsed : formatJson(parsed)
 
   return {
@@ -514,7 +519,7 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
     detail: shortText(detail, 160),
     tone: message.status === 'error' ? 'error' : 'neutral',
     actionLabel: message.status === 'error' ? '执行失败' : '校验结果',
-    objectLabel: shortText(detail, 160),
+    objectLabel: shortText(detail, 120),
     toolCategory: 'tool',
     toolRisk: 'safe',
     raw,
@@ -522,8 +527,31 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   }
 }
 
+function summarizeToolFailure(parsed: unknown, fallbackName?: string) {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const error = (parsed as Record<string, any>).error
+    if (error && typeof error === 'object') {
+      const tool = typeof error.tool === 'string' ? error.tool : fallbackName
+      const path = typeof error.path === 'string' ? error.path : ''
+      const message = typeof error.message === 'string' ? error.message : ''
+      const target = path || extractPathFromErrorMessage(message)
+      return target ? `${tool || '工具'} · ${target}` : `${tool || '工具'}执行失败`
+    }
+  }
+
+  return fallbackName ? `${fallbackName}执行失败` : '工具执行失败'
+}
+
+function extractPathFromErrorMessage(message: string) {
+  const quoted = message.match(/'([^']+)'/)
+  if (quoted?.[1]) return quoted[1]
+
+  const windowsPath = message.match(/[a-zA-Z]:\\[^\s,)]+/)
+  return windowsPath?.[0] || ''
+}
+
 function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined, tone: ProcessTone) {
-  if (tone === 'error' && outputRaw) return shortText(outputRaw, 120)
+  if (tone === 'error') return inputLabel
   if (!outputRaw) return inputLabel
 
   try {

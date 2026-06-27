@@ -186,18 +186,22 @@
     height: 9px;
   }
 
-  .approval-banner {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 10px 12px;
+  .approval-inline {
+    grid-template-columns: 1fr;
+    align-items: start;
+    padding: 9px 10px;
   }
 
-  .approval menu {
-    width: 100%;
+  .approval-inline-detail {
+    flex-wrap: wrap;
   }
 
-  .approval button {
-    flex: 1;
+  .approval-inline menu {
+    flex-wrap: wrap;
+  }
+
+  .approval-inline button {
+    flex: 0 0 auto;
   }
 
   .conversation {

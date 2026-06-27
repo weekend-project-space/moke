@@ -220,10 +220,34 @@ export function createRoutes({ sessions, runs, runManager, toolRegistry, browser
         }
 
         if (type === 'approve') {
+          const requestId = typeof body.request_id === 'string' ? body.request_id : '';
+          const decision = body.decision === 'approved' ? 'approved' : body.decision === 'rejected' ? 'rejected' : '';
+          const scope =
+            body.scope === 'once' || body.scope === 'session' || body.scope === 'persistent' ? body.scope : undefined;
+
+          if (!requestId || !decision) {
+            return json(res, 400, {
+              error: { code: 'BAD_REQUEST', message: 'request_id and decision are required' },
+            });
+          }
+
+          const result = runManager.approve(run.id, requestId, decision, {
+            scope,
+            message: typeof body.message === 'string' ? body.message : undefined,
+          });
+          if (result.status !== 200) {
+            return json(res, result.status, {
+              error: {
+                code: result.status === 404 ? 'RUN_NOT_FOUND' : 'APPROVAL_NOT_PENDING',
+                message: result.error,
+              },
+            });
+          }
+
           return json(res, 200, {
-            run_id: run.id,
-            request_id: typeof body.request_id === 'string' ? body.request_id : null,
-            status: 'accepted',
+            run_id: result.run.id,
+            request_id: requestId,
+            status: result.run.status,
           });
         }
 

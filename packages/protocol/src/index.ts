@@ -75,6 +75,20 @@ export type PendingAsk = {
   created_at: string;
 };
 
+export type PendingApproval = {
+  approval_id: string;
+  kind: 'workspace_path' | 'tool';
+  reason: string;
+  risk: RiskLevel;
+  action: {
+    tool: string;
+    input: Record<string, unknown>;
+  };
+  path?: string;
+  suggested_root?: string;
+  created_at: string;
+};
+
 export type Run = {
   id: string;
   session_id: string;
@@ -85,6 +99,7 @@ export type Run = {
   started_at: number;
   abort: boolean;
   pending_ask?: PendingAsk;
+  pending_approval?: PendingApproval;
 };
 
 export type RuntimeLimits = {

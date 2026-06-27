@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -53,6 +55,21 @@ test('execute defaults cwd to the workspace root', async () => {
   assert.match(backend.calls[0], /npm test$/);
 });
 
+test('writeFile writes directly when parent is the backend root', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-write-root-'));
+  try {
+    const system = new LocalSystemBackend(root);
+
+    await system.writeFile('a.md', 'hello');
+
+    const target = path.join(root, 'a.md');
+    assert.equal(existsSync(target), true);
+    assert.equal(readFileSync(target, 'utf8'), 'hello');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('execute rejects absolute command paths outside workspace', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');
@@ -60,7 +77,7 @@ test('execute rejects absolute command paths outside workspace', async () => {
 
   await assert.rejects(
     () => system.execute('copy E:\\work\\test\\moke\\a.md E:\\a.md'),
-    /Command path escapes workspace: E:\\a\.md/,
+    /Command path requires approval: E:\\a\.md/,
   );
 });
 
@@ -74,6 +91,17 @@ test('execute allows absolute command paths inside workspace', async () => {
   assert.equal(backend.calls.length, 1);
 });
 
+test('execute allows absolute command paths inside approved roots', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  system.approveWorkspaceRoot('E:/notes');
+  await system.execute('type E:\\notes\\a.md');
+
+  assert.equal(backend.calls.length, 1);
+});
+
 test('execute rejects UNC paths', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');
@@ -81,7 +109,7 @@ test('execute rejects UNC paths', async () => {
 
   await assert.rejects(
     () => system.execute('copy a.md \\\\server\\share\\a.md'),
-    /Command path escapes workspace: \\\\server\\share\\a\.md/,
+    /Command path requires approval: \\\\server\\share\\a\.md/,
   );
 });
 

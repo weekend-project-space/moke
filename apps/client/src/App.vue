@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { ArrowDown } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
+import ApprovalInlineBar from './components/ApprovalInlineBar.vue'
+import AskInlineBar from './components/AskInlineBar.vue'
 import BrowserPanel from './components/BrowserPanel.vue'
 import ChatHeader from './components/ChatHeader.vue'
 import ComposerBox from './components/ComposerBox.vue'
@@ -17,6 +20,7 @@ const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const copiedKey = ref('')
+const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const {
   closeSidebar,
@@ -129,8 +133,6 @@ const serverStatusLabel = computed(() => {
 
   return labels[serverStatus.value]
 })
-const approvalTool = computed(() => pendingApproval.value?.action?.tool || '待确认操作')
-const approvalToolLabel = computed(() => toolLabels[approvalTool.value] || approvalTool.value)
 const toolLabels: Record<string, string> = {
   apply_patch: '编辑内容',
   bash: '运行命令',
@@ -413,6 +415,11 @@ function handleInput() {
   resizeComposer()
 }
 
+function jumpToConversationBottom() {
+  conversationView.value?.jumpToBottom()
+  showJumpToBottom.value = false
+}
+
 function applySuggestion(prompt: string) {
   input.value = prompt
   void nextTick(() => {
@@ -517,17 +524,6 @@ onUnmounted(() => {
         @toggle-workspace="toggleWorkspace"
       />
 
-      <section v-if="pendingApproval" class="approval approval-banner">
-        <div>
-          <p>{{ pendingApproval.reason }}</p>
-          <span>{{ approvalToolLabel }} · 需要确认</span>
-        </div>
-        <menu>
-          <button type="button" @click="decideApproval('approved')">允许</button>
-          <button type="button" class="secondary" @click="decideApproval('rejected')">拒绝</button>
-        </menu>
-      </section>
-
       <ConversationView
         ref="conversationView"
         :copied-key="copiedKey"
@@ -542,12 +538,29 @@ onUnmounted(() => {
         :timeline-note="timelineNote"
         @apply-suggestion="applySuggestion"
         @copy-message="copyMessage($event.key, $event.content)"
+        @jump-visibility-change="showJumpToBottom = $event"
         @open-link="openLinkInBrowser"
         @toggle-process-group="toggleProcessGroup"
       />
-      <ComposerBox ref="composerBox" :input-value="input" :pending-ask="pendingAsk" :primary-disabled="primaryDisabled"
+      <button
+        v-if="showJumpToBottom"
+        class="jump-inline"
+        type="button"
+        aria-label="跳到底部"
+        title="跳到底部"
+        @click="jumpToConversationBottom"
+      >
+        <ArrowDown :size="15" stroke-width="2.2" />
+      </button>
+      <ApprovalInlineBar
+        v-if="pendingApproval"
+        :approval="pendingApproval"
+        @approve="decideApproval($event.decision, $event.scope)"
+      />
+      <AskInlineBar v-if="pendingAsk" :ask="pendingAsk" @select="selectAskOption" />
+      <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
         :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
-        @enter="sendOnEnter" @submit="handlePrimaryAction" @select-ask-option="selectAskOption" />
+        @enter="sendOnEnter" @submit="handlePrimaryAction" />
     </section>
 
     <div

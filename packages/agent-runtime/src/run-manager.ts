@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Message, Run, Session } from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { RuntimeContentManager } from './tool-context.js';
+import type { RuntimeContentManager, WorkspacePathApprovalDecision, WorkspacePathApprovalRequest } from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 function id(prefix: string) {
@@ -17,6 +17,7 @@ type RunManagerConfig = {
   toolRegistry: ToolRegistry;
   workspace: string;
   createSkillContentManager?: () => RuntimeContentManager;
+  approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => void;
   onChange?: () => void;
 };
 
@@ -49,6 +50,14 @@ export class RunManager {
     {
       runId: string;
       resolve: (selected: { id: string; label: string }) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+  private readonly pendingApprovals = new Map<
+    string,
+    {
+      runId: string;
+      resolve: (decision: WorkspacePathApprovalDecision) => void;
       reject: (error: Error) => void;
     }
   >();
@@ -113,6 +122,7 @@ export class RunManager {
           abortSignal: abortController.signal,
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
+          approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
         },
         limits,
       });
@@ -153,6 +163,39 @@ export class RunManager {
     } finally {
       this.abortControllers.delete(run.id);
     }
+  }
+
+  private approveWorkspacePath(
+    run: Run,
+    eventBus: EventBus,
+    input: WorkspacePathApprovalRequest,
+  ): Promise<WorkspacePathApprovalDecision> {
+    const approvalId = id('apv');
+    run.status = 'awaiting_approval';
+    run.pending_approval = {
+      approval_id: approvalId,
+      kind: 'workspace_path',
+      reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
+      risk: input.risk,
+      action: {
+        tool: input.tool,
+        input: input.input,
+      },
+      path: input.path,
+      suggested_root: input.suggestedRoot,
+      created_at: new Date().toISOString(),
+    };
+
+    eventBus.emit('approval.required', run.pending_approval);
+    this.config.onChange?.();
+
+    return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
+      this.pendingApprovals.set(approvalId, {
+        runId: run.id,
+        resolve,
+        reject,
+      });
+    });
   }
 
   private askUser(
@@ -223,6 +266,40 @@ export class RunManager {
     return { status: 200 as const, run };
   }
 
+  approve(
+    runId: string,
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    options: { scope?: 'once' | 'session' | 'persistent'; message?: string } = {},
+  ) {
+    const run = this.config.runs.get(runId);
+    if (!run) return { status: 404 as const, error: 'Run not found' };
+    if (run.pending_approval?.approval_id !== approvalId) {
+      return { status: 409 as const, error: 'Run is not waiting for this approval' };
+    }
+
+    const pending = this.pendingApprovals.get(approvalId);
+    if (!pending || pending.runId !== runId) return { status: 409 as const, error: 'Approval is no longer pending' };
+
+    const pendingApproval = run.pending_approval;
+    this.pendingApprovals.delete(approvalId);
+    run.pending_approval = undefined;
+    run.status = 'running';
+    this.config.onChange?.();
+    const scope = options.scope || 'session';
+    if (decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root) {
+      this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope);
+    }
+
+    pending.resolve({
+      approved: decision === 'approved',
+      scope,
+      message: options.message,
+    });
+
+    return { status: 200 as const, run };
+  }
+
   cancel(runId: string) {
     const run = this.config.runs.get(runId);
     if (!run) return null;
@@ -235,6 +312,13 @@ export class RunManager {
       const pending = this.pendingAsks.get(run.pending_ask.ask_id);
       this.pendingAsks.delete(run.pending_ask.ask_id);
       run.pending_ask = undefined;
+      pending?.reject(new Error('Run cancelled'));
+    }
+
+    if (run.pending_approval) {
+      const pending = this.pendingApprovals.get(run.pending_approval.approval_id);
+      this.pendingApprovals.delete(run.pending_approval.approval_id);
+      run.pending_approval = undefined;
       pending?.reject(new Error('Run cancelled'));
     }
 

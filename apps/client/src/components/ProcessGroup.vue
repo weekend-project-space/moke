@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight, Code2, FolderSearch, Globe, ShieldAlert, Sparkles, Terminal } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, Globe, ShieldAlert, Sparkles, Terminal } from 'lucide-vue-next'
 import type { ToolCategory, ToolRisk, ProcessViewItem } from '../types/conversation'
 
 defineProps<{
@@ -20,7 +20,8 @@ function riskLabel(risk: ToolRisk) {
   return '安全'
 }
 
-function iconCategory(step: { toolCategory: ToolCategory }) {
+function iconKind(step: { toolCategory: ToolCategory; toolRisk: ToolRisk }) {
+  if (step.toolRisk === 'write') return 'write'
   return step.toolCategory
 }
 </script>
@@ -32,7 +33,7 @@ function iconCategory(step: { toolCategory: ToolCategory }) {
         <ChevronRight v-if="collapsed" :size="13" stroke-width="2" />
         <ChevronDown v-else :size="13" stroke-width="2" />
       </span>
-      <span>{{ label }}</span>
+      <span class="process-toggle-label">{{ label }}</span>
     </button>
     <div v-if="!collapsed" class="process-list">
       <details
@@ -51,15 +52,17 @@ function iconCategory(step: { toolCategory: ToolCategory }) {
         </summary>
         <summary v-else-if="processItem.kind === 'tool-step' || processItem.kind === 'tool-batch'" class="process-tool-step-summary">
           <span class="process-tool-icon" aria-hidden="true">
-            <Globe v-if="iconCategory(processItem) === 'browser'" :size="14" stroke-width="1.9" />
-            <FolderSearch v-else-if="iconCategory(processItem) === 'workspace'" :size="14" stroke-width="1.9" />
-            <Sparkles v-else-if="iconCategory(processItem) === 'skill'" :size="14" stroke-width="1.9" />
-            <Terminal v-else-if="iconCategory(processItem) === 'command'" :size="14" stroke-width="1.9" />
+            <FilePenLine v-if="iconKind(processItem) === 'write'" :size="14" stroke-width="1.9" />
+            <Globe v-else-if="iconKind(processItem) === 'browser'" :size="14" stroke-width="1.9" />
+            <FolderSearch v-else-if="iconKind(processItem) === 'workspace'" :size="14" stroke-width="1.9" />
+            <Sparkles v-else-if="iconKind(processItem) === 'skill'" :size="14" stroke-width="1.9" />
+            <Terminal v-else-if="iconKind(processItem) === 'command'" :size="14" stroke-width="1.9" />
             <Code2 v-else :size="14" stroke-width="1.9" />
           </span>
           <span class="process-tool-title">
             {{ processItem.kind === 'tool-batch' ? `${processItem.actionLabel} · ${processItem.countLabel}` : processItem.actionLabel }}
           </span>
+          <span v-if="processItem.tone === 'error'" class="process-tool-status">失败</span>
           <span class="process-tool-separator" aria-hidden="true">·</span>
           <small class="process-tool-detail">{{ processItem.objectLabel }}</small>
         </summary>

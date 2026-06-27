@@ -50,3 +50,24 @@ test('resolveEnvPaths includes explicit env path before workspace env file', () 
     else process.env.MOKE_ENV_PATH = previousEnvPath;
   }
 });
+
+test('resolveServerConfig includes permissions path under workspace', async () => {
+  const { resolveServerConfig } = await import(`./app.js?permissions-test=${Date.now()}`);
+  const previousWorkspace = process.env.MOKE_WORKSPACE;
+  const previousPermissionsPath = process.env.MOKE_PERMISSIONS_PATH;
+
+  try {
+    process.env.MOKE_WORKSPACE = 'E:\\work\\test\\moke';
+    delete process.env.MOKE_PERMISSIONS_PATH;
+
+    assert.equal(
+      resolveServerConfig().permissionsPath,
+      resolve('E:\\work\\test\\moke', '.moke', 'permissions.json'),
+    );
+  } finally {
+    if (previousWorkspace === undefined) delete process.env.MOKE_WORKSPACE;
+    else process.env.MOKE_WORKSPACE = previousWorkspace;
+    if (previousPermissionsPath === undefined) delete process.env.MOKE_PERMISSIONS_PATH;
+    else process.env.MOKE_PERMISSIONS_PATH = previousPermissionsPath;
+  }
+});

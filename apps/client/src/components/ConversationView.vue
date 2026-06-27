@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   applySuggestion: [prompt: string]
   copyMessage: [payload: { key: string; content: string }]
+  jumpVisibilityChange: [visible: boolean]
   openLink: [url: string]
   toggleProcessGroup: [id: string]
 }>()
@@ -59,12 +60,12 @@ function scrollToBottom(force = false) {
   if (!el || (!force && !autoScroll.value)) return
 
   el.scrollTop = el.scrollHeight
-  showJumpToBottom.value = false
+  setJumpToBottomVisible(false)
 }
 
 function resetAutoScroll() {
   autoScroll.value = true
-  showJumpToBottom.value = false
+  setJumpToBottomVisible(false)
 }
 
 function handleConversationScroll() {
@@ -72,7 +73,7 @@ function handleConversationScroll() {
   if (!el) return
 
   autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-  if (autoScroll.value) showJumpToBottom.value = false
+  if (autoScroll.value) setJumpToBottomVisible(false)
 }
 
 function handleConversationClick(event: MouseEvent) {
@@ -94,15 +95,22 @@ function jumpToBottom() {
   void nextTick(() => scrollToBottom(true))
 }
 
+function setJumpToBottomVisible(visible: boolean) {
+  if (showJumpToBottom.value === visible) return
+  showJumpToBottom.value = visible
+  emit('jumpVisibilityChange', visible)
+}
+
 watch(
   () => props.scrollKey,
   () => {
-    if (!autoScroll.value) showJumpToBottom.value = true
+    if (!autoScroll.value) setJumpToBottomVisible(true)
     void nextTick(() => scrollToBottom())
   },
 )
 
 defineExpose({
+  jumpToBottom,
   resetAutoScroll,
   scrollToBottom,
 })
@@ -167,7 +175,7 @@ defineExpose({
     </div>
   </div>
 
-  <button v-if="showJumpToBottom" class="jump-bottom" type="button" @click="jumpToBottom">
+  <button v-if="false" class="jump-bottom" type="button" @click="jumpToBottom">
     跳到底部
   </button>
 </template>

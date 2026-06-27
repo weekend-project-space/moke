@@ -196,7 +196,15 @@ export class ReActAgent {
           const output =
             call.name === ASK_USER_TOOL_NAME
               ? await this.askUser(call.args || {}, callId, context)
-              : await toolRegistry.execute(call.name, call.args || {}, context);
+              : await toolRegistry.execute(call.name, call.args || {}, {
+                  ...context,
+                  currentToolCall: {
+                    callId,
+                    tool: call.name,
+                    input: toToolCallArgs(call.args),
+                    risk: runtimeTool?.risk || 'safe',
+                  },
+                });
           throwIfAborted(context.abortSignal);
           hasObservation = true;
 

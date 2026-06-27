@@ -158,7 +158,15 @@
   text-align: left;
   transition:
     color 0.14s ease,
-    background 0.14s ease;
+  background 0.14s ease;
+}
+
+.process-toggle-label {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .process-toggle:hover {
@@ -166,8 +174,8 @@
   background: transparent;
 }
 
-.process-group.error .process-toggle {
-  color: color-mix(in srgb, var(--danger), var(--ink-muted) 18%);
+.process-group.error .process-toggle-label {
+  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
 }
 
 .process-caret {
@@ -206,7 +214,7 @@
 }
 
 .process-tool-step-summary {
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto auto minmax(0, 1fr);
   column-gap: 6px;
   align-items: center;
 }
@@ -221,19 +229,29 @@
 }
 
 .process-item.risk-write .process-tool-icon {
-  color: color-mix(in srgb, var(--warning), var(--ink-muted) 48%);
+  color: color-mix(in srgb, var(--ink-muted), transparent 12%);
 }
 
 .process-item.risk-dangerous .process-tool-icon {
-  color: color-mix(in srgb, var(--danger), var(--ink-muted) 42%);
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
 }
 
 .process-tool-title {
   min-width: 0;
-  color: color-mix(in srgb, var(--ink-soft), transparent 8%);
+  color: color-mix(in srgb, var(--ink-muted), transparent 6%);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 430;
   line-height: 1.5;
+}
+
+.process-tool-status {
+  padding: 0 4px;
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 34%);
+  background: rgba(255, 59, 48, 0.06);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .process-tool-separator {
@@ -297,7 +315,11 @@
 
 .process-item.error .process-tool-title,
 .process-item.error .process-tool-detail {
-  color: color-mix(in srgb, var(--danger), var(--ink) 14%);
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 30%);
+}
+
+.process-item.error .process-tool-icon {
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 38%);
 }
 
 .process-tool-jsons {
@@ -330,7 +352,7 @@
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--ink-muted), var(--ink) 8%);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -765,55 +787,107 @@
   font-weight: 800;
 }
 
-.approval {
-  border: 1px solid color-mix(in srgb, var(--warning), white 48%);
-  background: var(--warning-soft);
-}
-
-.approval-banner {
-  flex: 0 0 auto;
-  display: flex;
+.approval-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  width: var(--content-width);
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-width: 0 0 1px;
-  background: rgba(255, 246, 232, 0.8);
+  align-self: center;
+  margin: 0 auto 8px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid rgba(60, 60, 67, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.74);
 }
 
-.approval p {
-  margin: 0 0 3px;
-  color: #52320c;
-  font-weight: 650;
+.approval-inline-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
 }
 
-.approval span {
-  display: block;
-  color: color-mix(in srgb, var(--warning), black 8%);
-  font-size: 12px;
-  font-weight: 700;
+.approval-inline-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 540;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.approval menu {
+.approval-inline-detail {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.approval-inline-detail span {
+  flex: 0 0 auto;
+}
+
+.approval-inline-detail code {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink), transparent 8%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-inline menu {
   display: flex;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 6px;
   padding: 0;
   margin: 0;
 }
 
-.approval button {
-  height: 32px;
-  min-width: 68px;
-  padding: 0 13px;
-  border-radius: 999px;
-  color: #fffaf2;
-  background: var(--warning);
-  font-weight: 650;
+.approval-inline button {
+  height: 30px;
+  min-width: 0;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 520;
+  white-space: nowrap;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    border-color 0.14s ease;
 }
 
-.approval .secondary {
-  border: 1px solid color-mix(in srgb, var(--warning), white 35%);
-  color: #52320c;
-  background: rgba(255, 255, 255, 0.58);
+.approval-inline .primary {
+  border: 1px solid var(--accent-strong);
+  color: white;
+  background: var(--accent-strong);
+}
+
+.approval-inline .secondary {
+  border: 1px solid rgba(60, 60, 67, 0.14);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.approval-inline .ghost {
+  border: 1px solid transparent;
+  color: var(--ink-muted);
+  background: transparent;
+}
+
+.approval-inline .primary:hover {
+  background: color-mix(in srgb, var(--accent-strong), black 8%);
+}
+
+.approval-inline .secondary:hover,
+.approval-inline .ghost:hover {
+  color: var(--ink);
+  background: rgba(118, 118, 128, 0.1);
 }

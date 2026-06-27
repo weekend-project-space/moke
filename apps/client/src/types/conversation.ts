@@ -42,6 +42,20 @@ export type PendingAsk = {
   created_at?: string
 }
 
+export type PendingApproval = {
+  approval_id: string
+  kind?: 'workspace_path' | 'tool'
+  reason: string
+  risk?: 'safe' | 'write' | 'dangerous'
+  action?: {
+    tool: string
+    input: Record<string, unknown>
+  }
+  path?: string
+  suggested_root?: string
+  created_at?: string
+}
+
 export type TraceStep = {
   id: string
   kind: string

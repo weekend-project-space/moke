@@ -1,5 +1,5 @@
 import { computed, nextTick, ref } from 'vue'
-import type { AgentEvent, AskOption, Message, PendingAsk, SessionSummary } from '../types/conversation'
+import type { AgentEvent, AskOption, Message, PendingApproval, PendingAsk, SessionSummary } from '../types/conversation'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -15,7 +15,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const sessions = ref<SessionSummary[]>([])
   const events = ref<AgentEvent[]>([])
   const streamingText = ref('')
-  const pendingApproval = ref<any | null>(null)
+  const pendingApproval = ref<PendingApproval | null>(null)
   const pendingAsk = ref<PendingAsk | null>(null)
   const isRunning = ref(false)
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
@@ -185,7 +185,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         }
 
         if (event.type === 'approval.required') {
-          pendingApproval.value = event.payload
+          pendingApproval.value = event.payload as PendingApproval
         }
 
         if (event.type === 'ask_user.required') {
@@ -248,7 +248,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
   }
 
-  async function decideApproval(decision: 'approved' | 'rejected') {
+  async function decideApproval(decision: 'approved' | 'rejected', scope: 'once' | 'session' | 'persistent' = 'session') {
     if (!pendingApproval.value || !runId.value) return
     const approval = pendingApproval.value
     pendingApproval.value = null
@@ -260,6 +260,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         type: 'approve',
         request_id: approval.approval_id,
         decision,
+        scope,
         message: decision === 'rejected' ? 'User rejected the action' : undefined,
       }),
     })
