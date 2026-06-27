@@ -8,6 +8,7 @@
     "dev:client": "npm --prefix apps/client run dev -- --host 127.0.0.1",
     "dev:server": "tsx apps/server/server.ts",
     "build:server": "node scripts/build-server-bundle.mjs",
+    "package:desktop": "node scripts/package-desktop.mjs",
     "desktop": "npm --prefix apps/client run desktop",
     "build": "npm --prefix apps/client run build"
   },

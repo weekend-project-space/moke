@@ -238,13 +238,23 @@ async function navigateHistory(type: 'back' | 'forward') {
   })
 }
 
+function waitForLayoutFrame() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
+}
+
 async function syncVisibility() {
   if (!nativeAvailable.value || !activePage.value) return
 
   try {
     if (props.active) {
       await nextTick()
+      await waitForLayoutFrame()
       applyState(await browserApi.show(activePage.value.pageId, getViewportBounds()))
+      await syncBrowserBounds()
+      await waitForLayoutFrame()
+      await syncBrowserBounds()
     } else {
       applyState(await browserApi.hide())
     }
@@ -297,6 +307,7 @@ watch(
 watch(
   activeTabKey,
   () => {
+    void syncVisibility()
     startStateSync()
   },
   { flush: 'post' },

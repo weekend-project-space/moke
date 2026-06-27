@@ -1144,7 +1144,7 @@ button:disabled {
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
-  padding: 7px 0 12px;
+  padding: 8px 0 14px;
   background: linear-gradient(180deg, rgba(251, 251, 253, 0), rgba(251, 251, 253, 0.92) 48%);
 }
 
@@ -1173,41 +1173,51 @@ button:disabled {
 .composer-panel {
   display: flex;
   width: var(--content-width);
-  min-height: 46px;
+  min-height: 0;
   flex-direction: column;
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 19px;
+  border-radius: 20px;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
 }
 
+.composer-panel.input-mode {
+  min-height: 98px;
+}
+
 .composer-input-row {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  min-height: 46px;
-  padding: 5px 6px 5px 14px;
-  border: 1px solid rgba(60, 60, 67, 0.1);
-  border-radius: 19px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: none;
+  min-height: 98px;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid rgba(60, 60, 67, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+  overflow: hidden;
+}
+
+.composer-textarea-area {
+  flex: 1 1 auto;
+  min-height: 58px;
+  padding: 12px 12px 4px;
 }
 
 .composer textarea {
-  height: 34px;
   width: 100%;
   min-width: 0;
+  height: 40px;
   max-height: 112px;
-  padding: 8px 0 7px;
+  padding: 0;
   border: 0;
   outline: none;
   color: var(--ink);
   background: transparent;
-  font-size: 13.5px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.45;
   resize: none;
   overflow-y: auto;
 }
@@ -1221,10 +1231,18 @@ button:disabled {
 }
 
 .composer-input-row:focus-within {
-  border-color: rgba(0, 122, 255, 0.42);
+  border-color: rgba(60, 60, 67, 0.2);
   box-shadow:
-    0 0 0 3px rgba(0, 122, 255, 0.1),
+    0 0 0 3px rgba(60, 60, 67, 0.055),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.88);
+}
+
+.composer-footer {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 8px 12px;
 }
 
 .ask-prompt {
@@ -1271,9 +1289,9 @@ button:disabled {
 
 .composer button {
   display: inline-flex;
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;

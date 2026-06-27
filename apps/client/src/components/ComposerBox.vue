@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SendHorizontal, Square } from 'lucide-vue-next'
+import { ArrowUp, Square } from 'lucide-vue-next'
 import { nextTick, ref } from 'vue'
 
 type AskOption = {
@@ -72,25 +72,30 @@ defineExpose({ focus, resize })
         </div>
       </div>
       <div v-else class="composer-input-row">
-        <textarea
-          ref="textarea"
-          :value="props.inputValue"
-          rows="1"
-          placeholder="输入给 Moke 的消息"
-          @input="handleInput"
-          @keydown.enter="$emit('enter', $event)"
-        ></textarea>
-        <button
-          class="primary-action"
-          type="submit"
-          :class="{ stop: primaryIsStop }"
-          :disabled="primaryDisabled"
-          :aria-label="primaryIsStop ? '停止运行' : '发送消息'"
-          :title="primaryIsStop ? '停止运行' : '发送消息'"
-        >
-          <Square v-if="primaryIsStop" :size="16" fill="currentColor" stroke-width="2.2" />
-          <SendHorizontal v-else :size="18" stroke-width="2.2" />
-        </button>
+        <div class="composer-textarea-area">
+          <textarea
+            ref="textarea"
+            :value="props.inputValue"
+            rows="1"
+            placeholder="输入给 Moke 的消息"
+            @input="handleInput"
+            @keydown.enter="$emit('enter', $event)"
+          ></textarea>
+        </div>
+        <div class="composer-footer">
+          <span aria-hidden="true"></span>
+          <button
+            class="primary-action"
+            type="submit"
+            :class="{ stop: primaryIsStop }"
+            :disabled="primaryDisabled"
+            :aria-label="primaryIsStop ? '停止运行' : '发送消息'"
+            :title="primaryIsStop ? '停止运行' : '发送消息'"
+          >
+            <Square v-if="primaryIsStop" :size="15" fill="currentColor" stroke-width="2.2" />
+            <ArrowUp v-else :size="17" stroke-width="2.4" />
+          </button>
+        </div>
       </div>
     </div>
   </form>
