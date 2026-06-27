@@ -42,6 +42,7 @@ export class BrowserBridge {
   private readonly pending = new Map<string, PendingRequest>();
 
   connect(res: ServerResponse) {
+    this.closeClient();
     this.client = res;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -54,6 +55,15 @@ export class BrowserBridge {
 
   disconnect(res: ServerResponse) {
     if (this.client === res) this.client = null;
+  }
+
+  close(error = new Error('Browser bridge closed')) {
+    this.closeClient();
+    for (const [id, pending] of this.pending.entries()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+      this.pending.delete(id);
+    }
   }
 
   async request(method: string, params: Record<string, unknown> = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -88,6 +98,14 @@ export class BrowserBridge {
     }
 
     return true;
+  }
+
+  private closeClient() {
+    if (!this.client) return;
+
+    // End the SSE stream explicitly so the desktop client can reconnect cleanly.
+    this.client.end();
+    this.client = null;
   }
 }
 

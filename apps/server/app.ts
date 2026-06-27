@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import http from 'node:http';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
 import { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
@@ -24,46 +24,126 @@ export type ServerApp = {
   close: () => Promise<void>;
 };
 
-export async function createApp(): Promise<ServerApp> {
-  const root = process.env.MOKE_WORKSPACE || process.cwd();
-  const envPaths = [
-    process.env.MOKE_ENV_PATH,
-    join(root, '.env'),
-  ].filter((path): path is string => Boolean(path));
+export type ServerConfig = {
+  envPaths: string[];
+  mcpConfigPath: string;
+  port: number;
+  statePath: string;
+  workspace: string;
+};
+
+export function normalizeWindowsDrivePath(value: string) {
+  // Tauri/Windows can hand Node paths like "\E:\..." which node:path treats as root-relative.
+  return process.platform === 'win32' ? value.replace(/^[/\\]+([a-zA-Z]:[/\\])/, '$1') : value;
+}
+
+export function resolvePath(value: string | undefined, basePath: string, fallback: string) {
+  const raw = normalizeWindowsDrivePath((value || fallback).trim());
+  return isAbsolute(raw) ? resolve(raw) : resolve(basePath, raw);
+}
+
+export function resolvePort(value: string | undefined) {
+  const port = Number(value || 4010);
+  if (Number.isInteger(port) && port > 0 && port <= 65535) return port;
+
+  console.warn(`Invalid PORT value "${value}", falling back to 4010.`);
+  return 4010;
+}
+
+export function resolveServerConfig(): ServerConfig {
+  const workspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+
+  return {
+    envPaths: resolveEnvPaths(workspace),
+    mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, workspace, join('.moke', 'mcp.json')),
+    port: resolvePort(process.env.PORT),
+    statePath: resolvePath(process.env.MOKE_STATE_PATH, workspace, join('.moke', 'state.json')),
+    workspace,
+  };
+}
+
+export function resolveEnvPaths(workspace: string) {
+  return [
+    process.env.MOKE_ENV_PATH ? resolvePath(process.env.MOKE_ENV_PATH, workspace, '') : '',
+    join(workspace, '.env'),
+  ].filter(Boolean);
+}
+
+function loadFirstEnvFile(envPaths: string[]) {
   for (const envPath of envPaths) {
     if (existsSync(envPath)) {
       process.loadEnvFile(envPath);
-      break;
+      return envPath;
     }
   }
 
-  const port = Number(process.env.PORT || 4010);
-  const statePath = process.env.MOKE_STATE_PATH || join(root, '.moke/state.json');
-  const mcpConfigPath = process.env.MOKE_MCP_CONFIG || join(root, '.moke/mcp.json');
-  const sessions = new Map<string, Session>();
-  const runs = new Map<string, Run>();
-  const workspace = root;
+  return '';
+}
+
+function createToolRegistry(workspace: string, browserBridge: BrowserBridge) {
   const system = new LocalSystemBackend(workspace);
-  const browserBridge = new BrowserBridge();
   const browserBackend = new BrowserBridgeBackend(browserBridge);
   const skillLoader = new SkillLoader(workspace);
-  const stateSaver = createStateSaver({ statePath, sessions, runs });
   const toolRegistry = new ToolRegistry()
     .register(createListSkillsTool(skillLoader))
     .register(createReadSkillTool(skillLoader));
+
   registerAgentTools(toolRegistry, system);
   registerBrowserTools(toolRegistry, browserBackend);
+
+  return toolRegistry;
+}
+
+function createRunManager(input: {
+  runs: Map<string, Run>;
+  sessions: Map<string, Session>;
+  toolRegistry: ToolRegistry;
+  workspace: string;
+  onChange: () => void;
+}) {
+  return new RunManager({
+    sessions: input.sessions,
+    runs: input.runs,
+    agent: new ReActAgent(),
+    toolRegistry: input.toolRegistry,
+    workspace: input.workspace,
+    createSkillContentManager: () => new ContentManager(),
+    onChange: input.onChange,
+  });
+}
+
+function closeHttpServer(server: http.Server) {
+  if (!server.listening) return Promise.resolve();
+
+  return new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) rejectClose(error);
+      else resolveClose();
+    });
+  });
+}
+
+export async function createApp(): Promise<ServerApp> {
+  const initialWorkspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+  const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialWorkspace));
+  if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
+
+  const { mcpConfigPath, port, statePath, workspace } = resolveServerConfig();
+
+  const sessions = new Map<string, Session>();
+  const runs = new Map<string, Run>();
+  const browserBridge = new BrowserBridge();
+  const stateSaver = createStateSaver({ statePath, sessions, runs });
+  const toolRegistry = createToolRegistry(workspace, browserBridge);
 
   loadState({ statePath, sessions, runs });
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
-  const runManager = new RunManager({
+  const runManager = createRunManager({
     sessions,
     runs,
-    agent: new ReActAgent(),
     toolRegistry,
     workspace,
-    createSkillContentManager: () => new ContentManager(),
     onChange: stateSaver.saveStateSoon,
   });
   const server = http.createServer(
@@ -81,8 +161,10 @@ export async function createApp(): Promise<ServerApp> {
     port,
     server,
     close: async () => {
+      browserBridge.close();
       stateSaver.flush();
       await mcpManager?.close();
+      await closeHttpServer(server);
     },
   };
 }

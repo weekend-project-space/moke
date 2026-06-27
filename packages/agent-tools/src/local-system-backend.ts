@@ -35,11 +35,11 @@ const DEFAULT_RESULT_LIMIT = 20;
 const DEFAULT_ROOT = '/';
 
 export class LocalSystemBackend implements ExecutableSystemBackend {
-  readonly root: string;
+  readonly rootDir: string;
   private readonly backend: SandboxBackendProtocolV2;
 
   constructor(root = DEFAULT_ROOT, options: LocalSystemBackendOptions = {}) {
-    this.root = path.resolve(root);
+    this.rootDir = path.resolve(root);
 
     if (options.backend) {
       this.backend = options.backend;
@@ -49,7 +49,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     this.backend = new LocalShellBackend({
       ...options,
       inheritEnv: options.inheritEnv ?? true,
-      rootDir: options.rootDir ?? this.root,
+      rootDir: options.rootDir ?? this.rootDir,
       virtualMode: true,
     });
   }
@@ -159,10 +159,14 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async execute(command: string, args: string[] = [], options?: SystemExecuteOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
-    const cwd = options?.cwd ? this.toHostPath(options.cwd) : undefined;
+    const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
     const commandText = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
-    const commands = commandText;//'export OPENWALK_SESSION_NAME=MOKE && ' + commandText
-    const result = await this.backend.execute(cwd ? `cd ${shellQuote(cwd)} && ${commands}` : commands);
+    this.assertCommandPathsStayInWorkspace(commandText);
+    const result = await withTimeout(
+      this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`),
+      options?.timeoutMs,
+      command,
+    );
 
     return {
       exit_code: result.exitCode ?? 1,
@@ -173,30 +177,48 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   private toBackendPath(requestedPath: string) {
-    if (path.isAbsolute(requestedPath) && requestedPath.startsWith(this.root)) {
+    if (path.isAbsolute(requestedPath) && requestedPath.startsWith(this.rootDir)) {
       return this.toVirtualPath(requestedPath);
     }
     return this.toVirtualPath(this.toHostPath(requestedPath));
   }
 
   private toHostPath(requestedPath: string) {
-    const fullPath = path.resolve(this.root, requestedPath);
-    if (fullPath !== this.root && !fullPath.startsWith(`${this.root}${path.sep}`)) {
+    const fullPath = path.resolve(this.rootDir, requestedPath);
+    if (!this.isInsideWorkspace(fullPath)) {
       throw new Error('Path escapes workspace');
     }
     return fullPath;
   }
 
+  private isInsideWorkspace(fullPath: string) {
+    const relative = path.relative(this.rootDir, fullPath);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  private assertCommandPathsStayInWorkspace(commandText: string) {
+    for (const rawPath of findDriveRelativePathTokens(commandText)) {
+      throw new Error(`Command path is ambiguous outside workspace: ${rawPath}`);
+    }
+
+    for (const rawPath of findAbsolutePathTokens(commandText)) {
+      const fullPath = path.resolve(rawPath);
+      if (!this.isInsideWorkspace(fullPath)) {
+        throw new Error(`Command path escapes workspace: ${rawPath}`);
+      }
+    }
+  }
+
   private toVirtualPath(fullPath: string) {
-    const relative = path.relative(this.root, fullPath).split(path.sep).join('/');
+    const relative = path.relative(this.rootDir, fullPath).split(path.sep).join('/');
     return relative ? `/${relative}` : '/';
   }
 
   private fromBackendPath(filePath: string) {
     const normalized = filePath.replace(/\\/g, '/').replace(/\/$/, '');
     if (normalized === '' || normalized === '/') return '.';
-    if (path.isAbsolute(normalized) && normalized.startsWith(this.root)) {
-      return path.relative(this.root, normalized) || '.';
+    if (path.isAbsolute(normalized) && normalized.startsWith(this.rootDir)) {
+      return path.relative(this.rootDir, normalized) || '.';
     }
     return normalized.replace(/^\//, '') || '.';
   }
@@ -238,4 +260,58 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function findAbsolutePathTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
+  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]+/g;
+  const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
+
+  for (const match of commandText.matchAll(uncPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  for (const match of commandText.matchAll(windowsDrivePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  for (const match of commandText.matchAll(unixPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  return [...tokens];
+}
+
+function findDriveRelativePathTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const driveRelativePath = /\b[a-zA-Z]:(?![\\/])(?:[^\s"'`|&;<>]+)/g;
+
+  for (const match of commandText.matchAll(driveRelativePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  return [...tokens];
+}
+
+function stripTrailingPunctuation(value: string) {
+  return value.replace(/[),\].]+$/, '');
+}
+
+async function withTimeout<T>(promise: Promise<T> | T, timeoutMs: number | undefined, command: string) {
+  if (!timeoutMs) return promise;
+
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
