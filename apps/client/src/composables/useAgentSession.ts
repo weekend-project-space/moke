@@ -101,6 +101,37 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return true
   }
 
+  async function forkSession(messageId: string) {
+    if (!sessionId.value || !messageId || isRunning.value) return false
+    if (serverStatus.value !== 'online' && !(await checkServer())) return false
+
+    const response = await fetch(`${options.apiBase}/api/sessions/${sessionId.value}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message_id: messageId,
+        mode: 'after',
+      }),
+    })
+    if (!response.ok) return false
+
+    const data = await response.json()
+    const nextSessionId = data.session?.id
+    if (typeof nextSessionId !== 'string') return false
+
+    await loadSessions()
+    sessionId.value = nextSessionId
+    messages.value = data.messages || []
+    events.value = []
+    streamingText.value = ''
+    pendingApproval.value = null
+    pendingAsk.value = null
+    runError.value = ''
+    await nextTick()
+    await options.onMessagesLoaded?.()
+    return true
+  }
+
   async function sendMessage(content: string) {
     const trimmedContent = content.trim()
     if (!trimmedContent || isRunning.value) return false
@@ -282,6 +313,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     createSession,
     decideApproval,
     events,
+    forkSession,
     isRunning,
     loadSessions,
     loadSessionMessages,

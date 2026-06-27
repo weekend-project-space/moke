@@ -5,6 +5,7 @@ import type { Run, Session } from '../../packages/protocol/src/index.js';
 import type { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
 import type { BrowserBridge } from './browser-bridge.js';
 import { json, readJson, route } from './http.js';
+import { forkSession } from './session-fork.js';
 
 type RoutesContext = {
   sessions: Map<string, Session>;
@@ -115,6 +116,38 @@ export function createRoutes({ sessions, runs, runManager, toolRegistry, browser
         }
 
         return json(res, 200, { session: summarizeSession(session), messages: session.messages });
+      }
+
+      if (method === 'POST' && parts[0] === 'api' && parts[1] === 'sessions' && parts[3] === 'fork') {
+        const source = sessions.get(parts[2]);
+        if (!source) {
+          return json(res, 404, {
+            error: { code: 'SESSION_NOT_FOUND', message: 'Session not found' },
+          });
+        }
+
+        const body = await readJson(req);
+        const messageId = typeof body.message_id === 'string' ? body.message_id : '';
+        const mode = typeof body.mode === 'string' ? body.mode : 'after';
+        if (!messageId || mode !== 'after') {
+          return json(res, 400, {
+            error: { code: 'BAD_REQUEST', message: 'message_id is required and mode must be after' },
+          });
+        }
+
+        const forkedSession = forkSession({ source, messageId, now: now() });
+        if (!forkedSession) {
+          return json(res, 404, {
+            error: { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' },
+          });
+        }
+
+        sessions.set(forkedSession.id, forkedSession);
+        onChange();
+        return json(res, 200, {
+          session: summarizeSession(forkedSession),
+          messages: forkedSession.messages,
+        });
       }
 
       if (method === 'POST' && parts[0] === 'api' && parts[1] === 'sessions' && parts[3] === 'messages') {

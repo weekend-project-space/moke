@@ -423,19 +423,19 @@
 
 .message-row {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
   width: var(--content-width);
   min-width: 0;
   align-self: center;
 }
 
 .message-row.user {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .message-row.assistant {
-  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .message-row.assistant + .message-row.assistant {
@@ -526,10 +526,10 @@
   }
 }
 
-.copy-button {
+.message-action {
   display: inline-flex;
-  width: 24px;
-  height: 24px;
+  width: 23px;
+  height: 23px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -545,12 +545,18 @@
     background 0.14s ease;
 }
 
-.message-row:hover .copy-button,
-.copy-button:focus-visible {
+.message-actions {
+  display: inline-flex;
+  gap: 2px;
+  min-height: 23px;
+}
+
+.message-row:hover .message-action,
+.message-action:focus-visible {
   opacity: 1;
 }
 
-.copy-button:hover {
+.message-action:hover {
   color: var(--ink);
   background: rgba(118, 118, 128, 0.1);
 }

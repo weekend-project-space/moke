@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   applySuggestion: [prompt: string]
   copyMessage: [payload: { key: string; content: string }]
+  forkMessage: [messageId: string]
   jumpVisibilityChange: [visible: boolean]
   openLink: [url: string]
   toggleProcessGroup: [id: string]
@@ -148,6 +149,7 @@ defineExpose({
         :copied-key="copiedKey"
         :render-markdown="renderMarkdown"
         @copy="emit('copyMessage', $event)"
+        @fork="emit('forkMessage', $event)"
       />
     </template>
 
@@ -174,8 +176,4 @@ defineExpose({
       </button>
     </div>
   </div>
-
-  <button v-if="false" class="jump-bottom" type="button" @click="jumpToBottom">
-    跳到底部
-  </button>
 </template>

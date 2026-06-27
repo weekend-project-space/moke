@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Copy } from 'lucide-vue-next'
+import { Check, Copy, GitBranchPlus } from 'lucide-vue-next'
 import type { Message } from '../types/conversation'
 
 defineProps<{
@@ -11,6 +11,7 @@ defineProps<{
 
 const emit = defineEmits<{
   copy: [payload: { key: string; content: string }]
+  fork: [messageId: string]
 }>()
 </script>
 
@@ -20,16 +21,28 @@ const emit = defineEmits<{
       <div v-if="message.role === 'assistant'" class="markdown" v-html="renderMarkdown(message.content)"></div>
       <template v-else>{{ message.content }}</template>
     </div>
-    <button
-      v-if="message.role === 'assistant'"
-      class="copy-button"
-      type="button"
-      :aria-label="copiedKey === id ? '已复制' : '复制内容'"
-      :title="copiedKey === id ? '已复制' : '复制内容'"
-      @click="emit('copy', { key: id, content: message.content })"
-    >
-      <Check v-if="copiedKey === id" :size="14" stroke-width="2.2" />
-      <Copy v-else :size="14" stroke-width="2.2" />
-    </button>
+    <div v-if="message.role === 'assistant'" class="message-actions">
+      <button
+        v-if="message.role === 'assistant'"
+        class="message-action"
+        type="button"
+        :aria-label="copiedKey === id ? '已复制' : '复制内容'"
+        :title="copiedKey === id ? '已复制' : '复制内容'"
+        @click="emit('copy', { key: id, content: message.content })"
+      >
+        <Check v-if="copiedKey === id" :size="14" stroke-width="2.2" />
+        <Copy v-else :size="14" stroke-width="2.2" />
+      </button>
+      <button
+        v-if="message.id"
+        class="message-action"
+        type="button"
+        aria-label="Fork 会话"
+        title="Fork 会话"
+        @click="emit('fork', message.id)"
+      >
+        <GitBranchPlus :size="14" stroke-width="2.2" />
+      </button>
+    </div>
   </article>
 </template>

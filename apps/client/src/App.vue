@@ -53,6 +53,7 @@ const {
   createSession,
   decideApproval,
   events,
+  forkSession,
   isRunning,
   loadSessions,
   messages,
@@ -405,6 +406,11 @@ async function startNewSession() {
   if (await createSession()) closeTransientPanels()
 }
 
+async function forkMessage(messageId: string) {
+  conversationView.value?.resetAutoScroll()
+  if (await forkSession(messageId)) closeTransientPanels()
+}
+
 function sendOnEnter(event: KeyboardEvent) {
   if (event.shiftKey || isRunning.value) return
   event.preventDefault()
@@ -538,6 +544,7 @@ onUnmounted(() => {
         :timeline-note="timelineNote"
         @apply-suggestion="applySuggestion"
         @copy-message="copyMessage($event.key, $event.content)"
+        @fork-message="forkMessage"
         @jump-visibility-change="showJumpToBottom = $event"
         @open-link="openLinkInBrowser"
         @toggle-process-group="toggleProcessGroup"

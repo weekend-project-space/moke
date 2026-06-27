@@ -7,6 +7,7 @@ export type AgentEvent = {
 }
 
 export type Message = {
+  id?: string
   role: 'user' | 'assistant' | 'tool'
   content: string
   created_at?: string
