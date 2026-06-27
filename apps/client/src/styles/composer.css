@@ -1,0 +1,182 @@
+.composer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 14px;
+  background: linear-gradient(180deg, rgba(251, 251, 253, 0), rgba(251, 251, 253, 0.92) 48%);
+}
+
+.jump-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  z-index: 3;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(60, 60, 67, 0.1);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+  font-size: 12px;
+  font-weight: 520;
+  transform: translateX(-50%);
+}
+
+.jump-bottom:hover {
+  color: var(--ink);
+  background: #fff;
+}
+
+.composer-panel {
+  display: flex;
+  width: var(--content-width);
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.composer-panel.input-mode {
+  min-height: 98px;
+}
+
+.composer-input-row {
+  display: flex;
+  min-height: 98px;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid rgba(60, 60, 67, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+  overflow: hidden;
+}
+
+.composer-textarea-area {
+  flex: 1 1 auto;
+  min-height: 58px;
+  padding: 12px 12px 4px;
+}
+
+.composer textarea {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  max-height: 112px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
+}
+
+.composer textarea::placeholder {
+  color: var(--ink-muted);
+}
+
+.composer-panel:focus-within {
+  box-shadow: none;
+}
+
+.composer-input-row:focus-within {
+  border-color: rgba(60, 60, 67, 0.2);
+  box-shadow:
+    0 0 0 3px rgba(60, 60, 67, 0.055),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.88);
+}
+
+.composer-footer {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 8px 12px;
+}
+
+.ask-prompt {
+  padding: 10px 12px;
+  border: 1px solid rgba(60, 60, 67, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.ask-prompt p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ask-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.composer .ask-options button {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  justify-content: center;
+  padding: 7px 11px;
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: rgba(0, 122, 255, 0.08);
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.composer .ask-options button:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.composer button {
+  display: inline-flex;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(118, 118, 128, 0.11);
+  transition:
+    background 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.composer button:hover {
+  transform: none;
+}
+
+.composer button.primary-action {
+  color: #fff;
+  background: #0a66d8;
+  box-shadow: none;
+}
+
+.composer button.primary-action.stop {
+  color: #fff;
+  background: #3a3a3c;
+  box-shadow: none;
+}
+

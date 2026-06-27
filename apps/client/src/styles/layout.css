@@ -1,0 +1,126 @@
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #f5f5f7;
+}
+
+.shell.trace-collapsed {
+  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 0 0;
+}
+
+.shell.sidebar-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+}
+
+.shell.sidebar-collapsed.trace-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
+}
+
+.sidebar-collapsed .topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.sidebar,
+.workspace,
+.topbar,
+.approval-banner {
+  background: var(--glass);
+  border-color: var(--line);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+
+.sidebar {
+  container-type: inline-size;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 10px;
+  border-right: 1px solid var(--line);
+  background: rgba(246, 246, 248, 0.72);
+}
+
+.sidebar-resizer,
+.workspace-resizer {
+  position: relative;
+  z-index: 2;
+  min-width: 2px;
+  cursor: col-resize;
+  color: #1e1e1e;
+}
+
+.sidebar-resizer::before,
+.workspace-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  content: "";
+  background: transparent;
+  transition: background 0.14s ease;
+}
+
+.sidebar-resizer::before {
+  left: 0;
+}
+
+.workspace-resizer::before {
+  right: 0;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus-visible::before,
+.sidebar-resizing .sidebar-resizer::before,
+.workspace-resizer:hover::before,
+.workspace-resizer:focus-visible::before,
+.workspace-resizing .workspace-resizer::before {
+  background: rgba(0, 122, 255, 0.22);
+}
+
+.trace-collapsed .workspace-resizer {
+  min-width: 0;
+  pointer-events: none;
+}
+
+.trace-collapsed .workspace-resizer::before,
+.sidebar-collapsed .sidebar-resizer::before {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar {
+  padding-right: 0;
+  padding-left: 0;
+  border-right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-collapsed .sidebar-resizer {
+  min-width: 0;
+  pointer-events: none;
+}
+
+.sidebar-toggle,
+.sidebar-scrim {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+.sidebar-collapsed .sidebar-toggle:hover {
+  background: rgba(118, 118, 128, 0.11);
+}
+
