@@ -20,7 +20,7 @@ import type {
   TypeTextInput,
   UploadFileInput,
   WaitForInput,
-} from '../../packages/browser-tools/src/index.js';
+} from '../../../packages/browser-tools/src/index.js';
 
 type BrowserRequest = {
   id: string;

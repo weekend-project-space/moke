@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 
 import { z } from 'zod';
 
-import { ToolExecutionError, type ToolRegistry } from '../../packages/agent-runtime/src/index.js';
-import { McpManager, loadMcpConfig, type McpTool } from '../../packages/mcp-client/src/index.js';
+import { ToolExecutionError, type ToolRegistry } from '../../../packages/agent-runtime/src/index.js';
+import { McpManager, loadMcpConfig, type McpTool } from '../../../packages/mcp-client/src/index.js';
 
 function describeMcpTool(tool: McpTool) {
   const schema = JSON.stringify(tool.inputSchema);

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { Run, Session } from '../../packages/protocol/src/index.js';
+import type { Run, Session } from '../../../packages/protocol/src/index.js';
 
 type StoredRun = Omit<Run, 'clients'>;
 

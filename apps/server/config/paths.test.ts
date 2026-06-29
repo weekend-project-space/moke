@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import test from 'node:test';
 
-import { normalizeWindowsDrivePath, resolveEnvPaths, resolvePath, resolvePort } from './app.js';
+import { normalizeWindowsDrivePath, resolveEnvPaths, resolvePath, resolvePort } from './paths.js';
 
 test('resolvePort falls back for invalid values', () => {
   const originalWarn = console.warn;
@@ -52,7 +52,7 @@ test('resolveEnvPaths includes explicit env path before workspace env file', () 
 });
 
 test('resolveServerConfig includes permissions path under workspace', async () => {
-  const { resolveServerConfig } = await import(`./app.js?permissions-test=${Date.now()}`);
+  const { resolveServerConfig } = await import(`./paths.js?permissions-test=${Date.now()}`);
   const previousWorkspace = process.env.MOKE_WORKSPACE;
   const previousPermissionsPath = process.env.MOKE_PERMISSIONS_PATH;
 

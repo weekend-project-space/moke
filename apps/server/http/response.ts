@@ -16,10 +16,3 @@ export async function readJson(req: IncomingMessage) {
   if (chunks.length === 0) return {} as Record<string, unknown>;
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, any>;
 }
-
-export function route(method: string, pathname: string) {
-  return {
-    method,
-    parts: pathname.split('/').filter(Boolean),
-  };
-}
