@@ -77,6 +77,44 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessions.value = data.sessions || []
   }
 
+  async function updateSession(id: string, payload: Record<string, unknown>) {
+    if (!id || isRunning.value) return false
+    if (serverStatus.value !== 'online' && !(await checkServer())) return false
+
+    const response = await fetch(`${options.apiBase}/api/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) return false
+
+    await loadSessions()
+    return true
+  }
+
+  async function renameSession(id: string, title: string) {
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) return false
+    return updateSession(id, { title: trimmedTitle })
+  }
+
+  async function archiveSession(id: string) {
+    if (!(await updateSession(id, { archived: true }))) return false
+    if (id !== sessionId.value) return true
+
+    const nextSession = sortedSessions.value.find((session) => session.id !== id)
+    if (nextSession) return loadSessionMessages(nextSession.id)
+
+    sessionId.value = ''
+    messages.value = []
+    events.value = []
+    streamingText.value = ''
+    pendingApproval.value = null
+    pendingAsk.value = null
+    runError.value = ''
+    return createSession()
+  }
+
   async function loadSessionMessages(id: string) {
     const response = await fetch(`${options.apiBase}/api/sessions/${id}`)
     if (!response.ok) return false
@@ -308,6 +346,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   return {
     cancelRun,
+    archiveSession,
     checkServer,
     closeEventSource,
     createSession,
@@ -320,6 +359,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     messages,
     pendingApproval,
     pendingAsk,
+    renameSession,
     runError,
     runId,
     selectAskOption,

@@ -48,6 +48,7 @@ const apiBase =
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
 const {
   cancelRun,
+  archiveSession,
   checkServer,
   closeEventSource,
   createSession,
@@ -59,6 +60,7 @@ const {
   messages,
   pendingApproval,
   pendingAsk,
+  renameSession,
   runError,
   runId,
   selectAskOption,
@@ -118,7 +120,7 @@ const taskTemplates: TaskTemplate[] = [
 ]
 const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
-const currentTitle = computed(() => currentSession.value?.preview || '新会话')
+const currentTitle = computed(() => (currentSession.value ? sessionLabel(currentSession.value) : '新会话'))
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value) return '等待回应'
   if (pendingApproval.value) return '等待确认'
@@ -508,7 +510,7 @@ onUnmounted(() => {
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online' || isRunning" :is-running="isRunning" :session-label="sessionLabel"
       :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
-      @select-session="selectSession" />
+      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSession" />
     <div
       class="sidebar-resizer"
       role="separator"

@@ -6,6 +6,7 @@ import type { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/
 import type { BrowserBridge } from './browser-bridge.js';
 import { json, readJson, route } from './http.js';
 import { forkSession } from './session-fork.js';
+import { applySessionUpdate } from './session-update.js';
 
 type RoutesContext = {
   sessions: Map<string, Session>;
@@ -32,7 +33,8 @@ function summarizeSession(session: Session) {
   const { messages, metadata, ...summary } = session;
   return {
     ...summary,
-    preview: messages.find((message) => message.role === 'user')?.content.slice(0, 42) || session.title,
+    archived: metadata?.archived === true,
+    preview: messages.find((message) => message.role === 'user')?.content.slice(0, 42) || '',
     message_count: messages.length,
   };
 }
@@ -101,10 +103,34 @@ export function createRoutes({ sessions, runs, runManager, toolRegistry, browser
       }
 
       if (method === 'GET' && url.pathname === '/api/sessions') {
+        const includeArchived = url.searchParams.get('include_archived') === 'true';
+        const visibleSessions = [...sessions.values()].filter(
+          (session) => includeArchived || session.metadata?.archived !== true,
+        );
         return json(res, 200, {
-          sessions: [...sessions.values()].map(summarizeSession),
+          sessions: visibleSessions.map(summarizeSession),
           next_cursor: null,
         });
+      }
+
+      if (method === 'PATCH' && parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 3) {
+        const session = sessions.get(parts[2]);
+        if (!session) {
+          return json(res, 404, {
+            error: { code: 'SESSION_NOT_FOUND', message: 'Session not found' },
+          });
+        }
+
+        const result = applySessionUpdate(session, await readJson(req));
+        if (!result.ok) {
+          return json(res, result.status, {
+            error: { code: result.code, message: result.message },
+          });
+        }
+
+        session.updated_at = now();
+        onChange();
+        return json(res, 200, { session: summarizeSession(session) });
       }
 
       if (method === 'GET' && parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 3) {

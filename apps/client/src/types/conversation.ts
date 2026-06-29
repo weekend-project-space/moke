@@ -26,6 +26,7 @@ export type SessionSummary = {
   title: string
   created_at: string
   updated_at: string
+  archived?: boolean
   preview?: string
   message_count?: number
 }
