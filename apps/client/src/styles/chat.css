@@ -833,11 +833,23 @@
 }
 
 .markdown blockquote {
-  padding: 8px 10px;
-  margin: 10px 0;
-  border-left: 3px solid var(--accent);
-  color: var(--ink-soft);
-  background: var(--panel-low);
+  margin: 8px 0 10px;
+  padding: 0 0 0 12px;
+  border-left: 2px solid rgba(60, 60, 67, 0.18);
+  border-radius: 0;
+  color: color-mix(in srgb, var(--ink), transparent 28%);
+  background: transparent;
+}
+
+.markdown blockquote p {
+  margin: 0 0 8px;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown table {
