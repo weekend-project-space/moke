@@ -53,7 +53,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const response = await fetch(`${options.apiBase}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Moke 对话' }),
+      body: JSON.stringify({ title: '新会话' }),
     })
     const data = await response.json()
     sessionId.value = data.session.id
@@ -201,6 +201,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       if (!data.run_id || !data.events_url) throw new Error('Invalid run response')
 
       runId.value = data.run_id
+      void loadSessions()
       subscribe(data.events_url)
       return true
     } catch {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Archive, PanelLeftClose, Pencil, Plus, Search } from 'lucide-vue-next'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
   id: string
@@ -11,11 +11,6 @@ type SessionSummary = {
   preview?: string
   message_count?: number
 }
-
-type SessionDialog = {
-  kind: 'rename' | 'archive'
-  session: SessionSummary
-} | null
 
 const props = defineProps<{
   sessions: SessionSummary[]
@@ -36,9 +31,10 @@ const emit = defineEmits<{
 
 const searchQuery = ref('')
 const contextMenu = ref<{ session: SessionSummary; x: number; y: number } | null>(null)
-const dialog = ref<SessionDialog>(null)
-const renameTitle = ref('')
-const renameInput = ref<HTMLInputElement | null>(null)
+const editingSessionId = ref('')
+const editingTitle = ref('')
+const editingInput = ref<HTMLInputElement | null>(null)
+const editingSession = ref<SessionSummary | null>(null)
 
 const filteredSessions = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -69,40 +65,59 @@ function closeContextMenu() {
   contextMenu.value = null
 }
 
-function openRenameDialog(session: SessionSummary) {
+function startRename(session: SessionSummary) {
   closeContextMenu()
-  renameTitle.value = props.sessionLabel(session)
-  dialog.value = { kind: 'rename', session }
+  editingSessionId.value = session.id
+  editingTitle.value = props.sessionLabel(session)
+  editingSession.value = session
   void nextTick(() => {
-    renameInput.value?.focus()
-    renameInput.value?.select()
+    editingInput.value?.focus()
+    editingInput.value?.select()
   })
 }
 
-function openArchiveDialog(session: SessionSummary) {
+function archiveSession(session: SessionSummary) {
   closeContextMenu()
-  dialog.value = { kind: 'archive', session }
+  emit('archiveSession', session.id)
 }
 
-function closeDialog() {
-  dialog.value = null
-  renameTitle.value = ''
+function cancelRename() {
+  editingSessionId.value = ''
+  editingTitle.value = ''
+  editingSession.value = null
 }
 
-function submitRename() {
-  if (!dialog.value || dialog.value.kind !== 'rename') return
-  const title = renameTitle.value.trim()
-  if (title && title !== props.sessionLabel(dialog.value.session)) {
-    emit('renameSession', dialog.value.session.id, title)
+function submitRename(session = editingSession.value) {
+  if (!session) return
+  if (editingSessionId.value !== session.id) return
+
+  const title = editingTitle.value.trim()
+  if (title && title !== props.sessionLabel(session)) {
+    emit('renameSession', session.id, title)
   }
-  closeDialog()
+  cancelRename()
 }
 
-function submitArchive() {
-  if (!dialog.value || dialog.value.kind !== 'archive') return
-  emit('archiveSession', dialog.value.session.id)
-  closeDialog()
+function handleOutsideRenamePointerDown(event: PointerEvent) {
+  if (!editingSession.value) return
+  if (event.target instanceof Element && event.target.closest('.session-rename-form')) return
+
+  submitRename()
 }
+
+function handleWindowBlur() {
+  submitRename()
+}
+
+onMounted(() => {
+  window.addEventListener('pointerdown', handleOutsideRenamePointerDown, true)
+  window.addEventListener('blur', handleWindowBlur)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pointerdown', handleOutsideRenamePointerDown, true)
+  window.removeEventListener('blur', handleWindowBlur)
+})
 </script>
 
 <template>
@@ -142,7 +157,13 @@ function submitArchive() {
         :class="{ active: session.id === activeSessionId, running: isRunning && session.id === activeSessionId }"
         @contextmenu="openContextMenu($event, session)"
       >
-        <button class="session-main" type="button" :disabled="disabled" @click="emit('selectSession', session.id)">
+        <button
+          v-if="editingSessionId !== session.id"
+          class="session-main"
+          type="button"
+          :disabled="disabled"
+          @click="emit('selectSession', session.id)"
+        >
           <span class="session-line">
             <small>
               {{ sessionLabel(session) }}
@@ -151,13 +172,26 @@ function submitArchive() {
             <time>{{ sessionMeta(session) }}</time>
           </span>
         </button>
+        <form v-else class="session-main session-rename-form" @submit.prevent="submitRename(session)">
+          <span class="session-line">
+            <input
+              ref="editingInput"
+              v-model="editingTitle"
+              type="text"
+              aria-label="会话名称"
+              @blur="submitRename()"
+              @keydown.esc.prevent="cancelRename"
+            />
+            <time>{{ sessionMeta(session) }}</time>
+          </span>
+        </form>
         <button
           class="session-archive-hover"
           type="button"
           :disabled="disabled"
           aria-label="归档"
           title="归档"
-          @click.stop="openArchiveDialog(session)"
+          @click.stop="archiveSession(session)"
         >
           <Archive :size="13" stroke-width="2.1" />
         </button>
@@ -175,37 +209,14 @@ function submitArchive() {
       @click.stop
       @keydown.esc.prevent="closeContextMenu"
     >
-      <button type="button" role="menuitem" @click="openRenameDialog(contextMenu.session)">
+      <button type="button" role="menuitem" @click="startRename(contextMenu.session)">
         <Pencil :size="14" stroke-width="2.1" />
         <span>重命名</span>
       </button>
-      <button type="button" role="menuitem" @click="openArchiveDialog(contextMenu.session)">
+      <button type="button" role="menuitem" @click="archiveSession(contextMenu.session)">
         <Archive :size="14" stroke-width="2.1" />
         <span>归档</span>
       </button>
-    </div>
-
-    <div v-if="dialog" class="session-dialog-backdrop" @click="closeDialog" @keydown.esc.prevent="closeDialog">
-      <section class="session-dialog" role="dialog" aria-modal="true" @click.stop>
-        <template v-if="dialog.kind === 'rename'">
-          <h3>重命名会话</h3>
-          <form @submit.prevent="submitRename">
-            <input ref="renameInput" v-model="renameTitle" type="text" aria-label="会话名称" />
-            <footer>
-              <button type="button" class="secondary" @click="closeDialog">取消</button>
-              <button type="submit" class="primary">保存</button>
-            </footer>
-          </form>
-        </template>
-        <template v-else>
-          <h3>归档会话</h3>
-          <p>{{ sessionLabel(dialog.session) }}</p>
-          <footer>
-            <button type="button" class="secondary" @click="closeDialog">取消</button>
-            <button type="button" class="primary" @click="submitArchive">归档</button>
-          </footer>
-        </template>
-      </section>
     </div>
   </Teleport>
 </template>

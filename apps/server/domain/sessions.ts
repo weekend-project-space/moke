@@ -20,6 +20,9 @@ export type SessionUpdateResult =
   | { ok: true; changed: true }
   | { ok: false; status: 400; code: string; message: string };
 
+const DEFAULT_SESSION_TITLES = new Set(['New Session', '新会话', 'Moke 对话']);
+const SESSION_TITLE_LIMIT = 24;
+
 export function id(prefix: string) {
   return `${prefix}_${randomUUID().slice(0, 8)}`;
 }
@@ -42,6 +45,30 @@ export function summarizeSession(session: Session) {
   };
 }
 
+export function titleFromFirstUserMessage(content: string) {
+  const compact = content
+    .replace(/\s+/g, ' ')
+    .replace(/^#+\s*/, '')
+    .trim();
+  if (!compact) return '';
+
+  return Array.from(compact).slice(0, SESSION_TITLE_LIMIT).join('');
+}
+
+export function maybeSetTitleFromFirstUserMessage(session: Session, content: string) {
+  if (session.metadata?.title_edited === true) return false;
+  if (!DEFAULT_SESSION_TITLES.has(session.title)) return false;
+
+  const hasPreviousUserMessage = session.messages.some((message) => message.role === 'user');
+  if (hasPreviousUserMessage) return false;
+
+  const title = titleFromFirstUserMessage(content);
+  if (!title) return false;
+
+  session.title = title;
+  return true;
+}
+
 export function applySessionUpdate(session: Session, input: SessionUpdateInput): SessionUpdateResult {
   let changed = false;
 
@@ -52,6 +79,10 @@ export function applySessionUpdate(session: Session, input: SessionUpdateInput):
     }
 
     session.title = title;
+    session.metadata = {
+      ...session.metadata,
+      title_edited: true,
+    };
     changed = true;
   }
 

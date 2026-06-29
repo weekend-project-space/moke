@@ -443,22 +443,26 @@
 }
 
 .bubble {
+  min-width: 0;
   max-width: 100%;
   padding: 9px 12px;
   border: 1px solid rgba(60, 60, 67, 0.12);
   border-radius: 14px;
   font-size: 14px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
 }
 
 .bubble.user {
   max-width: min(520px, 72%);
-  border-color: rgba(0, 105, 230, 0.12);
+  border: 0;
   color: #173453;
   background: rgba(0, 122, 255, 0.08);
   border-bottom-right-radius: 6px;
   box-shadow: none;
+  white-space: pre-wrap;
 }
 
 .bubble.assistant {
@@ -678,7 +682,9 @@
 }
 
 .markdown {
+  min-width: 0;
   overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 14px;
   line-height: 1.52;
 }
@@ -726,6 +732,8 @@
 .markdown a {
   color: var(--accent-strong);
   font-weight: 720;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-decoration: none;
 }
 
@@ -734,35 +742,94 @@
 }
 
 .markdown code {
+  max-width: 100%;
   padding: 2px 5px;
-  border: 1px solid rgba(60, 60, 67, 0.12);
+  border: 0;
   border-radius: 6px;
   color: #273039;
-  background: rgba(118, 118, 128, 0.13);
+  background: rgba(118, 118, 128, 0.12);
   font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
   font-size: 0.92em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown .code-block {
+  max-width: 100%;
+  margin: 10px 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(118, 118, 128, 0.1);
+}
+
+.markdown .code-block figcaption {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.markdown .code-block figcaption span {
+  overflow: hidden;
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown .code-block figcaption button {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ink-muted);
+  background: transparent;
+}
+
+.markdown .code-block figcaption button:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.markdown .code-block figcaption button::before {
+  width: 14px;
+  height: 14px;
+  content: "";
+  background-color: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
 }
 
 .markdown pre {
   max-width: 100%;
-  padding: 12px;
-  margin: 9px 0;
+  padding: 0 12px 12px;
+  margin: 0;
   overflow-x: auto;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
-  background: #1e1e1e;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .markdown pre code {
   display: block;
+  min-width: max-content;
   padding: 0;
   border: 0;
   border-radius: 0;
-  color: #f5f5f7;
+  color: #24292f;
   background: transparent;
   line-height: 1.55;
   white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .markdown blockquote {
@@ -783,9 +850,12 @@
 
 .markdown th,
 .markdown td {
+  min-width: 0;
   padding: 7px 9px;
   border: 1px solid var(--line);
   text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown th {

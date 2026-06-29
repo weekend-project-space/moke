@@ -52,8 +52,38 @@ markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
   return defaultLinkOpen(tokens, index, options, env, self)
 }
 
+markdown.renderer.rules.fence = (tokens, index, options) => {
+  const token = tokens[index]
+  const info = token.info ? token.info.trim().split(/\s+/)[0] : ''
+  const lang = info || 'text'
+  const highlighted = options.highlight
+    ? options.highlight(token.content, info, '')
+    : ''
+  const code = highlighted || markdown.utils.escapeHtml(token.content)
+  const encoded = encodeURIComponent(token.content)
+  const langLabel = markdown.utils.escapeHtml(lang)
+
+  return `<figure class="code-block"><figcaption><span>${langLabel}</span><button type="button" data-code-copy="${encoded}" aria-label="复制代码" title="复制代码"></button></figcaption><pre><code class="language-${langLabel}">${code}</code></pre></figure>`
+}
+
 function renderMarkdown(content: string) {
-  return DOMPurify.sanitize(markdown.render(content))
+  return DOMPurify.sanitize(markdown.render(content), {
+    ADD_ATTR: ['data-code-copy'],
+  })
+}
+
+async function copyCodeBlock(encoded: string) {
+  const code = decodeURIComponent(encoded)
+  try {
+    await navigator.clipboard.writeText(code)
+  } catch {
+    const helper = document.createElement('textarea')
+    helper.value = code
+    document.body.appendChild(helper)
+    helper.select()
+    document.execCommand('copy')
+    helper.remove()
+  }
 }
 
 function scrollToBottom(force = false) {
@@ -80,6 +110,13 @@ function handleConversationScroll() {
 function handleConversationClick(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Element)) return
+
+  const copyButton = target.closest<HTMLButtonElement>('button[data-code-copy]')
+  if (copyButton?.dataset.codeCopy) {
+    event.preventDefault()
+    void copyCodeBlock(copyButton.dataset.codeCopy)
+    return
+  }
 
   const link = target.closest<HTMLAnchorElement>('a[href]')
   if (!link) return

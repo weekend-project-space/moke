@@ -1,7 +1,14 @@
 import type { Session } from '../../../packages/protocol/src/index.js';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
-import { applySessionUpdate, forkSession, id, now, summarizeSession } from '../domain/sessions.js';
+import {
+  applySessionUpdate,
+  forkSession,
+  id,
+  maybeSetTitleFromFirstUserMessage,
+  now,
+  summarizeSession,
+} from '../domain/sessions.js';
 
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
@@ -73,6 +80,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const content = typeof message.content === 'string' ? message.content.trim() : '';
     if (!content) throw new HttpError(400, 'BAD_REQUEST', 'message.content is required');
 
+    maybeSetTitleFromFirstUserMessage(session, content);
     session.messages.push({
       id: id('msg'),
       role: 'user',
