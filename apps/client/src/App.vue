@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowDown } from 'lucide-vue-next'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import ApprovalInlineBar from './components/ApprovalInlineBar.vue'
 import AskInlineBar from './components/AskInlineBar.vue'
@@ -22,6 +22,8 @@ const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const copiedKey = ref('')
 const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
+const runtimeNow = ref(Date.now())
+let runtimeTimer: number | undefined
 const {
   closeSidebar,
   closeTransientPanels,
@@ -197,6 +199,7 @@ const {
   messages,
   events,
   isRunning,
+  runtimeNow,
   pendingAsk,
   pendingApproval,
   runError,
@@ -477,6 +480,19 @@ async function submitMessage() {
   await nextTick()
   resizeComposer()
 }
+
+watch(isRunning, (running) => {
+  window.clearInterval(runtimeTimer)
+  runtimeTimer = undefined
+  runtimeNow.value = Date.now()
+
+  if (!running) return
+
+  runtimeTimer = window.setInterval(() => {
+    runtimeNow.value = Date.now()
+  }, 1000)
+})
+
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('resize', handleWindowResize)
@@ -495,6 +511,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.clearInterval(runtimeTimer)
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('resize', handleWindowResize)
   disposeBrowserWorkspace()

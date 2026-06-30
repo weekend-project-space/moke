@@ -66,7 +66,7 @@ export type TraceStep = {
 }
 
 export type ProcessTone = 'neutral' | 'error' | 'ask'
-export type ToolCategory = 'workspace' | 'browser' | 'skill' | 'command' | 'tool'
+export type ToolCategory = 'view' | 'change' | 'run' | 'workspace' | 'browser' | 'skill' | 'command' | 'tool'
 export type ToolRisk = 'safe' | 'write' | 'dangerous'
 
 export type ProcessNote = {
@@ -82,6 +82,7 @@ export type ProcessItem = {
   title: string
   detail: string
   tone: ProcessTone
+  time?: number
   actionLabel?: string
   objectLabel?: string
   toolCategory?: ToolCategory
@@ -96,6 +97,7 @@ export type ToolStepViewItem = {
   title: string
   detail: string
   tone: ProcessTone
+  time?: number
   toolName: string
   actionLabel: string
   objectLabel: string
@@ -111,6 +113,7 @@ export type ToolBatchViewItem = {
   title: string
   detail: string
   tone: ProcessTone
+  time?: number
   actionLabel: string
   objectLabel: string
   countLabel: string
@@ -125,6 +128,8 @@ export type ProcessGroupView = {
   label: string
   items: ProcessViewItem[]
   hasError: boolean
+  startedAt?: number
+  endedAt?: number
 }
 
 export type TaskTemplate = {
@@ -151,4 +156,7 @@ export type DisplayItem =
       items: ProcessViewItem[]
       collapsed: boolean
       hasError: boolean
+      startedAt?: number
+      endedAt?: number
+      isActive?: boolean
     }

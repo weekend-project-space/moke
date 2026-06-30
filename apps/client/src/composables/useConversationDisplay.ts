@@ -1,4 +1,4 @@
-import { computed, type Ref } from 'vue'
+﻿import { computed, type Ref } from 'vue'
 import type {
   AgentEvent,
   DisplayItem,
@@ -71,6 +71,7 @@ type UseConversationDisplayOptions = {
   messages: Ref<Message[]>
   events: Ref<AgentEvent[]>
   isRunning: Ref<boolean>
+  runtimeNow: Ref<number>
   pendingAsk: Ref<PendingAsk | null>
   pendingApproval: Ref<unknown | null>
   runError: Ref<string>
@@ -150,6 +151,8 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     )
     let lastTime = 0
     let turnIndex = 0
+    let turnStartedAt = 0
+    let turnEndedAt = 0
     let processItems: ProcessItem[] = []
     let pendingFinalMessage: { id: string; message: Message } | null = null
 
@@ -170,13 +173,18 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (processItems.length) {
         const groupId = `process-turn-${turnIndex}`
         const processGroup = createProcessGroupView(processItems)
+        const startedAt = turnStartedAt || processGroup.startedAt
+        const endedAt = turnEndedAt || processGroup.endedAt || startedAt
         items.push({
           type: 'process-group',
           id: groupId,
-          label: processGroup.label,
+          label: processGroupLabel({ ...processGroup, startedAt, endedAt }, false, options.runtimeNow.value),
           items: processGroup.items,
           collapsed: options.processCollapsed.value[groupId] ?? true,
           hasError: processGroup.hasError,
+          startedAt,
+          endedAt,
+          isActive: false,
         })
       }
 
@@ -190,6 +198,8 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       }
 
       turnIndex += 1
+      turnStartedAt = 0
+      turnEndedAt = 0
       processItems = []
       pendingFinalMessage = null
     }
@@ -206,6 +216,8 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
       if (message.role === 'user') {
         flushAssistantTurn(time)
+        turnStartedAt = time
+        turnEndedAt = 0
         pushTime(time, index)
         items.push({
           type: 'message',
@@ -218,6 +230,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (message.role === 'tool') {
         movePendingFinalToProcess()
         processItems.push(createToolResultProcessItem(message, `message-${index}`))
+        if (time) turnEndedAt = time
         return
       }
 
@@ -233,6 +246,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (message.content.trim()) {
         movePendingFinalToProcess()
         pendingFinalMessage = { id: `message-${index}`, message }
+        if (time) turnEndedAt = time
       }
     })
 
@@ -245,13 +259,20 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       const groupId = 'process-current-events'
       const itemsFromEvents = processNotes.value.map(createEventProcessItem)
       const processGroup = createProcessGroupView(itemsFromEvents)
+      const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
+      const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
+      const previousProcessIndex = findPreviousProcessGroupIndex(items)
+      if (previousProcessIndex >= 0) items.splice(previousProcessIndex, 1)
       items.push({
         type: 'process-group',
         id: groupId,
-        label: processGroup.label,
+        label: processGroupLabel({ ...processGroup, startedAt, endedAt }, options.isRunning.value, options.runtimeNow.value),
         items: processGroup.items,
         collapsed: options.processCollapsed.value[groupId] ?? true,
         hasError: processGroup.hasError,
+        startedAt,
+        endedAt,
+        isActive: options.isRunning.value,
       })
     }
 
@@ -283,6 +304,28 @@ export function parseMessageTime(message: Message) {
 
   const time = Date.parse(message.created_at)
   return Number.isNaN(time) ? 0 : time
+}
+
+function latestUserMessageTime(messages: Message[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'user') continue
+
+    const time = parseMessageTime(message)
+    if (time) return time
+  }
+
+  return 0
+}
+
+function findPreviousProcessGroupIndex(items: DisplayItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item.type === 'message' && item.message.role === 'user') return -1
+    if (item.type === 'process-group') return index
+  }
+
+  return -1
 }
 
 export function summarizeOutput(output: Record<string, any> | undefined) {
@@ -351,7 +394,6 @@ function describeToolCall(name: string, args: Record<string, unknown>) {
   const value = firstString(args, ['value'])
   const key = firstString(args, ['key'])
   const selector = firstString(args, ['selector'])
-  let actionLabel = descriptor.actionLabel
   let objectLabel = name
 
   switch (name) {
@@ -388,22 +430,18 @@ function describeToolCall(name: string, args: Record<string, unknown>) {
     case 'navigate_page': {
       const type = firstString(args, ['type'])
       if (type === 'url' && url) {
-        actionLabel = '打开网页'
         objectLabel = shortText(url, 96)
         break
       }
       if (type === 'back') {
-        actionLabel = '浏览器返回'
         objectLabel = '上一页'
         break
       }
       if (type === 'forward') {
-        actionLabel = '浏览器前进'
         objectLabel = '下一页'
         break
       }
       if (type === 'reload') {
-        actionLabel = '刷新网页'
         objectLabel = '当前页面'
         break
       }
@@ -466,13 +504,81 @@ function describeToolCall(name: string, args: Record<string, unknown>) {
       objectLabel = name
   }
 
+  const displayDescriptor = displayToolDescriptor(name, descriptor.risk)
+
   return {
-    actionLabel,
+    actionLabel: displayDescriptor.actionLabel,
     objectLabel,
-    toolCategory: descriptor.category,
+    toolCategory: displayDescriptor.category,
     toolRisk: descriptor.risk,
   }
 }
+
+function displayToolDescriptor(name: string, risk: ToolRisk): Pick<ToolDescriptor, 'actionLabel' | 'category'> {
+  if (isViewTool(name)) return { actionLabel: viewActionLabel(name), category: 'view' }
+  if (isChangeTool(name, risk)) return { actionLabel: changeActionLabel(name), category: 'change' }
+  return { actionLabel: runActionLabel(name), category: 'run' }
+}
+
+function isViewTool(name: string) {
+  return [
+    'cat',
+    'hover',
+    'list_pages',
+    'list_skills',
+    'ls',
+    'read_file',
+    'sed',
+    'take_screenshot',
+    'take_snapshot',
+    'view_image',
+  ].includes(name)
+}
+
+function isChangeTool(name: string, risk: ToolRisk) {
+  if (risk === 'write') return true
+
+  return [
+    'click',
+    'close_page',
+    'create_page',
+    'fill',
+    'fill_form',
+    'handle_dialog',
+    'hide_browser',
+    'navigate_page',
+    'press_key',
+    'resize_page',
+    'select_page',
+    'show_browser',
+    'type_text',
+  ].includes(name)
+}
+
+function viewActionLabel(name: string) {
+  if (name === 'ls') return '查看目录'
+  if (name === 'view_image') return '查看图片'
+  if (name === 'list_pages' || name === 'take_snapshot' || name === 'take_screenshot' || name === 'hover') {
+    return '查看页面'
+  }
+  if (name === 'list_skills') return '查看工具'
+  return '查看文件'
+}
+
+function changeActionLabel(name: string) {
+  if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return '变更文件'
+  if (['show_browser', 'hide_browser'].includes(name)) return '变更界面'
+  return '变更页面'
+}
+
+function runActionLabel(name: string) {
+  if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return '运行命令'
+  if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return '运行搜索'
+  if (name === 'evaluate_script') return '运行脚本'
+  if (name === 'wait_for') return '运行等待'
+  return '运行工具'
+}
+
 function createAssistantProcessItem(message: Message, id: string): ProcessItem {
   return {
     id: `process-assistant-${id}`,
@@ -480,6 +586,7 @@ function createAssistantProcessItem(message: Message, id: string): ProcessItem {
     title: '',
     detail: shortText(message.content, 140),
     tone: 'neutral',
+    time: parseMessageTime(message),
     raw: message.content,
   }
 }
@@ -493,6 +600,7 @@ function createToolCallProcessItem(toolCall: NonNullable<Message['tool_calls']>[
     title: toolCall.name,
     detail: description.objectLabel,
     tone: 'neutral',
+    time: 0,
     actionLabel: description.actionLabel,
     objectLabel: description.objectLabel,
     toolCategory: description.toolCategory,
@@ -519,6 +627,7 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
     detail: shortText(detail, 160),
     tone: message.status === 'error' ? 'error' : 'neutral',
     actionLabel: message.status === 'error' ? '执行失败' : '校验结果',
+    time: parseMessageTime(message),
     objectLabel: shortText(detail, 120),
     toolCategory: 'tool',
     toolRisk: 'safe',
@@ -574,6 +683,7 @@ function createEventProcessItem(note: ProcessNote): ProcessItem {
     detail: note.label,
     tone: note.tone,
     actionLabel: note.tone === 'error' ? '遇到问题' : '执行状态',
+    time: note.time,
     objectLabel: note.label,
     toolCategory: 'tool',
     toolRisk: 'safe',
@@ -582,11 +692,14 @@ function createEventProcessItem(note: ProcessNote): ProcessItem {
 
 function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
   const viewItems = mergeToolSteps(items)
+  const times = processItemTimes(viewItems)
 
   return {
-    label: processGroupLabel(viewItems),
+    label: '处理细节',
     items: viewItems,
     hasError: viewItems.some((item) => item.tone === 'error'),
+    startedAt: times[0],
+    endedAt: times.at(-1),
   }
 }
 
@@ -687,19 +800,16 @@ function mergeAdjacentToolBatches(items: ProcessViewItem[]): ProcessViewItem[] {
 
 function createToolBatchView(steps: ToolStepViewItem[]): ToolBatchViewItem {
   const first = steps[0]
-  const objectSamples = steps.map((step) => step.objectLabel).filter(Boolean)
-  const uniqueObjects = [...new Set(objectSamples)]
   const countLabel = toolBatchCountLabel(first, steps.length)
-  const objectLabel = toolBatchObjectLabel(uniqueObjects, countLabel)
 
   return {
     id: `process-tool-batch-${first.id}-${steps.length}`,
     kind: 'tool-batch',
     title: first.title,
-    detail: objectLabel,
+    detail: countLabel,
     tone: steps.some((step) => step.tone === 'error') ? 'error' : first.tone,
     actionLabel: first.actionLabel,
-    objectLabel,
+    objectLabel: '',
     countLabel,
     toolCategory: first.toolCategory,
     toolRisk: steps.some((step) => step.toolRisk === 'dangerous')
@@ -712,22 +822,14 @@ function createToolBatchView(steps: ToolStepViewItem[]): ToolBatchViewItem {
 }
 
 function toolBatchCountLabel(step: ToolStepViewItem, count: number) {
+  if (step.toolCategory === 'view' || step.toolCategory === 'change' || step.toolCategory === 'run') return `${count} 项`
+
   if (step.actionLabel.includes('目录')) return `${count} 个目录`
   if (step.actionLabel.includes('文件')) return `${count} 个文件`
   if (step.toolCategory === 'browser') return `${count} 个页面操作`
   if (step.toolCategory === 'command') return `${count} 条命令`
   if (step.toolCategory === 'skill') return `${count} 个能力操作`
   return `${count} 个步骤`
-}
-
-function toolBatchObjectLabel(uniqueObjects: string[], countLabel: string) {
-  if (uniqueObjects.length === 0) return countLabel
-
-  const cleanObjects = uniqueObjects.map((value) => value.replace(/\s*·\s*已完成$/, '').trim()).filter(Boolean)
-  const samples = cleanObjects.slice(0, 2).join('、')
-  if (!samples) return countLabel
-  if (cleanObjects.length <= 2) return samples
-  return `${samples} 等`
 }
 
 function createToolStepView(call: ProcessItem): ToolStepViewItem {
@@ -737,6 +839,7 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     title: call.title,
     detail: call.detail,
     tone: call.tone,
+    time: call.time,
     toolName: call.title,
     actionLabel: call.actionLabel || '调用工具',
     objectLabel: call.objectLabel || call.detail,
@@ -746,7 +849,15 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
   }
 }
 
-function processGroupLabel(items: ProcessViewItem[]) {
+function processGroupLabel(group: ProcessGroupView | ProcessViewItem[], isActive = false, runtimeNow = Date.now()) {
+  if (!Array.isArray(group)) {
+    if (!group.startedAt) return '处理细节'
+
+    const end = isActive ? runtimeNow : group.endedAt || group.startedAt
+    return `处理了 ${formatDuration(end - group.startedAt)}`
+  }
+
+  const items = group
   const toolSteps = items.reduce((count, item) => {
     if (item.kind === 'tool-step') return count + 1
     if (item.kind === 'tool-batch') return count + item.steps.length
@@ -761,6 +872,29 @@ function processGroupLabel(items: ProcessViewItem[]) {
   if (parts.length === 1) parts.push(`${items.length} 条记录`)
 
   return parts.join(' · ')
+}
+
+function processItemTimes(items: ProcessViewItem[]) {
+  return items
+    .flatMap((item) => {
+      if (item.kind === 'tool-batch') return [item.time, ...item.steps.map((step) => step.time)]
+      return [item.time]
+    })
+    .filter((time): time is number => Boolean(time && time > 0))
+    .sort((left, right) => left - right)
+}
+
+function formatDuration(durationMs: number) {
+  const seconds = Math.max(1, Math.round(durationMs / 1000))
+  if (seconds < 60) return `${seconds} 秒`
+
+  const minutes = Math.floor(seconds / 60)
+  const restSeconds = seconds % 60
+  if (minutes < 60) return restSeconds ? `${minutes} 分 ${restSeconds} 秒` : `${minutes} 分`
+
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return restMinutes ? `${hours} 小时 ${restMinutes} 分` : `${hours} 小时`
 }
 
 function latestProcessActivity(
