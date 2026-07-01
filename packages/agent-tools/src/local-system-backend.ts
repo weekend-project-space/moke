@@ -27,6 +27,7 @@ import type {
   SystemWriteResult,
 } from '../../agent-runtime/src/index.js';
 import { PathRequiresApprovalError } from '../../agent-runtime/src/index.js';
+import { analyzeCommandSafety, isInsideRoot, suggestApprovalRoot } from './command-safety.js';
 
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {
   backend?: SandboxBackendProtocolV2;
@@ -63,8 +64,15 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   approveWorkspaceRoot(root: string) {
     const fullPath = path.resolve(root);
-    if (!this.isInsideApprovedRoot(fullPath)) this.approvedRoots.push(fullPath);
-    return fullPath;
+    const added = !this.isInsideApprovedRoot(fullPath);
+    if (added) this.approvedRoots.push(fullPath);
+    return { path: fullPath, added };
+  }
+
+  revokeWorkspaceRoot(root: string) {
+    const fullPath = path.resolve(root);
+    const index = this.approvedRoots.findIndex((approvedRoot) => path.resolve(approvedRoot) === fullPath);
+    if (index > 0) this.approvedRoots.splice(index, 1);
   }
 
   async ls(requestedPath = '.'): Promise<SystemLsResult> {
@@ -182,7 +190,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     const startedAt = Date.now();
     const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
     const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
-    this.assertCommandPathsStayInApprovedRoots(commandText);
+    this.assertCommandPathsStayInApprovedRoots(commandText, cwd);
     if (this.useLocalFsWrites) {
       return this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
     }
@@ -233,25 +241,20 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     });
   }
 
-  private assertCommandPathsStayInApprovedRoots(commandText: string) {
-    for (const rawPath of findDriveRelativePathTokens(commandText)) {
-      throw new PathRequiresApprovalError({
-        path: rawPath,
-        suggestedRoot: this.rootDir,
-        reason: `Command path is ambiguous outside workspace: ${rawPath}`,
-      });
-    }
+  private assertCommandPathsStayInApprovedRoots(commandText: string, cwd: string) {
+    const result = analyzeCommandSafety({
+      commandText,
+      cwd,
+      approvedRoots: this.approvedRoots,
+    });
+    const issue = result.issues[0];
+    if (!issue) return;
 
-    for (const rawPath of findAbsolutePathTokens(commandText)) {
-      const fullPath = path.resolve(rawPath);
-      if (!this.isInsideApprovedRoot(fullPath)) {
-        throw new PathRequiresApprovalError({
-          path: fullPath,
-          suggestedRoot: suggestApprovalRoot(fullPath),
-          reason: `Command path requires approval: ${rawPath}`,
-        });
-      }
-    }
+    throw new PathRequiresApprovalError({
+      path: issue.path,
+      suggestedRoot: issue.suggestedRoot,
+      reason: issue.reason,
+    });
   }
 
   private fromBackendPath(filePath: string) {
@@ -297,18 +300,6 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 }
 
-function isInsideRoot(root: string, fullPath: string) {
-  const relative = path.relative(root, fullPath);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function suggestApprovalRoot(fullPath: string) {
-  const parsed = path.parse(path.resolve(fullPath));
-  const relative = path.relative(parsed.root, fullPath);
-  const [firstSegment] = relative.split(path.sep).filter(Boolean);
-  return firstSegment ? path.join(parsed.root, firstSegment) : parsed.root;
-}
-
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -323,42 +314,6 @@ function formatCommandText(command: string, args: string[], useLocalShell: boole
 
 function powerShellQuote(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
-}
-
-function findAbsolutePathTokens(commandText: string) {
-  const tokens = new Set<string>();
-  const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
-  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]+/g;
-  const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
-
-  for (const match of commandText.matchAll(uncPath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-
-  for (const match of commandText.matchAll(windowsDrivePath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-
-  for (const match of commandText.matchAll(unixPath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-
-  return [...tokens];
-}
-
-function findDriveRelativePathTokens(commandText: string) {
-  const tokens = new Set<string>();
-  const driveRelativePath = /\b[a-zA-Z]:(?![\\/])(?:[^\s"'`|&;<>]+)/g;
-
-  for (const match of commandText.matchAll(driveRelativePath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-
-  return [...tokens];
-}
-
-function stripTrailingPunctuation(value: string) {
-  return value.replace(/[),\].]+$/, '');
 }
 
 type LocalCommandResult = {

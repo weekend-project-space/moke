@@ -73,7 +73,10 @@ export async function createApp(): Promise<ServerApp> {
     toolRegistry,
     workspace,
     approveWorkspaceRoot: (root, scope) => {
-      system.approveWorkspaceRoot(root);
+      const approval = system.approveWorkspaceRoot(root);
+      if (scope === 'once') {
+        return approval.added ? () => system.revokeWorkspaceRoot(root) : undefined;
+      }
       if (scope === 'persistent') {
         upsertWorkspaceRootPermission(persistentWorkspaceRoots, root);
         saveWorkspaceRootPermissions(permissionsPath, persistentWorkspaceRoots);

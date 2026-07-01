@@ -96,10 +96,89 @@ test('execute allows absolute command paths inside approved roots', async () => 
   const workspace = path.resolve('E:/work/test/moke');
   const system = new LocalSystemBackend(workspace, { backend });
 
-  system.approveWorkspaceRoot('E:/notes');
+  const approval = system.approveWorkspaceRoot('E:/notes');
   await system.execute('type E:\\notes\\a.md');
 
+  assert.equal(approval.added, true);
   assert.equal(backend.calls.length, 1);
+});
+
+test('execute rejects paths after revoking an approved root', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  system.approveWorkspaceRoot('E:/notes');
+  system.revokeWorkspaceRoot('E:/notes');
+
+  await assert.rejects(
+    () => system.execute('type E:\\notes\\a.md'),
+    /Command path requires approval: E:\\notes\\a\.md/,
+  );
+});
+
+test('execute allows relative command paths inside workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await system.execute('type .\\a.md');
+
+  assert.equal(backend.calls.length, 1);
+});
+
+test('execute does not treat URLs as workspace paths', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await system.execute('curl https://example.com/a/b');
+
+  assert.equal(backend.calls.length, 1);
+});
+
+test('execute rejects relative command paths escaping workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('type ..\\a.md'),
+    /Command relative path escapes workspace: \.\.\\a\.md/,
+  );
+});
+
+test('execute resolves relative command paths from cwd', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('type ..\\..\\..\\a.md', [], { cwd: 'apps/server' }),
+    /Command relative path escapes workspace: \.\.\\\.\.\\\.\.\\a\.md/,
+  );
+});
+
+test('execute rejects redirect targets escaping workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('echo hello > ..\\a.md'),
+    /Command relative path escapes workspace: \.\.\\a\.md|Command redirection target requires approval: \.\.\\a\.md/,
+  );
+});
+
+test('execute rejects absolute redirect targets outside workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('echo hello > E:\\a.md'),
+    /Command path requires approval: E:\\a\.md|Command redirection target requires approval: E:\\a\.md/,
+  );
 });
 
 test('execute separates stdout and stderr for local commands', async () => {

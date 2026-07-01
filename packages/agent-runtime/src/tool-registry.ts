@@ -95,7 +95,11 @@ export class ToolRegistry {
         });
       }
 
-      return tool.handler(parsedInput, nextContext);
+      try {
+        return await tool.handler(parsedInput, nextContext);
+      } finally {
+        decision.cleanup?.();
+      }
     }
   }
 }

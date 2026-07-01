@@ -22,6 +22,7 @@ export type WorkspacePathApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
   message?: string;
+  cleanup?: () => void;
 };
 
 export type ToolContext = {

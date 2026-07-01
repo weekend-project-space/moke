@@ -30,7 +30,7 @@ export function createRunManager(input: {
   sessions: Map<string, Session>;
   toolRegistry: ToolRegistry;
   workspace: string;
-  approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => void;
+  approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   onChange: () => void;
 }) {
   return new RunManager({

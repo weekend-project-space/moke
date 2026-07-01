@@ -17,7 +17,7 @@ type RunManagerConfig = {
   toolRegistry: ToolRegistry;
   workspace: string;
   createSkillContentManager?: () => RuntimeContentManager;
-  approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => void;
+  approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   onChange?: () => void;
 };
 
@@ -287,14 +287,16 @@ export class RunManager {
     run.status = 'running';
     this.config.onChange?.();
     const scope = options.scope || 'session';
-    if (decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root) {
-      this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope);
-    }
+    const cleanup =
+      decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
+        ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
+        : undefined;
 
     pending.resolve({
       approved: decision === 'approved',
       scope,
       message: options.message,
+      cleanup,
     });
 
     return { status: 200 as const, run };
