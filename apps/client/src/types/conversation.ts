@@ -66,8 +66,24 @@ export type TraceStep = {
 }
 
 export type ProcessTone = 'neutral' | 'error' | 'ask'
-export type ToolCategory = 'view' | 'change' | 'run' | 'workspace' | 'browser' | 'skill' | 'command' | 'tool'
-export type ToolRisk = 'safe' | 'write' | 'dangerous'
+export type ToolCategory = 'view' | 'change' | 'run'
+export type ToolRendererKind = 'file-read' | 'file-change' | 'directory' | 'search' | 'command' | 'browser' | 'generic'
+
+export type ToolStepSummary = {
+  command?: string
+  count?: number
+  cwd?: string
+  exitCode?: number
+  files?: string[]
+  path?: string
+  preview?: string
+  query?: string
+  stderr?: string
+  stdout?: string
+  url?: string
+  uid?: string
+  value?: string
+}
 
 export type ProcessNote = {
   id: string
@@ -85,8 +101,9 @@ export type ProcessItem = {
   time?: number
   actionLabel?: string
   objectLabel?: string
+  renderer?: ToolRendererKind
+  summary?: ToolStepSummary
   toolCategory?: ToolCategory
-  toolRisk?: ToolRisk
   raw?: string
   toolCallId?: string
 }
@@ -101,8 +118,9 @@ export type ToolStepViewItem = {
   toolName: string
   actionLabel: string
   objectLabel: string
+  renderer: ToolRendererKind
+  summary: ToolStepSummary
   toolCategory: ToolCategory
-  toolRisk: ToolRisk
   inputRaw?: string
   outputRaw?: string
 }
@@ -117,8 +135,8 @@ export type ToolBatchViewItem = {
   actionLabel: string
   objectLabel: string
   countLabel: string
+  renderer: ToolRendererKind
   toolCategory: ToolCategory
-  toolRisk: ToolRisk
   steps: ToolStepViewItem[]
 }
 
