@@ -107,6 +107,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     let turnEndedAt = 0
     let processItems: ProcessItem[] = []
     let pendingFinalMessage: { id: string; message: Message } | null = null
+    let hasActiveMessageProcessGroup = false
 
     function pushTime(time: number, index: number) {
       if (time && (lastTime === 0 || time - lastTime >= MESSAGE_TIME_GAP_MS)) {
@@ -123,20 +124,22 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (!processItems.length && !pendingFinalMessage) return
 
       if (processItems.length) {
+        const isCurrentTurn = options.isRunning.value && nextTime === 0
         const groupId = `process-turn-${turnIndex}`
         const processGroup = createProcessGroupView(processItems)
         const startedAt = turnStartedAt || processGroup.startedAt
-        const endedAt = turnEndedAt || processGroup.endedAt || startedAt
+        const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
+        if (isCurrentTurn) hasActiveMessageProcessGroup = true
         items.push({
           type: 'process-group',
           id: groupId,
-          label: formatProcessGroupLabel({ ...processGroup, startedAt, endedAt }, false, options.runtimeNow.value),
+          label: formatProcessGroupLabel({ ...processGroup, startedAt, endedAt }, isCurrentTurn, options.runtimeNow.value),
           items: processGroup.items,
-          collapsed: options.processCollapsed.value[groupId] ?? true,
+          collapsed: options.processCollapsed.value[groupId] ?? !isCurrentTurn,
           hasError: processGroup.hasError,
           startedAt,
           endedAt,
-          isActive: false,
+          isActive: isCurrentTurn,
         })
       }
 
@@ -206,21 +209,20 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
     if (
       (options.isRunning.value || options.pendingAsk.value || options.pendingApproval.value || options.runError.value) &&
-      processNotes.value.length
+      processNotes.value.length &&
+      !hasActiveMessageProcessGroup
     ) {
       const groupId = 'process-current-events'
       const itemsFromEvents = processNotes.value.map(createEventProcessItem)
       const processGroup = createProcessGroupView(itemsFromEvents)
       const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
       const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
-      const previousProcessIndex = findPreviousProcessGroupIndex(items)
-      if (previousProcessIndex >= 0) items.splice(previousProcessIndex, 1)
       items.push({
         type: 'process-group',
         id: groupId,
         label: formatProcessGroupLabel({ ...processGroup, startedAt, endedAt }, options.isRunning.value, options.runtimeNow.value),
         items: processGroup.items,
-        collapsed: options.processCollapsed.value[groupId] ?? true,
+        collapsed: options.processCollapsed.value[groupId] ?? !options.isRunning.value,
         hasError: processGroup.hasError,
         startedAt,
         endedAt,
@@ -268,16 +270,6 @@ function latestUserMessageTime(messages: Message[]) {
   }
 
   return 0
-}
-
-function findPreviousProcessGroupIndex(items: DisplayItem[]) {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index]
-    if (item.type === 'message' && item.message.role === 'user') return -1
-    if (item.type === 'process-group') return index
-  }
-
-  return -1
 }
 
 function parseEventTime(event: AgentEvent) {

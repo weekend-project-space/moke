@@ -139,6 +139,13 @@ function setJumpToBottomVisible(visible: boolean) {
   emit('jumpVisibilityChange', visible)
 }
 
+function shouldShowProcessDivider(item: DisplayItem, index: number) {
+  if (item.type !== 'process-group') return false
+
+  const nextItem = props.displayItems[index + 1]
+  return nextItem?.type === 'message' && nextItem.message.role === 'assistant'
+}
+
 watch(
   () => props.scrollKey,
   () => {
@@ -168,7 +175,7 @@ defineExpose({
       </div>
     </div>
 
-    <template v-for="item in displayItems" :key="item.id">
+    <template v-for="(item, index) in displayItems" :key="item.id">
       <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
       <ProcessGroup
         v-else-if="item.type === 'process-group'"
@@ -188,6 +195,7 @@ defineExpose({
         @copy="emit('copyMessage', $event)"
         @fork="emit('forkMessage', $event)"
       />
+      <div v-if="shouldShowProcessDivider(item, index)" class="process-result-divider" aria-hidden="true"></div>
     </template>
 
     <div v-if="streamingText" class="message-row assistant">

@@ -4920,7 +4920,7 @@ async function readdir2(dir) {
 async function stat2(filePath) {
   return nodeFsPromises.stat(filePath);
 }
-function existsSync2(p) {
+function existsSync3(p) {
   return nodeFs.existsSync(p);
 }
 function mkdirSync2(dir) {
@@ -5116,7 +5116,7 @@ var init_prompt_cache = __esm({
           entries[key] = entry.value;
         }
         const dir = path.dirname(filePath);
-        if (!existsSync2(dir)) {
+        if (!existsSync3(dir)) {
           mkdirSync2(dir);
         }
         const tempPath = `${filePath}.tmp`;
@@ -5124,7 +5124,7 @@ var init_prompt_cache = __esm({
           writeFileSync2(tempPath, JSON.stringify({ entries }, null, 2));
           renameSync2(tempPath, filePath);
         } catch (e) {
-          if (existsSync2(tempPath)) {
+          if (existsSync3(tempPath)) {
             unlinkSync2(tempPath);
           }
           throw e;
@@ -5138,7 +5138,7 @@ var init_prompt_cache = __esm({
        * @returns Number of entries loaded.
        */
       load(filePath) {
-        if (!existsSync2(filePath)) {
+        if (!existsSync3(filePath)) {
           return 0;
         }
         let entries;
@@ -5997,7 +5997,7 @@ async function onAttemptFailure({ error: error51, attemptNumber, retriesConsumed
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve2, reject) => {
+    await new Promise((resolve4, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -6005,7 +6005,7 @@ async function onAttemptFailure({ error: error51, attemptNumber, retriesConsumed
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve2();
+        resolve4();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -6267,11 +6267,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise2.then(
-        (val) => new Promise((resolve2) => {
-          resolve2(onFinally());
+        (val) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve2) => {
-          resolve2(onFinally());
+        (err) => new Promise((resolve4) => {
+          resolve4(onFinally());
         }).then(() => {
           throw err;
         })
@@ -6291,18 +6291,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise2, milliseconds, fallback) => new Promise((resolve2, reject) => {
+    var pTimeout = (promise2, milliseconds, fallback) => new Promise((resolve4, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve2(promise2);
+        resolve4(promise2);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve2(fallback());
+            resolve4(fallback());
           } catch (error51) {
             reject(error51);
           }
@@ -6317,7 +6317,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise2.then(resolve2, reject),
+        promise2.then(resolve4, reject),
         () => {
           clearTimeout(timer);
         }
@@ -6535,7 +6535,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -6546,7 +6546,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve2(await operation);
+              resolve4(await operation);
             } catch (error51) {
               reject(error51);
             }
@@ -6597,11 +6597,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve2) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve2();
+            resolve4();
           };
         });
       }
@@ -6614,11 +6614,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve2) => {
+        return new Promise((resolve4) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve2();
+            resolve4();
           };
         });
       }
@@ -6986,7 +6986,7 @@ function loadProfileState() {
     return void 0;
   }
   const configPath = getProfileConfigPath();
-  if (!configPath || !existsSync2(configPath)) {
+  if (!configPath || !existsSync3(configPath)) {
     return void 0;
   }
   try {
@@ -7772,8 +7772,8 @@ parentPort.on("message", (msg) => {
         if (!ok)
           return null;
         const id4 = this.nextId++;
-        return new Promise((resolve2, reject) => {
-          this.pending.set(id4, { resolve: resolve2, reject });
+        return new Promise((resolve4, reject) => {
+          this.pending.set(id4, { resolve: resolve4, reject });
           try {
             this.worker.postMessage({ id: id4, op: "serialize", payload });
           } catch (e) {
@@ -7905,7 +7905,7 @@ var init_client = __esm({
       if (response?.status === 429) {
         const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
         if (retryAfter > 0) {
-          await new Promise((resolve2) => setTimeout(resolve2, retryAfter));
+          await new Promise((resolve4) => setTimeout(resolve4, retryAfter));
           return true;
         }
       }
@@ -7942,8 +7942,8 @@ var init_client = __esm({
       }
       push(item) {
         let itemPromiseResolve;
-        const itemPromise = new Promise((resolve2) => {
-          itemPromiseResolve = resolve2;
+        const itemPromise = new Promise((resolve4) => {
+          itemPromiseResolve = resolve4;
         });
         const size = estimateSerializedSize(item.item).size;
         if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -12579,7 +12579,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
           return Promise.resolve();
         }
-        await new Promise((resolve2) => setTimeout(resolve2, 1));
+        await new Promise((resolve4) => setTimeout(resolve4, 1));
         while (this._pendingDrains.size > 0) {
           await Promise.all([...this._pendingDrains]);
         }
@@ -15478,11 +15478,11 @@ var init_stream = __esm({
         this.generator = params.generator;
         this.config = params.config;
         this.signal = params.signal ?? this.config?.signal;
-        this.setup = new Promise((resolve2, reject) => {
+        this.setup = new Promise((resolve4, reject) => {
           AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(params.config), async () => {
             this.firstResult = this.signal ? raceWithSignal(params.generator.next(), this.signal) : params.generator.next();
-            if (params.startSetup) this.firstResult.then(params.startSetup).then(resolve2, reject);
-            else this.firstResult.then((_result) => resolve2(void 0), reject);
+            if (params.startSetup) this.firstResult.then(params.startSetup).then(resolve4, reject);
+            else this.firstResult.then((_result) => resolve4(void 0), reject);
           }, true);
         });
       }
@@ -16332,8 +16332,8 @@ var init_event_stream = __esm({
         let tappedPromise = this.tappedPromises.get(runId);
         if (tappedPromise === void 0) {
           let tappedPromiseResolver;
-          tappedPromise = new Promise((resolve2) => {
-            tappedPromiseResolver = resolve2;
+          tappedPromise = new Promise((resolve4) => {
+            tappedPromiseResolver = resolve4;
           });
           this.tappedPromises.set(runId, tappedPromise);
           try {
@@ -16706,7 +16706,7 @@ async function onAttemptFailure2({ error: error51, attemptNumber, retriesConsume
   }
   const delayTime = calculateDelay2(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
-  if (finalDelay > 0) await new Promise((resolve2, reject) => {
+  if (finalDelay > 0) await new Promise((resolve4, reject) => {
     const onAbort = () => {
       clearTimeout(timeoutToken);
       options.signal?.removeEventListener("abort", onAbort);
@@ -16714,7 +16714,7 @@ async function onAttemptFailure2({ error: error51, attemptNumber, retriesConsume
     };
     const timeoutToken = setTimeout(() => {
       options.signal?.removeEventListener("abort", onAbort);
-      resolve2();
+      resolve4();
     }, finalDelay);
     if (options.unref) timeoutToken.unref?.();
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -38076,7 +38076,7 @@ var init_base4 = __esm({
         return new RunnableLambda2({ func });
       }
       async _invoke(input, config2, runManager) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           const childConfig = patchConfig(config2, {
             callbacks: runManager?.getChild(),
             recursionLimit: (config2?.recursionLimit ?? 25) - 1
@@ -38115,7 +38115,7 @@ var init_base4 = __esm({
                 }
                 output = finalOutput;
               }
-              resolve2(output);
+              resolve4(output);
             } catch (e) {
               reject(e);
             }
@@ -38137,10 +38137,10 @@ var init_base4 = __esm({
           callbacks: runManager?.getChild(),
           recursionLimit: (config2?.recursionLimit ?? 25) - 1
         });
-        const output = await new Promise((resolve2, reject) => {
+        const output = await new Promise((resolve4, reject) => {
           AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(childConfig), async () => {
             try {
-              resolve2(await this.func(finalChunk, {
+              resolve4(await this.func(finalChunk, {
                 ...childConfig,
                 config: childConfig
               }));
@@ -42904,12 +42904,12 @@ var init_stream2 = __esm({
             if (this.error) throw this.error;
             return;
           }
-          await new Promise((resolve2) => {
+          await new Promise((resolve4) => {
             if (cursor < this.events.length || this.finished) {
-              resolve2();
+              resolve4();
               return;
             }
-            this.waiters.push(resolve2);
+            this.waiters.push(resolve4);
           });
         }
       }
@@ -46584,11 +46584,11 @@ function tool(func, fields) {
     ...fields,
     description: fields.description ?? fields.schema?.description ?? `${fields.name} tool`,
     func: async (input, runManager, config2) => {
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve4, reject) => {
         const childConfig = patchConfig(config2, { callbacks: runManager?.getChild() });
         AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(childConfig), async () => {
           try {
-            resolve2(func(input, childConfig));
+            resolve4(func(input, childConfig));
           } catch (e) {
             reject(e);
           }
@@ -46603,7 +46603,7 @@ function tool(func, fields) {
     description,
     schema,
     func: async (input, runManager, config2) => {
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve4, reject) => {
         let listener;
         const cleanup = () => {
           if (config2?.signal && listener) config2.signal.removeEventListener("abort", listener);
@@ -46620,7 +46620,7 @@ function tool(func, fields) {
           try {
             const result = await func(input, childConfig);
             if (isAsyncGenerator(result)) {
-              resolve2(result);
+              resolve4(result);
               return;
             }
             if (config2?.signal?.aborted) {
@@ -46628,7 +46628,7 @@ function tool(func, fields) {
               return;
             }
             cleanup();
-            resolve2(result);
+            resolve4(result);
           } catch (e) {
             cleanup();
             reject(e);
@@ -53011,8 +53011,8 @@ var init_chat_models2 = __esm({
         if (this.sleep !== void 0) await this._sleep();
       }
       async _sleep() {
-        return new Promise((resolve2) => {
-          setTimeout(() => resolve2(), this.sleep);
+        return new Promise((resolve4) => {
+          setTimeout(() => resolve4(), this.sleep);
         });
       }
       _createResponseChunk(text, generationInfo) {
@@ -53212,7 +53212,7 @@ var init_llms2 = __esm({
         const response = this.responses?.[0];
         this.responses = this.responses?.slice(1);
         for (const c of response ?? input) {
-          await new Promise((resolve2) => setTimeout(resolve2, this.sleep));
+          await new Promise((resolve4) => setTimeout(resolve4, this.sleep));
           yield {
             text: c,
             generationInfo: {}
@@ -54435,20 +54435,20 @@ var init_batch = __esm({
         if (this.processingTask) await this.processingTask;
       }
       enqueueOperation(operation) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           const key = this.nextKey;
           this.nextKey += 1;
           this.queue.set(key, {
             operation,
-            resolve: resolve2,
+            resolve: resolve4,
             reject
           });
         });
       }
       async processBatchQueue() {
         while (this.running) {
-          await new Promise((resolve2) => {
-            setTimeout(resolve2, 0);
+          await new Promise((resolve4) => {
+            setTimeout(resolve4, 0);
           });
           if (this.queue.size === 0) continue;
           const batch = new Map(this.queue);
@@ -54456,8 +54456,8 @@ var init_batch = __esm({
           try {
             const operations = Array.from(batch.values()).map(({ operation }) => operation);
             const results = await this.store.batch(operations);
-            batch.forEach(({ resolve: resolve2 }, key) => {
-              resolve2(results[Array.from(batch.keys()).indexOf(key)]);
+            batch.forEach(({ resolve: resolve4 }, key) => {
+              resolve4(results[Array.from(batch.keys()).indexOf(key)]);
             });
           } catch (e) {
             batch.forEach(({ reject }) => {
@@ -55551,7 +55551,7 @@ var init_stream_channel = __esm({
                 done: true
               };
             }
-            await new Promise((resolve2) => this.#waiters.push(resolve2));
+            await new Promise((resolve4) => this.#waiters.push(resolve4));
           }
         } };
       }
@@ -56527,8 +56527,8 @@ var init_run_stream = __esm({
         this.#eventStart = eventStart;
         this.extensions = extensions ?? {};
         this.#abortController = abortController ?? new AbortController();
-        this.#valuesDone = new Promise((resolve2, reject) => {
-          this.#resolveValuesFn = resolve2;
+        this.#valuesDone = new Promise((resolve4, reject) => {
+          this.#resolveValuesFn = resolve4;
           this.#rejectValuesFn = reject;
         });
         this.#valuesDone.catch(() => {
@@ -57165,11 +57165,11 @@ var init_utils8 = __esm({
         this.recurse = fields.recurse ?? this.recurse;
       }
       async _tracedInvoke(input, config2, runManager) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           const childConfig = patchConfig(config2, { callbacks: runManager?.getChild() });
           AsyncLocalStorageProviderSingleton2.runWithConfig(childConfig, async () => {
             try {
-              resolve2(await this.func(input, childConfig));
+              resolve4(await this.func(input, childConfig));
             } catch (e) {
               reject(e);
             }
@@ -58661,8 +58661,8 @@ var init_stream5 = __esm({
       }
       constructor(params) {
         let streamControllerPromiseResolver;
-        const streamControllerPromise = new Promise((resolve2) => {
-          streamControllerPromiseResolver = resolve2;
+        const streamControllerPromise = new Promise((resolve4) => {
+          streamControllerPromiseResolver = resolve4;
         });
         super({ start: (controller) => {
           streamControllerPromiseResolver(controller);
@@ -59765,7 +59765,7 @@ async function _runWithRetry(pregelTask, retryPolicy, configurable, signal) {
       if (!(resolvedRetryPolicy.retryOn ?? DEFAULT_RETRY_ON_HANDLER)(error51)) break;
       interval = Math.min(resolvedRetryPolicy.maxInterval ?? 128e3, interval * (resolvedRetryPolicy.backoffFactor ?? 2));
       const intervalWithJitter = resolvedRetryPolicy.jitter ? Math.floor(interval + Math.random() * 1e3) : interval;
-      await new Promise((resolve2) => setTimeout(resolve2, intervalWithJitter));
+      await new Promise((resolve4) => setTimeout(resolve4, intervalWithJitter));
       const errorName = error51.name ?? error51.constructor.unminifiable_name ?? error51.constructor.name;
       if (resolvedRetryPolicy?.logWarning ?? true) console.log(`Retrying task "${String(pregelTask.name)}" after ${interval.toFixed(2)}ms (attempt ${attempts}) after ${errorName}: ${error51}`);
       config2 = patchConfigurable2(config2, { [CONFIG_KEY_RESUMING]: true });
@@ -59819,10 +59819,10 @@ function createPromiseBarrier() {
     next: () => void 0,
     wait: Promise.resolve(PROMISE_ADDED_SYMBOL)
   };
-  function waitHandler(resolve2) {
+  function waitHandler(resolve4) {
     barrier.next = () => {
       barrier.wait = new Promise(waitHandler);
-      resolve2(PROMISE_ADDED_SYMBOL);
+      resolve4(PROMISE_ADDED_SYMBOL);
     };
   }
   barrier.wait = new Promise(waitHandler);
@@ -61221,8 +61221,8 @@ var init_pregel = __esm({
               loopError = loopError ?? e;
             }
             if (loopError) {
-              await new Promise((resolve2) => {
-                queueMicrotask(resolve2);
+              await new Promise((resolve4) => {
+                queueMicrotask(resolve4);
               });
               stream.error(loopError);
             } else stream.close();
@@ -73713,8 +73713,8 @@ var init_multi_cursor_buffer = __esm({
                 done: true,
                 value: void 0
               };
-              await new Promise((resolve2) => {
-                this.#wakeups.add(resolve2);
+              await new Promise((resolve4) => {
+                this.#wakeups.add(resolve4);
               });
             }
           },
@@ -73881,8 +73881,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve2) => {
-                  waiters.push(resolve2);
+                await new Promise((resolve4) => {
+                  waiters.push(resolve4);
                 });
               }
             } };
@@ -73900,8 +73900,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve2) => {
-                  waiters.push(resolve2);
+                await new Promise((resolve4) => {
+                  waiters.push(resolve4);
                 });
               }
             } }) }) {
@@ -73928,8 +73928,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve2) => {
-                  waiters.push(resolve2);
+                await new Promise((resolve4) => {
+                  waiters.push(resolve4);
                 });
               }
             } };
@@ -73947,8 +73947,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve2) => {
-                  waiters.push(resolve2);
+                await new Promise((resolve4) => {
+                  waiters.push(resolve4);
                 });
               }
             } }) }) {
@@ -74566,7 +74566,7 @@ var require_pattern = __commonJS({
       const absolute = [];
       const relative = [];
       for (const pattern of patterns) {
-        if (isAbsolute(pattern)) {
+        if (isAbsolute2(pattern)) {
           absolute.push(pattern);
         } else {
           relative.push(pattern);
@@ -74575,10 +74575,10 @@ var require_pattern = __commonJS({
       return [absolute, relative];
     }
     exports2.partitionAbsoluteAndRelative = partitionAbsoluteAndRelative;
-    function isAbsolute(pattern) {
+    function isAbsolute2(pattern) {
       return path6.isAbsolute(pattern);
     }
-    exports2.isAbsolute = isAbsolute;
+    exports2.isAbsolute = isAbsolute2;
   }
 });
 
@@ -74867,13 +74867,13 @@ var require_async = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
     function read(path6, settings, callback) {
-      settings.fs.lstat(path6, (lstatError, lstat) => {
+      settings.fs.lstat(path6, (lstatError, lstat2) => {
         if (lstatError !== null) {
           callFailureCallback(callback, lstatError);
           return;
         }
-        if (!lstat.isSymbolicLink() || !settings.followSymbolicLink) {
-          callSuccessCallback(callback, lstat);
+        if (!lstat2.isSymbolicLink() || !settings.followSymbolicLink) {
+          callSuccessCallback(callback, lstat2);
           return;
         }
         settings.fs.stat(path6, (statError, stat4) => {
@@ -74882,7 +74882,7 @@ var require_async = __commonJS({
               callFailureCallback(callback, statError);
               return;
             }
-            callSuccessCallback(callback, lstat);
+            callSuccessCallback(callback, lstat2);
             return;
           }
           if (settings.markSymbolicLink) {
@@ -74909,9 +74909,9 @@ var require_sync = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
     function read(path6, settings) {
-      const lstat = settings.fs.lstatSync(path6);
-      if (!lstat.isSymbolicLink() || !settings.followSymbolicLink) {
-        return lstat;
+      const lstat2 = settings.fs.lstatSync(path6);
+      if (!lstat2.isSymbolicLink() || !settings.followSymbolicLink) {
+        return lstat2;
       }
       try {
         const stat4 = settings.fs.statSync(path6);
@@ -74921,7 +74921,7 @@ var require_sync = __commonJS({
         return stat4;
       } catch (error51) {
         if (!settings.throwErrorOnBrokenSymbolicLink) {
-          return lstat;
+          return lstat2;
         }
         throw error51;
       }
@@ -75662,41 +75662,41 @@ var require_queue = __commonJS({
       queue2.drained = drained;
       return queue2;
       function push2(value) {
-        var p = new Promise(function(resolve2, reject) {
+        var p = new Promise(function(resolve4, reject) {
           pushCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve2(result);
+            resolve4(result);
           });
         });
         p.catch(noop2);
         return p;
       }
       function unshift(value) {
-        var p = new Promise(function(resolve2, reject) {
+        var p = new Promise(function(resolve4, reject) {
           unshiftCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve2(result);
+            resolve4(result);
           });
         });
         p.catch(noop2);
         return p;
       }
       function drained() {
-        var p = new Promise(function(resolve2) {
+        var p = new Promise(function(resolve4) {
           process.nextTick(function() {
             if (queue2.idle()) {
-              resolve2();
+              resolve4();
             } else {
               var previousDrain = queue2.drain;
               queue2.drain = function() {
                 if (typeof previousDrain === "function") previousDrain();
-                resolve2();
+                resolve4();
                 queue2.drain = previousDrain;
               };
             }
@@ -76182,9 +76182,9 @@ var require_stream3 = __commonJS({
         });
       }
       _getStat(filepath) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           this._stat(filepath, this._fsStatSettings, (error51, stats) => {
-            return error51 === null ? resolve2(stats) : reject(error51);
+            return error51 === null ? resolve4(stats) : reject(error51);
           });
         });
       }
@@ -76208,10 +76208,10 @@ var require_async5 = __commonJS({
         this._readerStream = new stream_1.default(this._settings);
       }
       dynamic(root, options) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           this._walkAsync(root, options, (error51, entries) => {
             if (error51 === null) {
-              resolve2(entries);
+              resolve4(entries);
             } else {
               reject(error51);
             }
@@ -76221,10 +76221,10 @@ var require_async5 = __commonJS({
       async static(patterns, options) {
         const entries = [];
         const stream = this._readerStream.static(patterns, options);
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve4, reject) => {
           stream.once("error", reject);
           stream.on("data", (entry) => entries.push(entry));
-          stream.once("end", () => resolve2(entries));
+          stream.once("end", () => resolve4(entries));
         });
       }
     };
@@ -79832,7 +79832,7 @@ var require_compile2 = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a5 = root.localRefs) === null || _a5 === void 0 ? void 0 : _a5[ref];
         const { schemaId } = this.opts;
@@ -79859,7 +79859,7 @@ var require_compile2 = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -80490,7 +80490,7 @@ var require_fast_uri = __commonJS({
       }
       return uri2;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse9(baseURI, schemelessOptions), parse9(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -80748,7 +80748,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve: resolve2,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize: serialize2,
@@ -83831,12 +83831,12 @@ var require_isexe = __commonJS({
         if (typeof Promise !== "function") {
           throw new TypeError("callback not provided");
         }
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve4, reject) {
           isexe(path6, options || {}, function(er, is) {
             if (er) {
               reject(er);
             } else {
-              resolve2(is);
+              resolve4(is);
             }
           });
         });
@@ -83902,27 +83902,27 @@ var require_which = __commonJS({
         opt = {};
       const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt);
       const found = [];
-      const step = (i) => new Promise((resolve2, reject) => {
+      const step = (i) => new Promise((resolve4, reject) => {
         if (i === pathEnv.length)
-          return opt.all && found.length ? resolve2(found) : reject(getNotFoundError(cmd));
+          return opt.all && found.length ? resolve4(found) : reject(getNotFoundError(cmd));
         const ppRaw = pathEnv[i];
         const pathPart = /^".*"$/.test(ppRaw) ? ppRaw.slice(1, -1) : ppRaw;
         const pCmd = path6.join(pathPart, cmd);
         const p = !pathPart && /^\.[\\\/]/.test(cmd) ? cmd.slice(0, 2) + pCmd : pCmd;
-        resolve2(subStep(p, i, 0));
+        resolve4(subStep(p, i, 0));
       });
-      const subStep = (p, i, ii) => new Promise((resolve2, reject) => {
+      const subStep = (p, i, ii) => new Promise((resolve4, reject) => {
         if (ii === pathExt.length)
-          return resolve2(step(i + 1));
+          return resolve4(step(i + 1));
         const ext = pathExt[ii];
         isexe(p + ext, { pathExt: pathExtExe }, (er, is) => {
           if (!er && is) {
             if (opt.all)
               found.push(p + ext);
             else
-              return resolve2(p + ext);
+              return resolve4(p + ext);
           }
-          return resolve2(subStep(p, i, ii + 1));
+          return resolve4(subStep(p, i, ii + 1));
         });
       });
       return cb ? step(0).then((res) => cb(null, res), cb) : step(0);
@@ -84214,7 +84214,7 @@ var require_cross_spawn = __commonJS({
     var cp2 = require("child_process");
     var parse9 = require_parse3();
     var enoent = require_enoent();
-    function spawn3(command, args, options) {
+    function spawn4(command, args, options) {
       const parsed = parse9(command, args, options);
       const spawned = cp2.spawn(parsed.command, parsed.args, parsed.options);
       enoent.hookChildProcess(spawned, parsed);
@@ -84226,8 +84226,8 @@ var require_cross_spawn = __commonJS({
       result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
       return result;
     }
-    module2.exports = spawn3;
-    module2.exports.spawn = spawn3;
+    module2.exports = spawn4;
+    module2.exports.spawn = spawn4;
     module2.exports.sync = spawnSync;
     module2.exports._parse = parse9;
     module2.exports._enoent = enoent;
@@ -84235,9 +84235,50 @@ var require_cross_spawn = __commonJS({
 });
 
 // apps/server/app.ts
-var import_node_fs4 = require("node:fs");
 var import_node_http = __toESM(require("node:http"), 1);
-var import_node_path6 = require("node:path");
+
+// apps/server/config/paths.ts
+var import_node_fs = require("node:fs");
+var import_node_path = require("node:path");
+function normalizeWindowsDrivePath(value) {
+  return process.platform === "win32" ? value.replace(/^[/\\]+([a-zA-Z]:[/\\])/, "$1") : value;
+}
+function resolvePath(value, basePath, fallback) {
+  const raw = normalizeWindowsDrivePath((value || fallback).trim());
+  return (0, import_node_path.isAbsolute)(raw) ? (0, import_node_path.resolve)(raw) : (0, import_node_path.resolve)(basePath, raw);
+}
+function resolvePort(value) {
+  const port = Number(value || 4010);
+  if (Number.isInteger(port) && port > 0 && port <= 65535) return port;
+  console.warn(`Invalid PORT value "${value}", falling back to 4010.`);
+  return 4010;
+}
+function resolveServerConfig() {
+  const workspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+  return {
+    envPaths: resolveEnvPaths(workspace),
+    mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, workspace, (0, import_node_path.join)(".moke", "mcp.json")),
+    permissionsPath: resolvePath(process.env.MOKE_PERMISSIONS_PATH, workspace, (0, import_node_path.join)(".moke", "permissions.json")),
+    port: resolvePort(process.env.PORT),
+    statePath: resolvePath(process.env.MOKE_STATE_PATH, workspace, (0, import_node_path.join)(".moke", "state.json")),
+    workspace
+  };
+}
+function resolveEnvPaths(workspace) {
+  return [
+    process.env.MOKE_ENV_PATH ? resolvePath(process.env.MOKE_ENV_PATH, workspace, "") : "",
+    (0, import_node_path.join)(workspace, ".env")
+  ].filter(Boolean);
+}
+function loadFirstEnvFile(envPaths) {
+  for (const envPath of envPaths) {
+    if ((0, import_node_fs.existsSync)(envPath)) {
+      process.loadEnvFile(envPath);
+      return envPath;
+    }
+  }
+  return "";
+}
 
 // packages/agent-re-act/src/re-act-agent.ts
 var import_node_crypto4 = require("node:crypto");
@@ -84795,6 +84836,7 @@ var RunManager = class {
   config;
   abortControllers = /* @__PURE__ */ new Map();
   pendingAsks = /* @__PURE__ */ new Map();
+  pendingApprovals = /* @__PURE__ */ new Map();
   createRun(session, content, options = {}) {
     const run = {
       id: id2("run"),
@@ -84847,7 +84889,8 @@ var RunManager = class {
           workspace: this.config.workspace,
           abortSignal: abortController.signal,
           contentManager,
-          askUser: (input) => this.askUser(run, eventBus, input)
+          askUser: (input) => this.askUser(run, eventBus, input),
+          approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input)
         },
         limits
       });
@@ -84886,6 +84929,32 @@ var RunManager = class {
       this.abortControllers.delete(run.id);
     }
   }
+  approveWorkspacePath(run, eventBus, input) {
+    const approvalId = id2("apv");
+    run.status = "awaiting_approval";
+    run.pending_approval = {
+      approval_id: approvalId,
+      kind: "workspace_path",
+      reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
+      risk: input.risk,
+      action: {
+        tool: input.tool,
+        input: input.input
+      },
+      path: input.path,
+      suggested_root: input.suggestedRoot,
+      created_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    eventBus.emit("approval.required", run.pending_approval);
+    this.config.onChange?.();
+    return new Promise((resolve4, reject) => {
+      this.pendingApprovals.set(approvalId, {
+        runId: run.id,
+        resolve: resolve4,
+        reject
+      });
+    });
+  }
   askUser(run, eventBus, input) {
     const askId = id2("ask");
     run.status = "awaiting_user";
@@ -84897,10 +84966,10 @@ var RunManager = class {
       created_at: (/* @__PURE__ */ new Date()).toISOString()
     };
     eventBus.emit("ask_user.required", run.pending_ask);
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve4, reject) => {
       this.pendingAsks.set(askId, {
         runId: run.id,
-        resolve: resolve2,
+        resolve: resolve4,
         reject
       });
     });
@@ -84941,6 +85010,30 @@ var RunManager = class {
     pending.resolve(selected);
     return { status: 200, run };
   }
+  approve(runId, approvalId, decision, options = {}) {
+    const run = this.config.runs.get(runId);
+    if (!run) return { status: 404, error: "Run not found" };
+    if (run.pending_approval?.approval_id !== approvalId) {
+      return { status: 409, error: "Run is not waiting for this approval" };
+    }
+    const pending = this.pendingApprovals.get(approvalId);
+    if (!pending || pending.runId !== runId) return { status: 409, error: "Approval is no longer pending" };
+    const pendingApproval = run.pending_approval;
+    this.pendingApprovals.delete(approvalId);
+    run.pending_approval = void 0;
+    run.status = "running";
+    this.config.onChange?.();
+    const scope = options.scope || "session";
+    if (decision === "approved" && pendingApproval.kind === "workspace_path" && pendingApproval.suggested_root) {
+      this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope);
+    }
+    pending.resolve({
+      approved: decision === "approved",
+      scope,
+      message: options.message
+    });
+    return { status: 200, run };
+  }
   cancel(runId) {
     const run = this.config.runs.get(runId);
     if (!run) return null;
@@ -84952,6 +85045,12 @@ var RunManager = class {
       const pending = this.pendingAsks.get(run.pending_ask.ask_id);
       this.pendingAsks.delete(run.pending_ask.ask_id);
       run.pending_ask = void 0;
+      pending?.reject(new Error("Run cancelled"));
+    }
+    if (run.pending_approval) {
+      const pending = this.pendingApprovals.get(run.pending_approval.approval_id);
+      this.pendingApprovals.delete(run.pending_approval.approval_id);
+      run.pending_approval = void 0;
       pending?.reject(new Error("Run cancelled"));
     }
     new EventBus(run).emit("agent.done", {
@@ -84970,6 +85069,20 @@ var RunManager = class {
 // node_modules/zod/index.js
 init_external2();
 init_external2();
+
+// packages/agent-runtime/src/workspace-approval.ts
+var PathRequiresApprovalError = class extends Error {
+  constructor(details) {
+    super(details.reason || `Path requires approval: ${details.path}`);
+    this.details = details;
+    this.name = "PathRequiresApprovalError";
+  }
+  details;
+  code = "PATH_REQUIRES_APPROVAL";
+};
+function isPathRequiresApprovalError(error51) {
+  return error51 instanceof PathRequiresApprovalError;
+}
 
 // packages/agent-runtime/src/tool-registry.ts
 var ToolExecutionError = class extends Error {
@@ -85004,9 +85117,48 @@ var ToolRegistry = class {
       });
     }
     const parsedInput = parseToolInput(tool2, input);
-    return tool2.handler(parsedInput, context2);
+    const normalizedInput = toRecord(parsedInput);
+    const nextContext = {
+      ...context2,
+      currentToolCall: {
+        callId: context2.currentToolCall?.callId || "",
+        tool: name,
+        input: normalizedInput,
+        risk: tool2.risk
+      }
+    };
+    try {
+      return await tool2.handler(parsedInput, nextContext);
+    } catch (error51) {
+      if (!isPathRequiresApprovalError(error51) || !context2.approveWorkspacePath) throw error51;
+      const decision = await context2.approveWorkspacePath({
+        tool: name,
+        input: normalizedInput,
+        risk: tool2.risk,
+        source: tool2.source,
+        callId: context2.currentToolCall?.callId,
+        path: error51.details.path,
+        suggestedRoot: error51.details.suggestedRoot,
+        reason: error51.details.reason
+      });
+      if (!decision.approved) {
+        throw new ToolExecutionError(decision.message || `Workspace path access rejected: ${error51.details.path}`, {
+          error: {
+            code: "PATH_ACCESS_REJECTED",
+            message: decision.message || "User rejected workspace path access",
+            tool: name,
+            path: error51.details.path,
+            suggested_root: error51.details.suggestedRoot
+          }
+        });
+      }
+      return tool2.handler(parsedInput, nextContext);
+    }
   }
 };
+function toRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
 function parseToolInput(tool2, input) {
   const result = tool2.schema.safeParse(input);
   if (result.success) return result.data;
@@ -85457,7 +85609,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/openai/internal/utils/sleep.mjs
-var sleep2 = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+var sleep2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 
 // node_modules/openai/version.mjs
 var VERSION = "6.42.0";
@@ -86536,8 +86688,8 @@ function addRequestID(value, response) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse2 = defaultParseResponse) {
-    super((resolve2) => {
-      resolve2(null);
+    super((resolve4) => {
+      resolve4(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse2;
@@ -87232,12 +87384,12 @@ var EventStream = class {
     _EventStream_errored.set(this, false);
     _EventStream_aborted.set(this, false);
     _EventStream_catchingPromiseCreated.set(this, false);
-    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve4, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve4, "f");
       __classPrivateFieldSet(this, _EventStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve2, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve2, "f");
+    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve4, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve4, "f");
       __classPrivateFieldSet(this, _EventStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet(this, _EventStream_connectedPromise, "f").catch(() => {
@@ -87321,11 +87473,11 @@ var EventStream = class {
    *   const message = await stream.emitted('message') // rejects if the stream errors
    */
   emitted(event) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve4, reject) => {
       __classPrivateFieldSet(this, _EventStream_catchingPromiseCreated, true, "f");
       if (event !== "error")
         this.once("error", reject);
-      this.once(event, resolve2);
+      this.once(event, resolve4);
     });
   }
   async done() {
@@ -88264,7 +88416,7 @@ var ChatCompletionStream = class _ChatCompletionStream extends AbstractChatCompl
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve2, reject) => readQueue.push({ resolve: resolve2, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -91363,7 +91515,7 @@ var AssistantStream = class extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve2, reject) => readQueue.push({ resolve: resolve2, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -93432,7 +93584,7 @@ var ResponseStream = class _ResponseStream extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve2, reject) => readQueue.push({ resolve: resolve2, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
         }
         const event = pushQueue.shift();
         return { value: event, done: false };
@@ -98208,7 +98360,7 @@ var completionsApiContentBlockConverter = {
     throw new Error(`File content blocks with source_type ${block.source_type} are not supported for ChatOpenAI`);
   }
 };
-var convertCompletionsMessageToBaseMessage = ({ message, rawResponse, includeRawResponse }) => {
+var convertCompletionsMessageToBaseMessage = ({ message, rawResponse: rawResponse2, includeRawResponse }) => {
   const rawToolCalls = message.tool_calls;
   const providerReasoningContent = message.reasoning_content;
   switch (message.role) {
@@ -98224,46 +98376,46 @@ var convertCompletionsMessageToBaseMessage = ({ message, rawResponse, includeRaw
         function_call: message.function_call,
         tool_calls: rawToolCalls
       };
-      if (includeRawResponse !== void 0) additional_kwargs.__raw_response = rawResponse;
+      if (includeRawResponse !== void 0) additional_kwargs.__raw_response = rawResponse2;
       if (providerReasoningContent !== void 0) additional_kwargs.reasoning_content = providerReasoningContent;
       const response_metadata = {
         model_provider: "openai",
-        model_name: rawResponse.model,
-        ...rawResponse.system_fingerprint ? {
-          usage: { ...rawResponse.usage },
-          system_fingerprint: rawResponse.system_fingerprint
+        model_name: rawResponse2.model,
+        ...rawResponse2.system_fingerprint ? {
+          usage: { ...rawResponse2.usage },
+          system_fingerprint: rawResponse2.system_fingerprint
         } : {}
       };
       if (message.audio) additional_kwargs.audio = message.audio;
       return new AIMessage({
-        content: handleMultiModalOutput(message.content || "", rawResponse.choices?.[0]?.message),
+        content: handleMultiModalOutput(message.content || "", rawResponse2.choices?.[0]?.message),
         tool_calls: toolCalls,
         invalid_tool_calls: invalidToolCalls,
         additional_kwargs,
         response_metadata,
-        id: rawResponse.id
+        id: rawResponse2.id
       });
     }
     default:
       return new ChatMessage(message.content || "", message.role ?? "unknown");
   }
 };
-var convertCompletionsDeltaToBaseMessageChunk = ({ delta, rawResponse, includeRawResponse, defaultRole }) => {
+var convertCompletionsDeltaToBaseMessageChunk = ({ delta, rawResponse: rawResponse2, includeRawResponse, defaultRole }) => {
   const role = delta.role ?? defaultRole;
   const content = delta.content ?? "";
   let additional_kwargs;
   if (delta.function_call) additional_kwargs = { function_call: delta.function_call };
   else if (delta.tool_calls) additional_kwargs = { tool_calls: delta.tool_calls };
   else additional_kwargs = {};
-  if (includeRawResponse) additional_kwargs.__raw_response = rawResponse;
+  if (includeRawResponse) additional_kwargs.__raw_response = rawResponse2;
   if (delta.reasoning_content !== void 0) additional_kwargs.reasoning_content = delta.reasoning_content;
   if (delta.audio) additional_kwargs.audio = {
     ...delta.audio,
-    index: rawResponse.choices[0].index
+    index: rawResponse2.choices[0].index
   };
   const response_metadata = {
     model_provider: "openai",
-    usage: { ...rawResponse.usage }
+    usage: { ...rawResponse2.usage }
   };
   if (role === "user") return new HumanMessageChunk({
     content,
@@ -98282,7 +98434,7 @@ var convertCompletionsDeltaToBaseMessageChunk = ({ delta, rawResponse, includeRa
       content,
       tool_call_chunks: toolCallChunks,
       additional_kwargs,
-      id: rawResponse.id,
+      id: rawResponse2.id,
       response_metadata
     });
   } else if (role === "system") return new SystemMessageChunk({
@@ -98657,10 +98809,10 @@ var ChatOpenAICompletions = class extends BaseChatOpenAI {
   * that depend on ChatOpenAICompletions, we'll keep it here as an overridable
   * method. This will be removed in a future release
   */
-  _convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse, defaultRole) {
+  _convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse2, defaultRole) {
     return convertCompletionsDeltaToBaseMessageChunk({
       delta,
-      rawResponse,
+      rawResponse: rawResponse2,
       includeRawResponse: this.__includeRawResponse,
       defaultRole
     });
@@ -98672,10 +98824,10 @@ var ChatOpenAICompletions = class extends BaseChatOpenAI {
   * that depend on ChatOpenAICompletions, we'll keep it here as an overridable
   * method. This will be removed in a future release
   */
-  _convertCompletionsMessageToBaseMessage(message, rawResponse) {
+  _convertCompletionsMessageToBaseMessage(message, rawResponse2) {
     return convertCompletionsMessageToBaseMessage({
       message,
-      rawResponse,
+      rawResponse: rawResponse2,
       includeRawResponse: this.__includeRawResponse
     });
   }
@@ -100041,7 +100193,15 @@ var ReActAgent = class {
             );
             break;
           }
-          const output = call3.name === ASK_USER_TOOL_NAME ? await this.askUser(call3.args || {}, callId, context2) : await toolRegistry.execute(call3.name, call3.args || {}, context2);
+          const output = call3.name === ASK_USER_TOOL_NAME ? await this.askUser(call3.args || {}, callId, context2) : await toolRegistry.execute(call3.name, call3.args || {}, {
+            ...context2,
+            currentToolCall: {
+              callId,
+              tool: call3.name,
+              input: toToolCallArgs(call3.args),
+              risk: runtimeTool?.risk || "safe"
+            }
+          });
           throwIfAborted(context2.abortSignal);
           hasObservation = true;
           eventBus.emit("tool.result", {
@@ -100235,7 +100395,9 @@ function createLsTool(system) {
 }
 
 // packages/agent-tools/src/local-system-backend.ts
-var import_node_path2 = __toESM(require("node:path"), 1);
+var import_node_child_process2 = require("node:child_process");
+var import_promises4 = require("node:fs/promises");
+var import_node_path3 = __toESM(require("node:path"), 1);
 
 // node_modules/deepagents/dist/index.js
 init_dist4();
@@ -100327,8 +100489,8 @@ init_media();
 // node_modules/deepagents/dist/index.js
 init_errors();
 var import_promises3 = __toESM(require("node:fs/promises"), 1);
-var import_node_fs = __toESM(require("node:fs"), 1);
-var import_node_path = __toESM(require("node:path"), 1);
+var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_path2 = __toESM(require("node:path"), 1);
 var import_node_child_process = __toESM(require("node:child_process"), 1);
 var import_fast_glob = __toESM(require_out4(), 1);
 init_langsmith();
@@ -101070,11 +101232,11 @@ function raiseForWsError(msg, commandId = "") {
 }
 async function connectWs(url2, headers) {
   const { WebSocket: WS } = await ensureWs();
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve4, reject) => {
     const ws = new WS(url2, { headers });
     ws.on("open", () => {
       ws.removeAllListeners("error");
-      resolve2(ws);
+      resolve4(ws);
     });
     ws.on("error", (err) => {
       ws.removeAllListeners("open");
@@ -101084,16 +101246,16 @@ async function connectWs(url2, headers) {
 }
 async function* readWsMessages(ws) {
   const messageQueue = [];
-  let resolve2 = null;
+  let resolve4 = null;
   let error51 = null;
   let done = false;
   const onMessage = (data) => {
     const raw = typeof data === "string" ? data : data.toString();
     const msg = JSON.parse(raw);
     messageQueue.push(msg);
-    if (resolve2) {
-      const r = resolve2;
-      resolve2 = null;
+    if (resolve4) {
+      const r = resolve4;
+      resolve4 = null;
       r();
     }
   };
@@ -101104,9 +101266,9 @@ async function* readWsMessages(ws) {
     } else if (code !== 1e3) {
       error51 = new LangSmithSandboxConnectionError(`WebSocket connection closed unexpectedly (code: ${code}, reason: ${reason.toString()})`);
     }
-    if (resolve2) {
-      const r = resolve2;
-      resolve2 = null;
+    if (resolve4) {
+      const r = resolve4;
+      resolve4 = null;
       r();
     }
   };
@@ -101115,9 +101277,9 @@ async function* readWsMessages(ws) {
     if (!error51) {
       error51 = new LangSmithSandboxConnectionError(`WebSocket connection error: ${err.message}`);
     }
-    if (resolve2) {
-      const r = resolve2;
-      resolve2 = null;
+    if (resolve4) {
+      const r = resolve4;
+      resolve4 = null;
       r();
     }
   };
@@ -101136,7 +101298,7 @@ async function* readWsMessages(ws) {
         return;
       }
       await new Promise((r) => {
-        resolve2 = r;
+        resolve4 = r;
       });
     }
   } finally {
@@ -101592,14 +101754,14 @@ var Sandbox = class {
 init_src();
 function sleepWithSignal(ms, signal) {
   if (!signal) {
-    return new Promise((resolve2) => setTimeout(resolve2, ms));
+    return new Promise((resolve4) => setTimeout(resolve4, ms));
   }
   const abortSignal = signal;
   abortSignal.throwIfAborted();
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve4, reject) => {
     const timer = setTimeout(() => {
       abortSignal.removeEventListener("abort", onAbort);
-      resolve2();
+      resolve4();
     }, ms);
     function onAbort() {
       clearTimeout(timer);
@@ -102863,14 +103025,14 @@ var ASYNC_TASK_TOOL_NAMES = [
   "cancel_async_task",
   "list_async_tasks"
 ];
-var SUPPORTS_NOFOLLOW = import_node_fs.default.constants.O_NOFOLLOW !== void 0;
+var SUPPORTS_NOFOLLOW = import_node_fs2.default.constants.O_NOFOLLOW !== void 0;
 var FilesystemBackend = class {
   cwd;
   virtualMode;
   maxFileSizeBytes;
   constructor(options = {}) {
     const { rootDir, virtualMode = false, maxFileSizeMb = 10 } = options;
-    this.cwd = rootDir ? import_node_path.default.resolve(rootDir) : process.cwd();
+    this.cwd = rootDir ? import_node_path2.default.resolve(rootDir) : process.cwd();
     this.virtualMode = virtualMode;
     this.maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
   }
@@ -102890,13 +103052,13 @@ var FilesystemBackend = class {
     if (this.virtualMode) {
       const vpath = key.startsWith("/") ? key : "/" + key;
       if (vpath.includes("..") || vpath.startsWith("~")) throw new Error("Path traversal not allowed");
-      const full = import_node_path.default.resolve(this.cwd, vpath.substring(1));
-      const relative = import_node_path.default.relative(this.cwd, full);
-      if (relative.startsWith("..") || import_node_path.default.isAbsolute(relative)) throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
+      const full = import_node_path2.default.resolve(this.cwd, vpath.substring(1));
+      const relative = import_node_path2.default.relative(this.cwd, full);
+      if (relative.startsWith("..") || import_node_path2.default.isAbsolute(relative)) throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
       return full;
     }
-    if (import_node_path.default.isAbsolute(key)) return key;
-    return import_node_path.default.resolve(this.cwd, key);
+    if (import_node_path2.default.isAbsolute(key)) return key;
+    return import_node_path2.default.resolve(this.cwd, key);
   }
   /**
   * List files and directories in the specified directory (non-recursive).
@@ -102911,9 +103073,9 @@ var FilesystemBackend = class {
       if (!(await import_promises3.default.stat(resolvedPath)).isDirectory()) return { files: [] };
       const entries = await import_promises3.default.readdir(resolvedPath, { withFileTypes: true });
       const results = [];
-      const cwdStr = this.cwd.endsWith(import_node_path.default.sep) ? this.cwd : this.cwd + import_node_path.default.sep;
+      const cwdStr = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
       for (const entry of entries) {
-        const fullPath = import_node_path.default.join(resolvedPath, entry.name);
+        const fullPath = import_node_path2.default.join(resolvedPath, entry.name);
         try {
           const entryStat = await import_promises3.default.stat(fullPath);
           const isFile = entryStat.isFile();
@@ -102926,7 +103088,7 @@ var FilesystemBackend = class {
               modified_at: entryStat.mtime.toISOString()
             });
             else if (isDir) results.push({
-              path: fullPath + import_node_path.default.sep,
+              path: fullPath + import_node_path2.default.sep,
               is_dir: true,
               size: 0,
               modified_at: entryStat.mtime.toISOString()
@@ -102936,7 +103098,7 @@ var FilesystemBackend = class {
             if (fullPath.startsWith(cwdStr)) relativePath = fullPath.substring(cwdStr.length);
             else if (fullPath.startsWith(this.cwd)) relativePath = fullPath.substring(this.cwd.length).replace(/^[/\\]/, "");
             else relativePath = fullPath;
-            relativePath = relativePath.split(import_node_path.default.sep).join("/");
+            relativePath = relativePath.split(import_node_path2.default.sep).join("/");
             const virtPath = "/" + relativePath;
             if (isFile) results.push({
               path: virtPath,
@@ -102977,7 +103139,7 @@ var FilesystemBackend = class {
       let content;
       if (SUPPORTS_NOFOLLOW) {
         if (!(await import_promises3.default.stat(resolvedPath)).isFile()) return { error: `File '${filePath}' not found` };
-        const fd = await import_promises3.default.open(resolvedPath, import_node_fs.default.constants.O_RDONLY | import_node_fs.default.constants.O_NOFOLLOW);
+        const fd = await import_promises3.default.open(resolvedPath, import_node_fs2.default.constants.O_RDONLY | import_node_fs2.default.constants.O_NOFOLLOW);
         try {
           if (isBinary) {
             const buffer = await fd.readFile();
@@ -103035,7 +103197,7 @@ var FilesystemBackend = class {
     if (SUPPORTS_NOFOLLOW) {
       stat4 = await import_promises3.default.stat(resolvedPath);
       if (!stat4.isFile()) return { error: `File '${filePath}' not found` };
-      const fd = await import_promises3.default.open(resolvedPath, import_node_fs.default.constants.O_RDONLY | import_node_fs.default.constants.O_NOFOLLOW);
+      const fd = await import_promises3.default.open(resolvedPath, import_node_fs2.default.constants.O_RDONLY | import_node_fs2.default.constants.O_NOFOLLOW);
       try {
         if (isBinary) {
           const buffer = await fd.readFile();
@@ -103085,9 +103247,9 @@ var FilesystemBackend = class {
         return { error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.` };
       } catch {
       }
-      await import_promises3.default.mkdir(import_node_path.default.dirname(resolvedPath), { recursive: true });
+      await import_promises3.default.mkdir(import_node_path2.default.dirname(resolvedPath), { recursive: true });
       if (SUPPORTS_NOFOLLOW) {
-        const flags = import_node_fs.default.constants.O_WRONLY | import_node_fs.default.constants.O_CREAT | import_node_fs.default.constants.O_TRUNC | import_node_fs.default.constants.O_NOFOLLOW;
+        const flags = import_node_fs2.default.constants.O_WRONLY | import_node_fs2.default.constants.O_CREAT | import_node_fs2.default.constants.O_TRUNC | import_node_fs2.default.constants.O_NOFOLLOW;
         const fd = await import_promises3.default.open(resolvedPath, flags, 420);
         try {
           if (isBinary) {
@@ -103119,7 +103281,7 @@ var FilesystemBackend = class {
       let content;
       if (SUPPORTS_NOFOLLOW) {
         if (!(await import_promises3.default.stat(resolvedPath)).isFile()) return { error: `Error: File '${filePath}' not found` };
-        const fd = await import_promises3.default.open(resolvedPath, import_node_fs.default.constants.O_RDONLY | import_node_fs.default.constants.O_NOFOLLOW);
+        const fd = await import_promises3.default.open(resolvedPath, import_node_fs2.default.constants.O_RDONLY | import_node_fs2.default.constants.O_NOFOLLOW);
         try {
           content = await fd.readFile({ encoding: "utf-8" });
         } finally {
@@ -103135,7 +103297,7 @@ var FilesystemBackend = class {
       if (typeof result === "string") return { error: result };
       const [newContent, occurrences] = result;
       if (SUPPORTS_NOFOLLOW) {
-        const flags = import_node_fs.default.constants.O_WRONLY | import_node_fs.default.constants.O_TRUNC | import_node_fs.default.constants.O_NOFOLLOW;
+        const flags = import_node_fs2.default.constants.O_WRONLY | import_node_fs2.default.constants.O_TRUNC | import_node_fs2.default.constants.O_NOFOLLOW;
         const fd = await import_promises3.default.open(resolvedPath, flags);
         try {
           await fd.writeFile(newContent, "utf-8");
@@ -103194,7 +103356,7 @@ var FilesystemBackend = class {
   *          Returns null if ripgrep is unavailable or times out.
   */
   async ripgrepSearch(pattern, baseFull, includeGlob) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve4) => {
       const args = ["--json", "-F"];
       if (includeGlob) args.push("--glob", includeGlob);
       args.push("--", pattern, baseFull);
@@ -103206,7 +103368,7 @@ var FilesystemBackend = class {
       });
       proc.on("close", (code) => {
         if (code !== 0 && code !== 1) {
-          resolve2(null);
+          resolve4(null);
           return;
         }
         for (const line of output.split("\n")) {
@@ -103219,10 +103381,10 @@ var FilesystemBackend = class {
             if (!ftext) continue;
             let virtPath;
             if (this.virtualMode) try {
-              const resolved = import_node_path.default.resolve(ftext);
-              const relative = import_node_path.default.relative(this.cwd, resolved);
+              const resolved = import_node_path2.default.resolve(ftext);
+              const relative = import_node_path2.default.relative(this.cwd, resolved);
               if (relative.startsWith("..")) continue;
-              virtPath = "/" + relative.split(import_node_path.default.sep).join("/");
+              virtPath = "/" + relative.split(import_node_path2.default.sep).join("/");
             } catch {
               continue;
             }
@@ -103236,10 +103398,10 @@ var FilesystemBackend = class {
             continue;
           }
         }
-        resolve2(results);
+        resolve4(results);
       });
       proc.on("error", () => {
-        resolve2(null);
+        resolve4(null);
       });
     });
   }
@@ -103256,14 +103418,14 @@ var FilesystemBackend = class {
   async literalSearch(pattern, baseFull, includeGlob) {
     const results = {};
     const files = await (0, import_fast_glob.default)("**/*", {
-      cwd: (await import_promises3.default.stat(baseFull)).isDirectory() ? baseFull : import_node_path.default.dirname(baseFull),
+      cwd: (await import_promises3.default.stat(baseFull)).isDirectory() ? baseFull : import_node_path2.default.dirname(baseFull),
       absolute: true,
       onlyFiles: true,
       dot: true
     });
     for (const fp of files) try {
       if (!isTextMimeType(getMimeType(fp))) continue;
-      if (includeGlob && !import_micromatch.default.isMatch(import_node_path.default.basename(fp), includeGlob)) continue;
+      if (includeGlob && !import_micromatch.default.isMatch(import_node_path2.default.basename(fp), includeGlob)) continue;
       if ((await import_promises3.default.stat(fp)).size > this.maxFileSizeBytes) continue;
       const lines = (await import_promises3.default.readFile(fp, "utf-8")).split("\n");
       for (let i = 0; i < lines.length; i++) {
@@ -103271,9 +103433,9 @@ var FilesystemBackend = class {
         if (line.includes(pattern)) {
           let virtPath;
           if (this.virtualMode) try {
-            const relative = import_node_path.default.relative(this.cwd, fp);
+            const relative = import_node_path2.default.relative(this.cwd, fp);
             if (relative.startsWith("..")) continue;
-            virtPath = "/" + relative.split(import_node_path.default.sep).join("/");
+            virtPath = "/" + relative.split(import_node_path2.default.sep).join("/");
           } catch {
             continue;
           }
@@ -103309,7 +103471,7 @@ var FilesystemBackend = class {
       for (const matchedPath of matches) try {
         const stat4 = await import_promises3.default.stat(matchedPath);
         if (!stat4.isFile()) continue;
-        const normalizedPath = matchedPath.split("/").join(import_node_path.default.sep);
+        const normalizedPath = matchedPath.split("/").join(import_node_path2.default.sep);
         if (!this.virtualMode) results.push({
           path: normalizedPath,
           is_dir: false,
@@ -103317,12 +103479,12 @@ var FilesystemBackend = class {
           modified_at: stat4.mtime.toISOString()
         });
         else {
-          const cwdStr = this.cwd.endsWith(import_node_path.default.sep) ? this.cwd : this.cwd + import_node_path.default.sep;
+          const cwdStr = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
           let relativePath;
           if (normalizedPath.startsWith(cwdStr)) relativePath = normalizedPath.substring(cwdStr.length);
           else if (normalizedPath.startsWith(this.cwd)) relativePath = normalizedPath.substring(this.cwd.length).replace(/^[/\\]/, "");
           else relativePath = normalizedPath;
-          relativePath = relativePath.split(import_node_path.default.sep).join("/");
+          relativePath = relativePath.split(import_node_path2.default.sep).join("/");
           const virt = "/" + relativePath;
           results.push({
             path: virt,
@@ -103349,7 +103511,7 @@ var FilesystemBackend = class {
     const responses = [];
     for (const [filePath, content] of files) try {
       const resolvedPath = this.resolvePath(filePath);
-      await import_promises3.default.mkdir(import_node_path.default.dirname(resolvedPath), { recursive: true });
+      await import_promises3.default.mkdir(import_node_path2.default.dirname(resolvedPath), { recursive: true });
       await import_promises3.default.writeFile(resolvedPath, content);
       responses.push({
         path: filePath,
@@ -103500,7 +103662,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     const result = await super.ls(dirPath);
     if (result.error) return result;
     if (this.virtualMode) return result;
-    const cwdPrefix = this.cwd.endsWith(import_node_path.default.sep) ? this.cwd : this.cwd + import_node_path.default.sep;
+    const cwdPrefix = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
     return { files: (result.files || []).map((info) => ({
       ...info,
       path: info.path.startsWith(cwdPrefix) ? info.path.slice(cwdPrefix.length) : info.path
@@ -103511,7 +103673,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
   */
   async glob(pattern, searchPath = "/") {
     if (pattern.startsWith("/")) pattern = pattern.substring(1);
-    const resolvedSearchPath = searchPath === "/" || searchPath === "" ? this.cwd : this.virtualMode ? import_node_path.default.resolve(this.cwd, searchPath.replace(/^\//, "")) : import_node_path.default.resolve(this.cwd, searchPath);
+    const resolvedSearchPath = searchPath === "/" || searchPath === "" ? this.cwd : this.virtualMode ? import_node_path2.default.resolve(this.cwd, searchPath.replace(/^\//, "")) : import_node_path2.default.resolve(this.cwd, searchPath);
     try {
       if (!(await import_promises3.default.stat(resolvedSearchPath)).isDirectory()) return { files: [] };
     } catch {
@@ -103532,7 +103694,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     })]);
     const statFile = async (match) => {
       try {
-        const entryStat = await import_promises3.default.stat(import_node_path.default.join(resolvedSearchPath, match));
+        const entryStat = await import_promises3.default.stat(import_node_path2.default.join(resolvedSearchPath, match));
         if (entryStat.isFile()) return {
           path: formatPath(match),
           is_dir: false,
@@ -103545,7 +103707,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     };
     const statDir = async (match) => {
       try {
-        const entryStat = await import_promises3.default.stat(import_node_path.default.join(resolvedSearchPath, match));
+        const entryStat = await import_promises3.default.stat(import_node_path2.default.join(resolvedSearchPath, match));
         if (entryStat.isDirectory()) return {
           path: formatPath(match),
           is_dir: true,
@@ -103581,7 +103743,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       exitCode: 1,
       truncated: false
     };
-    return new Promise((resolve2) => {
+    return new Promise((resolve4) => {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
@@ -103602,7 +103764,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve2({
+        resolve4({
           output: `Error executing command: ${err.message}`,
           exitCode: 1,
           truncated: false
@@ -103611,7 +103773,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       child.on("close", (code, signal) => {
         clearTimeout(timer);
         if (timedOut || signal === "SIGTERM") {
-          resolve2({
+          resolve4({
             output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
             exitCode: 124,
             truncated: false
@@ -103637,7 +103799,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
         if (exitCode !== 0) output = `${output.trimEnd()}
 
 Exit code: ${exitCode}`;
-        resolve2({
+        resolve4({
           output,
           exitCode,
           truncated
@@ -103770,10 +103932,14 @@ var DEFAULT_READ_LIMIT = 200;
 var DEFAULT_RESULT_LIMIT = 20;
 var DEFAULT_ROOT = "/";
 var LocalSystemBackend = class {
-  root;
+  rootDir;
   backend;
+  approvedRoots;
+  useLocalFsWrites;
   constructor(root = DEFAULT_ROOT, options = {}) {
-    this.root = import_node_path2.default.resolve(root);
+    this.rootDir = import_node_path3.default.resolve(root);
+    this.approvedRoots = [this.rootDir];
+    this.useLocalFsWrites = !options.backend;
     if (options.backend) {
       this.backend = options.backend;
       return;
@@ -103781,9 +103947,14 @@ var LocalSystemBackend = class {
     this.backend = new LocalShellBackend({
       ...options,
       inheritEnv: options.inheritEnv ?? true,
-      rootDir: options.rootDir ?? this.root,
-      virtualMode: true
+      rootDir: options.rootDir ?? this.rootDir,
+      virtualMode: false
     });
+  }
+  approveWorkspaceRoot(root) {
+    const fullPath = import_node_path3.default.resolve(root);
+    if (!this.isInsideApprovedRoot(fullPath)) this.approvedRoots.push(fullPath);
+    return fullPath;
   }
   async ls(requestedPath = ".") {
     const target = this.toBackendPath(requestedPath);
@@ -103834,7 +104005,7 @@ var LocalSystemBackend = class {
   async grep(pattern, options) {
     const mode = options?.mode ?? "content";
     const limit2 = options?.limit ?? DEFAULT_RESULT_LIMIT;
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const result = await this.backend.grep(pattern, target, options?.glob ?? null);
     if (result.error) throw new Error(result.error);
     return {
@@ -103843,7 +104014,7 @@ var LocalSystemBackend = class {
     };
   }
   async glob(pattern, options) {
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const limit2 = options?.limit ?? DEFAULT_RESULT_LIMIT;
     const result = await this.backend.glob(pattern, target);
     if (result.error) throw new Error(result.error);
@@ -103853,6 +104024,13 @@ var LocalSystemBackend = class {
   }
   async writeFile(filePath, content) {
     const target = this.toBackendPath(filePath);
+    if (this.useLocalFsWrites) {
+      await writeLocalTextFile(target, content);
+      return {
+        path: this.fromBackendPath(target),
+        bytes: Buffer.byteLength(content, "utf8")
+      };
+    }
     const result = await this.backend.write(target, content);
     if (result.error) throw new Error(result.error);
     return {
@@ -103871,10 +104049,13 @@ var LocalSystemBackend = class {
   }
   async execute(command, args = [], options) {
     const startedAt = Date.now();
-    const cwd = options?.cwd ? this.toHostPath(options.cwd) : void 0;
-    const commandText = args.length > 0 ? [command, ...args].map(shellQuote2).join(" ") : command;
-    const commands = commandText;
-    const result = await this.backend.execute(cwd ? `cd ${shellQuote2(cwd)} && ${commands}` : commands);
+    const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
+    const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
+    this.assertCommandPathsStayInApprovedRoots(commandText);
+    if (this.useLocalFsWrites) {
+      return this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+    }
+    const result = await withTimeout2(this.backend.execute(`cd ${shellQuote2(cwd)} && ${commandText}`), options?.timeoutMs, command);
     return {
       exit_code: result.exitCode ?? 1,
       stdout: result.output,
@@ -103882,34 +104063,62 @@ var LocalSystemBackend = class {
       duration_ms: Date.now() - startedAt
     };
   }
+  async executeLocalCommand(commandText, cwd, startedAt, timeoutMs) {
+    const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration_ms: Date.now() - startedAt
+    };
+  }
   toBackendPath(requestedPath) {
-    if (import_node_path2.default.isAbsolute(requestedPath) && requestedPath.startsWith(this.root)) {
-      return this.toVirtualPath(requestedPath);
-    }
-    return this.toVirtualPath(this.toHostPath(requestedPath));
+    return this.toHostPath(requestedPath);
   }
   toHostPath(requestedPath) {
-    const fullPath = import_node_path2.default.resolve(this.root, requestedPath);
-    if (fullPath !== this.root && !fullPath.startsWith(`${this.root}${import_node_path2.default.sep}`)) {
-      throw new Error("Path escapes workspace");
-    }
+    const fullPath = import_node_path3.default.resolve(this.rootDir, requestedPath);
+    if (!this.isInsideApprovedRoot(fullPath)) throw this.createPathApprovalError(fullPath);
     return fullPath;
   }
-  toVirtualPath(fullPath) {
-    const relative = import_node_path2.default.relative(this.root, fullPath).split(import_node_path2.default.sep).join("/");
-    return relative ? `/${relative}` : "/";
+  isInsideApprovedRoot(fullPath) {
+    return this.approvedRoots.some((root) => isInsideRoot(root, fullPath));
+  }
+  createPathApprovalError(fullPath) {
+    return new PathRequiresApprovalError({
+      path: fullPath,
+      suggestedRoot: suggestApprovalRoot(fullPath),
+      reason: `Path requires approval: ${fullPath}`
+    });
+  }
+  assertCommandPathsStayInApprovedRoots(commandText) {
+    for (const rawPath of findDriveRelativePathTokens(commandText)) {
+      throw new PathRequiresApprovalError({
+        path: rawPath,
+        suggestedRoot: this.rootDir,
+        reason: `Command path is ambiguous outside workspace: ${rawPath}`
+      });
+    }
+    for (const rawPath of findAbsolutePathTokens(commandText)) {
+      const fullPath = import_node_path3.default.resolve(rawPath);
+      if (!this.isInsideApprovedRoot(fullPath)) {
+        throw new PathRequiresApprovalError({
+          path: fullPath,
+          suggestedRoot: suggestApprovalRoot(fullPath),
+          reason: `Command path requires approval: ${rawPath}`
+        });
+      }
+    }
   }
   fromBackendPath(filePath) {
-    const normalized = filePath.replace(/\\/g, "/").replace(/\/$/, "");
-    if (normalized === "" || normalized === "/") return ".";
-    if (import_node_path2.default.isAbsolute(normalized) && normalized.startsWith(this.root)) {
-      return import_node_path2.default.relative(this.root, normalized) || ".";
+    const normalized = import_node_path3.default.resolve(this.rootDir, filePath);
+    if (isInsideRoot(this.rootDir, normalized)) {
+      return import_node_path3.default.relative(this.rootDir, normalized) || ".";
     }
-    return normalized.replace(/^\//, "") || ".";
+    return normalized;
   }
   toSystemFileInfo(file2) {
     return {
-      path: this.fromBackendPath(file2.path.replace(/\/$/, "")),
+      path: this.fromBackendPath(file2.path.replace(/[/\\]$/, "")),
       type: file2.is_dir ? "directory" : "file",
       size: file2.size,
       modified_at: file2.modified_at || void 0
@@ -103939,8 +104148,149 @@ var LocalSystemBackend = class {
     }));
   }
 };
+function isInsideRoot(root, fullPath) {
+  const relative = import_node_path3.default.relative(root, fullPath);
+  return relative === "" || !relative.startsWith("..") && !import_node_path3.default.isAbsolute(relative);
+}
+function suggestApprovalRoot(fullPath) {
+  const parsed = import_node_path3.default.parse(import_node_path3.default.resolve(fullPath));
+  const relative = import_node_path3.default.relative(parsed.root, fullPath);
+  const [firstSegment] = relative.split(import_node_path3.default.sep).filter(Boolean);
+  return firstSegment ? import_node_path3.default.join(parsed.root, firstSegment) : parsed.root;
+}
 function shellQuote2(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+function formatCommandText(command, args, useLocalShell) {
+  if (useLocalShell && process.platform === "win32") {
+    return `& ${[command, ...args].map(powerShellQuote).join(" ")}`;
+  }
+  return [command, ...args].map(shellQuote2).join(" ");
+}
+function powerShellQuote(value) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+function findAbsolutePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
+  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]+/g;
+  const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
+  for (const match of commandText.matchAll(uncPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  for (const match of commandText.matchAll(windowsDrivePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  for (const match of commandText.matchAll(unixPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  return [...tokens];
+}
+function findDriveRelativePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const driveRelativePath = /\b[a-zA-Z]:(?![\\/])(?:[^\s"'`|&;<>]+)/g;
+  for (const match of commandText.matchAll(driveRelativePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  return [...tokens];
+}
+function stripTrailingPunctuation(value) {
+  return value.replace(/[),\].]+$/, "");
+}
+function runLocalShellCommand(commandText, cwd, timeoutMs) {
+  return new Promise((resolve4, reject) => {
+    const isWindows = process.platform === "win32";
+    const windowsCommand = [
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+      "$OutputEncoding = [System.Text.Encoding]::UTF8",
+      "$null = chcp.com 65001",
+      commandText
+    ].join("; ");
+    const child = isWindows ? (0, import_node_child_process2.spawn)("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", windowsCommand], {
+      cwd,
+      env: {
+        ...process.env,
+        DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || "en",
+        PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8"
+      },
+      windowsHide: true
+    }) : (0, import_node_child_process2.spawn)(commandText, {
+      cwd,
+      env: process.env,
+      shell: true
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timer;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error51) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(error51);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve4({
+        exitCode: code ?? 1,
+        stdout,
+        stderr
+      });
+    });
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.kill();
+        reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
+      }, timeoutMs);
+    }
+  });
+}
+async function writeLocalTextFile(filePath, content) {
+  try {
+    const stat4 = await (0, import_promises4.lstat)(filePath);
+    if (stat4.isSymbolicLink()) {
+      throw new Error(`Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`);
+    }
+  } catch (error51) {
+    const code = typeof error51 === "object" && error51 !== null && "code" in error51 ? error51.code : void 0;
+    if (code !== "ENOENT") throw error51;
+  }
+  const parent = import_node_path3.default.dirname(filePath);
+  if (parent !== import_node_path3.default.parse(parent).root) {
+    await (0, import_promises4.mkdir)(parent, { recursive: true });
+  }
+  await (0, import_promises4.writeFile)(filePath, content, {
+    flag: "w",
+    mode: 420
+  });
+}
+async function withTimeout2(promise2, timeoutMs, command) {
+  if (!timeoutMs) return promise2;
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise2),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // packages/agent-tools/src/read-file.ts
@@ -104049,6 +104399,162 @@ function isWritableSystemBackend(system) {
 }
 function isExecutableSystemBackend(system) {
   return typeof system.execute === "function";
+}
+
+// packages/agent-skills/src/content-manager.ts
+var DEFAULT_MAX_SKILLS = 2;
+var DEFAULT_MAX_CHARS_PER_SKILL = 4e3;
+var ContentManager = class {
+  active = /* @__PURE__ */ new Map();
+  maxSkills;
+  maxCharsPerSkill;
+  constructor(options = {}) {
+    this.maxSkills = options.maxSkills ?? DEFAULT_MAX_SKILLS;
+    this.maxCharsPerSkill = options.maxCharsPerSkill ?? DEFAULT_MAX_CHARS_PER_SKILL;
+  }
+  addSkill(skill) {
+    if (this.active.has(skill.name)) return;
+    if (this.active.size >= this.maxSkills) return;
+    this.active.set(skill.name, skill);
+  }
+  buildContext() {
+    if (this.active.size === 0) return "";
+    const skills = [...this.active.values()].map((skill) => {
+      const content = skill.content.slice(0, this.maxCharsPerSkill);
+      return `<skill name="${escapeAttr(skill.name)}">
+${content}
+</skill>`;
+    }).join("\n\n");
+    return `<active_skills>
+${skills}
+</active_skills>`;
+  }
+  reset() {
+    this.active.clear();
+  }
+};
+function escapeAttr(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+// packages/agent-skills/src/skill-loader.ts
+var import_promises5 = require("node:fs/promises");
+var import_node_path4 = __toESM(require("node:path"), 1);
+var DEFAULT_SKILL_DIR = ".moke/skills";
+var SKILL_FILE = "SKILL.md";
+var SkillLoader = class {
+  root;
+  skillsDir;
+  constructor(root, skillsDir = DEFAULT_SKILL_DIR) {
+    this.root = import_node_path4.default.resolve(root);
+    this.skillsDir = import_node_path4.default.resolve(this.root, skillsDir);
+  }
+  async list() {
+    const entries = await safeReadDir(this.skillsDir);
+    const manifests = await Promise.all(
+      entries.map(async (entry) => {
+        const skillPath = import_node_path4.default.join(this.skillsDir, entry, SKILL_FILE);
+        const info = await safeStat(skillPath);
+        if (!info?.isFile()) return null;
+        const content = await (0, import_promises5.readFile)(skillPath, "utf8");
+        const parsed = parseSkillFile(content);
+        const name = parsed.frontmatter.name || entry;
+        const description = parsed.frontmatter.description || firstParagraph(parsed.body);
+        return {
+          name,
+          description,
+          path: import_node_path4.default.relative(this.root, skillPath)
+        };
+      })
+    );
+    return manifests.filter((skill) => Boolean(skill));
+  }
+  async read(name) {
+    const skills = await this.list();
+    const manifest = skills.find((skill) => skill.name === name);
+    if (!manifest) {
+      throw new Error(`Skill not found: ${name}`);
+    }
+    const content = await (0, import_promises5.readFile)(import_node_path4.default.join(this.root, manifest.path), "utf8");
+    const parsed = parseSkillFile(content);
+    return {
+      ...manifest,
+      content: parsed.body.trim()
+    };
+  }
+};
+async function safeReadDir(dir) {
+  try {
+    return await (0, import_promises5.readdir)(dir);
+  } catch {
+    return [];
+  }
+}
+async function safeStat(filePath) {
+  try {
+    return await (0, import_promises5.stat)(filePath);
+  } catch {
+    return null;
+  }
+}
+function parseSkillFile(content) {
+  if (!content.startsWith("---")) {
+    return { frontmatter: {}, body: content };
+  }
+  const end = content.indexOf("\n---", 3);
+  if (end < 0) {
+    return { frontmatter: {}, body: content };
+  }
+  const raw = content.slice(3, end).trim();
+  const body = content.slice(end + 4).trim();
+  const frontmatter = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const index2 = line.indexOf(":");
+    if (index2 < 0) continue;
+    const key = line.slice(0, index2).trim();
+    const value = line.slice(index2 + 1).trim().replace(/^["']|["']$/g, "");
+    if (key) frontmatter[key] = value;
+  }
+  return { frontmatter, body };
+}
+function firstParagraph(content) {
+  return content.replace(/^# .+$/m, "").split(/\n\s*\n/).map((part) => part.trim()).find(Boolean) || "";
+}
+
+// packages/agent-skills/src/skill-tools.ts
+var listSkillsSchema = external_exports2.object({});
+var readSkillSchema = external_exports2.object({
+  name: external_exports2.string().min(1)
+});
+function createListSkillsTool(loader) {
+  return {
+    name: "list_skills",
+    description: "List available agent skills with descriptions.",
+    risk: "safe",
+    schema: listSkillsSchema,
+    async handler() {
+      return {
+        skills: await loader.list()
+      };
+    }
+  };
+}
+function createReadSkillTool(loader) {
+  return {
+    name: "active_skill",
+    description: "Read and activate an agent skill by name.",
+    risk: "safe",
+    schema: readSkillSchema,
+    async handler(input, context2) {
+      const skill = await loader.read(input.name);
+      context2.contentManager?.addSkill(skill);
+      return {
+        name: skill.name,
+        description: skill.description,
+        activated: Boolean(context2.contentManager)
+      };
+    }
+  };
 }
 
 // packages/browser-tools/src/page-tools.ts
@@ -104361,169 +104867,14 @@ function registerBrowserTools(toolRegistry, browser) {
   return toolRegistry.register(createListPagesTool(browser)).register(createCreatePageTool(browser)).register(createSelectPageTool(browser)).register(createClosePageTool(browser)).register(createNavigatePageTool(browser)).register(createEvaluateScriptTool(browser)).register(createTakeSnapshotTool(browser)).register(createTakeScreenshotTool(browser)).register(createClickTool(browser)).register(createHoverTool(browser)).register(createFillTool(browser)).register(createFillFormTool(browser)).register(createUploadFileTool(browser)).register(createWaitForTool(browser)).register(createPressKeyTool(browser)).register(createTypeTextTool(browser)).register(createHandleDialogTool(browser)).register(createResizePageTool(browser)).register(createShowBrowserTool(browser)).register(createHideBrowserTool(browser));
 }
 
-// packages/agent-skills/src/content-manager.ts
-var DEFAULT_MAX_SKILLS = 2;
-var DEFAULT_MAX_CHARS_PER_SKILL = 4e3;
-var ContentManager = class {
-  active = /* @__PURE__ */ new Map();
-  maxSkills;
-  maxCharsPerSkill;
-  constructor(options = {}) {
-    this.maxSkills = options.maxSkills ?? DEFAULT_MAX_SKILLS;
-    this.maxCharsPerSkill = options.maxCharsPerSkill ?? DEFAULT_MAX_CHARS_PER_SKILL;
-  }
-  addSkill(skill) {
-    if (this.active.has(skill.name)) return;
-    if (this.active.size >= this.maxSkills) return;
-    this.active.set(skill.name, skill);
-  }
-  buildContext() {
-    if (this.active.size === 0) return "";
-    const skills = [...this.active.values()].map((skill) => {
-      const content = skill.content.slice(0, this.maxCharsPerSkill);
-      return `<skill name="${escapeAttr(skill.name)}">
-${content}
-</skill>`;
-    }).join("\n\n");
-    return `<active_skills>
-${skills}
-</active_skills>`;
-  }
-  reset() {
-    this.active.clear();
-  }
-};
-function escapeAttr(value) {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-}
-
-// packages/agent-skills/src/skill-loader.ts
-var import_promises4 = require("node:fs/promises");
-var import_node_path3 = __toESM(require("node:path"), 1);
-var DEFAULT_SKILL_DIR = ".moke/skills";
-var SKILL_FILE = "SKILL.md";
-var SkillLoader = class {
-  root;
-  skillsDir;
-  constructor(root, skillsDir = DEFAULT_SKILL_DIR) {
-    this.root = import_node_path3.default.resolve(root);
-    this.skillsDir = import_node_path3.default.resolve(this.root, skillsDir);
-  }
-  async list() {
-    const entries = await safeReadDir(this.skillsDir);
-    const manifests = await Promise.all(
-      entries.map(async (entry) => {
-        const skillPath = import_node_path3.default.join(this.skillsDir, entry, SKILL_FILE);
-        const info = await safeStat(skillPath);
-        if (!info?.isFile()) return null;
-        const content = await (0, import_promises4.readFile)(skillPath, "utf8");
-        const parsed = parseSkillFile(content);
-        const name = parsed.frontmatter.name || entry;
-        const description = parsed.frontmatter.description || firstParagraph(parsed.body);
-        return {
-          name,
-          description,
-          path: import_node_path3.default.relative(this.root, skillPath)
-        };
-      })
-    );
-    return manifests.filter((skill) => Boolean(skill));
-  }
-  async read(name) {
-    const skills = await this.list();
-    const manifest = skills.find((skill) => skill.name === name);
-    if (!manifest) {
-      throw new Error(`Skill not found: ${name}`);
-    }
-    const content = await (0, import_promises4.readFile)(import_node_path3.default.join(this.root, manifest.path), "utf8");
-    const parsed = parseSkillFile(content);
-    return {
-      ...manifest,
-      content: parsed.body.trim()
-    };
-  }
-};
-async function safeReadDir(dir) {
-  try {
-    return await (0, import_promises4.readdir)(dir);
-  } catch {
-    return [];
-  }
-}
-async function safeStat(filePath) {
-  try {
-    return await (0, import_promises4.stat)(filePath);
-  } catch {
-    return null;
-  }
-}
-function parseSkillFile(content) {
-  if (!content.startsWith("---")) {
-    return { frontmatter: {}, body: content };
-  }
-  const end = content.indexOf("\n---", 3);
-  if (end < 0) {
-    return { frontmatter: {}, body: content };
-  }
-  const raw = content.slice(3, end).trim();
-  const body = content.slice(end + 4).trim();
-  const frontmatter = {};
-  for (const line of raw.split(/\r?\n/)) {
-    const index2 = line.indexOf(":");
-    if (index2 < 0) continue;
-    const key = line.slice(0, index2).trim();
-    const value = line.slice(index2 + 1).trim().replace(/^["']|["']$/g, "");
-    if (key) frontmatter[key] = value;
-  }
-  return { frontmatter, body };
-}
-function firstParagraph(content) {
-  return content.replace(/^# .+$/m, "").split(/\n\s*\n/).map((part) => part.trim()).find(Boolean) || "";
-}
-
-// packages/agent-skills/src/skill-tools.ts
-var listSkillsSchema = external_exports2.object({});
-var readSkillSchema = external_exports2.object({
-  name: external_exports2.string().min(1)
-});
-function createListSkillsTool(loader) {
-  return {
-    name: "list_skills",
-    description: "List available agent skills with descriptions.",
-    risk: "safe",
-    schema: listSkillsSchema,
-    async handler() {
-      return {
-        skills: await loader.list()
-      };
-    }
-  };
-}
-function createReadSkillTool(loader) {
-  return {
-    name: "active_skill",
-    description: "Read and activate an agent skill by name.",
-    risk: "safe",
-    schema: readSkillSchema,
-    async handler(input, context2) {
-      const skill = await loader.read(input.name);
-      context2.contentManager?.addSkill(skill);
-      return {
-        name: skill.name,
-        description: skill.description,
-        activated: Boolean(context2.contentManager)
-      };
-    }
-  };
-}
-
-// apps/server/browser-bridge.ts
+// apps/server/services/browser-bridge.ts
 var DEFAULT_TIMEOUT_MS = 3e4;
 var BrowserBridge = class {
   client = null;
   requestSeq = 0;
   pending = /* @__PURE__ */ new Map();
   connect(res) {
+    this.closeClient();
     this.client = res;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -104539,16 +104890,24 @@ data: ${JSON.stringify({ status: "connected" })}
   disconnect(res) {
     if (this.client === res) this.client = null;
   }
+  close(error51 = new Error("Browser bridge closed")) {
+    this.closeClient();
+    for (const [id4, pending] of this.pending.entries()) {
+      clearTimeout(pending.timer);
+      pending.reject(error51);
+      this.pending.delete(id4);
+    }
+  }
   async request(method, params = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
     if (!this.client) throw new Error("In-app browser is not connected");
     const id4 = `browser_req_${++this.requestSeq}`;
     const request = { id: id4, method, params };
-    const result = new Promise((resolve2, reject) => {
+    const result = new Promise((resolve4, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id4);
         reject(new Error(`Browser request timed out: ${method}`));
       }, timeoutMs);
-      this.pending.set(id4, { resolve: resolve2, reject, timer });
+      this.pending.set(id4, { resolve: resolve4, reject, timer });
     });
     this.client.write(`event: browser_request
 data: ${JSON.stringify(request)}
@@ -104567,6 +104926,11 @@ data: ${JSON.stringify(request)}
       pending.resolve(response.result || {});
     }
     return true;
+  }
+  closeClient() {
+    if (!this.client) return;
+    this.client.end();
+    this.client = null;
   }
 };
 var BrowserBridgeBackend = class {
@@ -104639,13 +105003,491 @@ var BrowserBridgeBackend = class {
   }
 };
 
-// apps/server/mcp-tools.ts
-var import_node_fs2 = require("node:fs");
+// apps/server/runtime/factory.ts
+function createToolRegistry(workspace, browserBridge) {
+  const system = new LocalSystemBackend(workspace);
+  const browserBackend = new BrowserBridgeBackend(browserBridge);
+  const skillLoader = new SkillLoader(workspace);
+  const toolRegistry = new ToolRegistry().register(createListSkillsTool(skillLoader)).register(createReadSkillTool(skillLoader));
+  registerAgentTools(toolRegistry, system);
+  registerBrowserTools(toolRegistry, browserBackend);
+  return { system, toolRegistry };
+}
+function createRunManager(input) {
+  return new RunManager({
+    sessions: input.sessions,
+    runs: input.runs,
+    agent: new ReActAgent(),
+    toolRegistry: input.toolRegistry,
+    workspace: input.workspace,
+    createSkillContentManager: () => new ContentManager(),
+    approveWorkspaceRoot: input.approveWorkspaceRoot,
+    onChange: input.onChange
+  });
+}
+
+// apps/server/http/response.ts
+function json2(res, status, body) {
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
+  });
+  res.end(JSON.stringify(body));
+}
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  if (chunks.length === 0) return {};
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+// apps/server/http/router.ts
+var HttpError = class extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+  status;
+  code;
+};
+var RAW_RESPONSE = /* @__PURE__ */ Symbol("raw-response");
+function rawResponse() {
+  return RAW_RESPONSE;
+}
+function createRouter() {
+  const routes = [];
+  function add(method, path6, handler) {
+    routes.push({ method, path: path6, parts: splitPath(path6), handler });
+  }
+  return {
+    get: (path6, handler) => add("GET", path6, handler),
+    post: (path6, handler) => add("POST", path6, handler),
+    patch: (path6, handler) => add("PATCH", path6, handler),
+    handler(context2) {
+      return async function handleRequest(req, res) {
+        try {
+          if (req.method === "OPTIONS") return json2(res, 204, {});
+          const url2 = new URL(req.url || "/", `http://${req.headers.host}`);
+          const match = matchRoute(routes, req.method || "GET", url2.pathname);
+          if (!match) {
+            return json2(res, 404, {
+              error: { code: "NOT_FOUND", message: "Route not found" }
+            });
+          }
+          const body = memoizeBody(req);
+          const result = await match.route.handler({
+            body,
+            context: context2,
+            json: (status, responseBody) => json2(res, status, responseBody),
+            params: match.params,
+            query: url2.searchParams,
+            raw: { req, res }
+          });
+          if (result === RAW_RESPONSE || res.writableEnded) return;
+        } catch (error51) {
+          if (error51 instanceof HttpError) {
+            return json2(res, error51.status, {
+              error: { code: error51.code, message: error51.message }
+            });
+          }
+          return json2(res, 500, {
+            error: {
+              code: "INTERNAL_ERROR",
+              message: error51 instanceof Error ? error51.message : "Unknown error"
+            }
+          });
+        }
+      };
+    }
+  };
+}
+function memoizeBody(req) {
+  let parsed;
+  return () => {
+    parsed ||= readJson(req);
+    return parsed;
+  };
+}
+function splitPath(path6) {
+  return path6.split("/").filter(Boolean);
+}
+function matchRoute(routes, method, pathname) {
+  const requestParts = splitPath(pathname);
+  for (const route of routes) {
+    if (route.method !== method) continue;
+    if (route.parts.length !== requestParts.length) continue;
+    const params = {};
+    let matched = true;
+    for (let index2 = 0; index2 < route.parts.length; index2++) {
+      const routePart = route.parts[index2];
+      const requestPart = requestParts[index2];
+      if (routePart.startsWith(":")) {
+        params[routePart.slice(1)] = decodeURIComponent(requestPart);
+        continue;
+      }
+      if (routePart !== requestPart) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return { route, params };
+  }
+  return null;
+}
+
+// apps/server/routes/browser.ts
+function registerBrowserRoutes(router) {
+  router.get("/api/browser/connect", ({ context: context2, raw }) => {
+    context2.browserBridge.connect(raw.res);
+    raw.req.on("close", () => context2.browserBridge.disconnect(raw.res));
+    return rawResponse();
+  });
+  router.post("/api/browser/respond", async ({ body, context: context2, json: json3 }) => {
+    const requestBody = await body();
+    const id4 = typeof requestBody.id === "string" ? requestBody.id : "";
+    if (!id4) throw new HttpError(400, "BAD_REQUEST", "id is required");
+    const accepted = context2.browserBridge.respond(id4, {
+      ok: requestBody.ok !== false,
+      result: typeof requestBody.result === "object" && requestBody.result !== null ? requestBody.result : {},
+      error: typeof requestBody.error === "string" ? requestBody.error : void 0
+    });
+    return json3(accepted ? 200 : 404, { accepted });
+  });
+}
+
+// apps/server/domain/sessions.ts
+var import_node_crypto5 = require("node:crypto");
+var DEFAULT_SESSION_TITLES = /* @__PURE__ */ new Set(["New Session", "\u65B0\u4F1A\u8BDD", "Moke \u5BF9\u8BDD"]);
+var SESSION_TITLE_LIMIT = 24;
+function id3(prefix) {
+  return `${prefix}_${(0, import_node_crypto5.randomUUID)().slice(0, 8)}`;
+}
+function now3() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function isTerminalRun(run) {
+  return ["completed", "failed", "cancelled", "timeout"].includes(run.status);
+}
+function summarizeSession(session) {
+  const { messages, metadata, ...summary } = session;
+  return {
+    ...summary,
+    archived: metadata?.archived === true,
+    preview: messages.find((message) => message.role === "user")?.content.slice(0, 42) || "",
+    message_count: messages.length
+  };
+}
+function titleFromFirstUserMessage(content) {
+  const compact = content.replace(/\s+/g, " ").replace(/^#+\s*/, "").trim();
+  if (!compact) return "";
+  return Array.from(compact).slice(0, SESSION_TITLE_LIMIT).join("");
+}
+function maybeSetTitleFromFirstUserMessage(session, content) {
+  if (session.metadata?.title_edited === true) return false;
+  if (!DEFAULT_SESSION_TITLES.has(session.title)) return false;
+  const hasPreviousUserMessage = session.messages.some((message) => message.role === "user");
+  if (hasPreviousUserMessage) return false;
+  const title = titleFromFirstUserMessage(content);
+  if (!title) return false;
+  session.title = title;
+  return true;
+}
+function applySessionUpdate(session, input) {
+  let changed = false;
+  if (Object.hasOwn(input, "title")) {
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!title) {
+      return { ok: false, status: 400, code: "BAD_REQUEST", message: "title must be a non-empty string" };
+    }
+    session.title = title;
+    session.metadata = {
+      ...session.metadata,
+      title_edited: true
+    };
+    changed = true;
+  }
+  if (Object.hasOwn(input, "archived")) {
+    if (typeof input.archived !== "boolean") {
+      return { ok: false, status: 400, code: "BAD_REQUEST", message: "archived must be a boolean" };
+    }
+    session.metadata = {
+      ...session.metadata,
+      archived: input.archived
+    };
+    changed = true;
+  }
+  if (!changed) {
+    return { ok: false, status: 400, code: "BAD_REQUEST", message: "title or archived is required" };
+  }
+  return { ok: true, changed: true };
+}
+function cloneToolCall(toolCall, toolCallIds) {
+  const nextId = id3("call");
+  toolCallIds.set(toolCall.id, nextId);
+  return {
+    ...toolCall,
+    id: nextId,
+    args: { ...toolCall.args }
+  };
+}
+function cloneMessage(message, toolCallIds) {
+  if (message.role === "user") {
+    return {
+      ...message,
+      id: id3("msg")
+    };
+  }
+  if (message.role === "assistant") {
+    return {
+      ...message,
+      id: id3("msg"),
+      tool_calls: message.tool_calls?.map((toolCall) => cloneToolCall(toolCall, toolCallIds))
+    };
+  }
+  return {
+    ...message,
+    id: id3("msg"),
+    tool_call_id: toolCallIds.get(message.tool_call_id) || message.tool_call_id
+  };
+}
+function forkSession({ source, messageId: messageId2, now: now4 }) {
+  const messageIndex = source.messages.findIndex((message) => message.id === messageId2);
+  if (messageIndex < 0) return null;
+  const toolCallIds = /* @__PURE__ */ new Map();
+  const messages = source.messages.slice(0, messageIndex + 1).map((message) => cloneMessage(message, toolCallIds));
+  return {
+    id: id3("sess"),
+    title: source.title,
+    created_at: now4,
+    updated_at: now4,
+    messages,
+    metadata: {
+      ...source.metadata,
+      forked_from: {
+        session_id: source.id,
+        message_id: messageId2,
+        message_index: messageIndex,
+        created_at: now4
+      }
+    }
+  };
+}
+
+// apps/server/routes/health.ts
+function registerHealthRoutes(router) {
+  router.get("/api/health", ({ json: json3 }) => {
+    return json3(200, {
+      status: "ok",
+      service: "moke-agent-server",
+      ts: now3()
+    });
+  });
+}
+
+// apps/server/routes/runs.ts
+function registerRunRoutes(router) {
+  router.get("/api/runs/:id/events", ({ context: context2, params, raw }) => {
+    const run = getRun(context2, params.id);
+    raw.res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*"
+    });
+    for (const event of run.events) {
+      raw.res.write(`event: ${event.type}
+data: ${JSON.stringify(event)}
+
+`);
+    }
+    if (isTerminalRun(run)) {
+      raw.res.end();
+      return rawResponse();
+    }
+    run.clients.add(raw.res);
+    raw.req.on("close", () => run.clients.delete(raw.res));
+    return rawResponse();
+  });
+  router.post("/api/runs/:id/respond", async ({ body, context: context2, json: json3, params }) => {
+    const run = getRun(context2, params.id);
+    const requestBody = await body();
+    const type = typeof requestBody.type === "string" ? requestBody.type : "";
+    if (type === "choose") {
+      return handleChoose(context2, run, requestBody, json3);
+    }
+    if (type === "approve") {
+      return handleApprove(context2, run, requestBody, json3);
+    }
+    if (type === "cancel") {
+      context2.runManager.cancel(run.id);
+      return json3(200, {
+        run_id: run.id,
+        status: "cancelled"
+      });
+    }
+    throw new HttpError(400, "BAD_REQUEST", "type must be choose, approve, or cancel");
+  });
+}
+function getRun(context2, id4) {
+  const run = context2.runs.get(id4);
+  if (!run) throw new HttpError(404, "RUN_NOT_FOUND", "Run not found");
+  return run;
+}
+function handleChoose(context2, run, body, json3) {
+  const requestId = typeof body.request_id === "string" ? body.request_id : "";
+  const optionId = typeof body.option_id === "string" ? body.option_id : "";
+  if (!requestId || !optionId) {
+    throw new HttpError(400, "BAD_REQUEST", "request_id and option_id are required");
+  }
+  const result = context2.runManager.answer(run.id, requestId, optionId);
+  if (result.status !== 200) {
+    throw new HttpError(
+      result.status,
+      result.status === 404 ? "RUN_NOT_FOUND" : result.status === 400 ? "BAD_REQUEST" : "ASK_NOT_PENDING",
+      result.error
+    );
+  }
+  return json3(200, {
+    run_id: result.run.id,
+    request_id: requestId,
+    status: result.run.status
+  });
+}
+function handleApprove(context2, run, body, json3) {
+  const requestId = typeof body.request_id === "string" ? body.request_id : "";
+  const decision = body.decision === "approved" ? "approved" : body.decision === "rejected" ? "rejected" : "";
+  const scope = body.scope === "once" || body.scope === "session" || body.scope === "persistent" ? body.scope : void 0;
+  if (!requestId || !decision) {
+    throw new HttpError(400, "BAD_REQUEST", "request_id and decision are required");
+  }
+  const result = context2.runManager.approve(run.id, requestId, decision, {
+    scope,
+    message: typeof body.message === "string" ? body.message : void 0
+  });
+  if (result.status !== 200) {
+    throw new HttpError(result.status, result.status === 404 ? "RUN_NOT_FOUND" : "APPROVAL_NOT_PENDING", result.error);
+  }
+  return json3(200, {
+    run_id: result.run.id,
+    request_id: requestId,
+    status: result.run.status
+  });
+}
+
+// apps/server/routes/sessions.ts
+function registerSessionRoutes(router) {
+  router.post("/api/sessions", async ({ body, context: context2, json: json3 }) => {
+    const requestBody = await body();
+    const session = {
+      id: id3("sess"),
+      title: typeof requestBody.title === "string" ? requestBody.title : "New Session",
+      created_at: now3(),
+      updated_at: now3(),
+      messages: [],
+      metadata: typeof requestBody.metadata === "object" && requestBody.metadata !== null ? requestBody.metadata : {}
+    };
+    context2.sessions.set(session.id, session);
+    context2.onChange();
+    return json3(200, { session });
+  });
+  router.get("/api/sessions", ({ context: context2, json: json3, query }) => {
+    const includeArchived = query.get("include_archived") === "true";
+    const visibleSessions = [...context2.sessions.values()].filter(
+      (session) => includeArchived || session.metadata?.archived !== true
+    );
+    return json3(200, {
+      sessions: visibleSessions.map(summarizeSession),
+      next_cursor: null
+    });
+  });
+  router.patch("/api/sessions/:id", async ({ body, context: context2, json: json3, params }) => {
+    const session = getSession(context2, params.id);
+    const result = applySessionUpdate(session, await body());
+    if (!result.ok) throw new HttpError(result.status, result.code, result.message);
+    session.updated_at = now3();
+    context2.onChange();
+    return json3(200, { session: summarizeSession(session) });
+  });
+  router.get("/api/sessions/:id", ({ context: context2, json: json3, params }) => {
+    const session = getSession(context2, params.id);
+    return json3(200, { session: summarizeSession(session), messages: session.messages });
+  });
+  router.post("/api/sessions/:id/fork", async ({ body, context: context2, json: json3, params }) => {
+    const source = getSession(context2, params.id);
+    const requestBody = await body();
+    const messageId2 = typeof requestBody.message_id === "string" ? requestBody.message_id : "";
+    const mode = typeof requestBody.mode === "string" ? requestBody.mode : "after";
+    if (!messageId2 || mode !== "after") {
+      throw new HttpError(400, "BAD_REQUEST", "message_id is required and mode must be after");
+    }
+    const forkedSession = forkSession({ source, messageId: messageId2, now: now3() });
+    if (!forkedSession) throw new HttpError(404, "MESSAGE_NOT_FOUND", "Message not found");
+    context2.sessions.set(forkedSession.id, forkedSession);
+    context2.onChange();
+    return json3(200, {
+      session: summarizeSession(forkedSession),
+      messages: forkedSession.messages
+    });
+  });
+  router.post("/api/sessions/:id/messages", async ({ body, context: context2, json: json3, params }) => {
+    const session = getSession(context2, params.id);
+    const requestBody = await body();
+    const message = requestBody.message && typeof requestBody.message === "object" ? requestBody.message : {};
+    const content = typeof message.content === "string" ? message.content.trim() : "";
+    if (!content) throw new HttpError(400, "BAD_REQUEST", "message.content is required");
+    maybeSetTitleFromFirstUserMessage(session, content);
+    session.messages.push({
+      id: id3("msg"),
+      role: "user",
+      content,
+      created_at: now3()
+    });
+    session.updated_at = now3();
+    const options = requestBody.options && typeof requestBody.options === "object" ? requestBody.options : {};
+    const run = context2.runManager.createRun(session, content, options);
+    return json3(200, {
+      run_id: run.id,
+      session_id: session.id,
+      events_url: `/api/runs/${run.id}/events`
+    });
+  });
+}
+function getSession(context2, id4) {
+  const session = context2.sessions.get(id4);
+  if (!session) throw new HttpError(404, "SESSION_NOT_FOUND", "Session not found");
+  return session;
+}
+
+// apps/server/routes/tools.ts
+function registerToolRoutes(router) {
+  router.get("/api/tools", ({ context: context2, json: json3 }) => {
+    return json3(200, {
+      tools: context2.toolRegistry.list().map(({ schema, ...tool2 }) => tool2)
+    });
+  });
+}
+
+// apps/server/routes/index.ts
+function createRoutes(context2) {
+  const router = createRouter();
+  registerHealthRoutes(router);
+  registerToolRoutes(router);
+  registerBrowserRoutes(router);
+  registerSessionRoutes(router);
+  registerRunRoutes(router);
+  return router.handler(context2);
+}
+
+// apps/server/services/mcp-tools.ts
+var import_node_fs3 = require("node:fs");
 
 // packages/mcp-client/src/index.ts
-var import_node_path4 = require("node:path");
+var import_node_path5 = require("node:path");
 var import_node_url = require("node:url");
-var import_promises5 = require("node:fs/promises");
+var import_promises6 = require("node:fs/promises");
 
 // node_modules/zod/v4/mini/parse.js
 init_core3();
@@ -106762,7 +107604,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task3.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -106779,7 +107621,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task: task2, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -106857,7 +107699,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -107118,12 +107960,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -108074,7 +108916,7 @@ var StdioClientTransport = class {
     if (this._process) {
       throw new Error("StdioClientTransport already started! If using Client class, note that connect() calls start() automatically.");
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve4, reject) => {
       this._process = (0, import_cross_spawn.default)(this._serverParams.command, this._serverParams.args ?? [], {
         // merge default env with server env because mcp server needs some env vars
         env: {
@@ -108091,7 +108933,7 @@ var StdioClientTransport = class {
         this.onerror?.(error51);
       });
       this._process.on("spawn", () => {
-        resolve2();
+        resolve4();
       });
       this._process.on("close", (_code) => {
         this._process = void 0;
@@ -108150,22 +108992,22 @@ var StdioClientTransport = class {
     if (this._process) {
       const processToClose = this._process;
       this._process = void 0;
-      const closePromise = new Promise((resolve2) => {
+      const closePromise = new Promise((resolve4) => {
         processToClose.once("close", () => {
-          resolve2();
+          resolve4();
         });
       });
       try {
         processToClose.stdin?.end();
       } catch {
       }
-      await Promise.race([closePromise, new Promise((resolve2) => setTimeout(resolve2, 2e3).unref())]);
+      await Promise.race([closePromise, new Promise((resolve4) => setTimeout(resolve4, 2e3).unref())]);
       if (processToClose.exitCode === null) {
         try {
           processToClose.kill("SIGTERM");
         } catch {
         }
-        await Promise.race([closePromise, new Promise((resolve2) => setTimeout(resolve2, 2e3).unref())]);
+        await Promise.race([closePromise, new Promise((resolve4) => setTimeout(resolve4, 2e3).unref())]);
       }
       if (processToClose.exitCode === null) {
         try {
@@ -108177,15 +109019,15 @@ var StdioClientTransport = class {
     this._readBuffer.clear();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve4) => {
       if (!this._process?.stdin) {
         throw new Error("Not connected");
       }
       const json3 = serializeMessage(message);
       if (this._process.stdin.write(json3)) {
-        resolve2();
+        resolve4();
       } else {
-        this._process.stdin.once("drain", resolve2);
+        this._process.stdin.once("drain", resolve4);
       }
     });
   }
@@ -108228,7 +109070,7 @@ var mcpConfigInputSchema = external_exports2.union([
   }).strict()
 ]);
 async function loadMcpConfig(path6) {
-  const raw = await (0, import_promises5.readFile)(path6, "utf8");
+  const raw = await (0, import_promises6.readFile)(path6, "utf8");
   const parsed = JSON.parse(raw);
   return normalizeMcpConfig(mcpConfigInputSchema.parse(parsed));
 }
@@ -108298,8 +109140,8 @@ var McpManager = class {
     client2.setRequestHandler(ListRootsRequestSchema, async () => ({
       roots
     }));
-    await withTimeout2(client2.connect(transport), config2.timeout_ms, `MCP server ${config2.id} connect timed out`);
-    const toolList = await withTimeout2(client2.listTools(), config2.timeout_ms, `MCP server ${config2.id} listTools timed out`);
+    await withTimeout3(client2.connect(transport), config2.timeout_ms, `MCP server ${config2.id} connect timed out`);
+    const toolList = await withTimeout3(client2.listTools(), config2.timeout_ms, `MCP server ${config2.id} listTools timed out`);
     const disabledTools = new Set(config2.disabled_tools);
     const tools2 = (toolList.tools || []).filter((tool2) => !disabledTools.has(tool2.name)).map((tool2) => ({
       name: createNamespacedToolName(config2.id, tool2.name),
@@ -108333,7 +109175,7 @@ var McpManager = class {
     const tool2 = this.findTool(namespacedName);
     const connection = this.connections.get(tool2.serverId);
     if (!connection) throw new Error(`MCP server is not connected: ${tool2.serverId}`);
-    return withTimeout2(
+    return withTimeout3(
       connection.client.callTool({
         name: tool2.originalName,
         arguments: input
@@ -108359,14 +109201,14 @@ function createRoots(config2, workspace = process.cwd()) {
   return configuredRoots.map((root) => {
     const path6 = typeof root === "string" ? root : root.path;
     const name = typeof root === "string" ? void 0 : root.name;
-    const resolvedPath = (0, import_node_path4.resolve)(workspace, path6);
+    const resolvedPath = (0, import_node_path5.resolve)(workspace, path6);
     return {
       uri: (0, import_node_url.pathToFileURL)(resolvedPath).toString(),
       ...name ? { name } : {}
     };
   });
 }
-async function withTimeout2(promise2, timeoutMs, message) {
+async function withTimeout3(promise2, timeoutMs, message) {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(message)), timeoutMs);
@@ -108378,7 +109220,7 @@ async function withTimeout2(promise2, timeoutMs, message) {
   }
 }
 
-// apps/server/mcp-tools.ts
+// apps/server/services/mcp-tools.ts
 function describeMcpTool(tool2) {
   const schema = JSON.stringify(tool2.inputSchema);
   const schemaHint = schema && schema !== "{}" ? ` Input schema: ${schema.slice(0, 1200)}` : "";
@@ -108444,7 +109286,7 @@ function truncateMcpOutput(output, maxChars) {
   };
 }
 async function registerMcpTools(toolRegistry, mcpConfigPath, workspace) {
-  if (!(0, import_node_fs2.existsSync)(mcpConfigPath)) return void 0;
+  if (!(0, import_node_fs3.existsSync)(mcpConfigPath)) return void 0;
   try {
     const config2 = await loadMcpConfig(mcpConfigPath);
     const mcpManager = new McpManager(config2, { workspace });
@@ -108497,247 +109339,64 @@ async function registerMcpTools(toolRegistry, mcpConfigPath, workspace) {
   }
 }
 
-// apps/server/routes.ts
-var import_node_crypto5 = require("node:crypto");
-
-// apps/server/http.ts
-function json2(res, status, body) {
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
-  });
-  res.end(JSON.stringify(body));
-}
-async function readJson(req) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-function route(method, pathname) {
-  return {
-    method,
-    parts: pathname.split("/").filter(Boolean)
-  };
-}
-
-// apps/server/routes.ts
-function id3(prefix) {
-  return `${prefix}_${(0, import_node_crypto5.randomUUID)().slice(0, 8)}`;
-}
-function now3() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function isTerminalRun(run) {
-  return ["completed", "failed", "cancelled", "timeout"].includes(run.status);
-}
-function summarizeSession(session) {
-  const { messages, metadata, ...summary } = session;
-  return {
-    ...summary,
-    preview: messages.find((message) => message.role === "user")?.content.slice(0, 42) || session.title,
-    message_count: messages.length
-  };
-}
-function createRoutes({ sessions, runs, runManager, toolRegistry, browserBridge, onChange }) {
-  return async function handleRequest(req, res) {
-    try {
-      if (req.method === "OPTIONS") return json2(res, 204, {});
-      const url2 = new URL(req.url || "/", `http://${req.headers.host}`);
-      const { method, parts } = route(req.method || "GET", url2.pathname);
-      if (method === "GET" && url2.pathname === "/api/health") {
-        return json2(res, 200, {
-          status: "ok",
-          service: "moke-agent-server",
-          ts: now3()
-        });
-      }
-      if (method === "GET" && url2.pathname === "/api/tools") {
-        return json2(res, 200, {
-          tools: toolRegistry.list().map(({ schema, ...tool2 }) => tool2)
-        });
-      }
-      if (method === "GET" && url2.pathname === "/api/browser/connect") {
-        browserBridge.connect(res);
-        req.on("close", () => browserBridge.disconnect(res));
-        return;
-      }
-      if (method === "POST" && url2.pathname === "/api/browser/respond") {
-        const body = await readJson(req);
-        const id4 = typeof body.id === "string" ? body.id : "";
-        if (!id4) {
-          return json2(res, 400, {
-            error: { code: "BAD_REQUEST", message: "id is required" }
-          });
-        }
-        const accepted = browserBridge.respond(id4, {
-          ok: body.ok !== false,
-          result: typeof body.result === "object" && body.result !== null ? body.result : {},
-          error: typeof body.error === "string" ? body.error : void 0
-        });
-        return json2(res, accepted ? 200 : 404, {
-          accepted
-        });
-      }
-      if (method === "POST" && url2.pathname === "/api/sessions") {
-        const body = await readJson(req);
-        const session = {
-          id: id3("sess"),
-          title: typeof body.title === "string" ? body.title : "New Session",
-          created_at: now3(),
-          updated_at: now3(),
-          messages: [],
-          metadata: typeof body.metadata === "object" && body.metadata !== null ? body.metadata : {}
-        };
-        sessions.set(session.id, session);
-        onChange();
-        return json2(res, 200, { session });
-      }
-      if (method === "GET" && url2.pathname === "/api/sessions") {
-        return json2(res, 200, {
-          sessions: [...sessions.values()].map(summarizeSession),
-          next_cursor: null
-        });
-      }
-      if (method === "GET" && parts[0] === "api" && parts[1] === "sessions" && parts.length === 3) {
-        const session = sessions.get(parts[2]);
-        if (!session) {
-          return json2(res, 404, {
-            error: { code: "SESSION_NOT_FOUND", message: "Session not found" }
-          });
-        }
-        return json2(res, 200, { session: summarizeSession(session), messages: session.messages });
-      }
-      if (method === "POST" && parts[0] === "api" && parts[1] === "sessions" && parts[3] === "messages") {
-        const session = sessions.get(parts[2]);
-        if (!session) {
-          return json2(res, 404, {
-            error: { code: "SESSION_NOT_FOUND", message: "Session not found" }
-          });
-        }
-        const body = await readJson(req);
-        const message = body.message && typeof body.message === "object" ? body.message : {};
-        const content = typeof message.content === "string" ? message.content.trim() : "";
-        if (!content) {
-          return json2(res, 400, {
-            error: { code: "BAD_REQUEST", message: "message.content is required" }
-          });
-        }
-        session.messages.push({
-          id: id3("msg"),
-          role: "user",
-          content,
-          created_at: now3()
-        });
-        session.updated_at = now3();
-        const options = body.options && typeof body.options === "object" ? body.options : {};
-        const run = runManager.createRun(session, content, options);
-        return json2(res, 200, {
-          run_id: run.id,
-          session_id: session.id,
-          events_url: `/api/runs/${run.id}/events`
-        });
-      }
-      if (method === "GET" && parts[0] === "api" && parts[1] === "runs" && parts[3] === "events") {
-        const run = runs.get(parts[2]);
-        if (!run) {
-          return json2(res, 404, {
-            error: { code: "RUN_NOT_FOUND", message: "Run not found" }
-          });
-        }
-        res.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "Access-Control-Allow-Origin": "*"
-        });
-        for (const event of run.events) {
-          res.write(`event: ${event.type}
-data: ${JSON.stringify(event)}
-
-`);
-        }
-        if (isTerminalRun(run)) {
-          res.end();
-          return;
-        }
-        run.clients.add(res);
-        req.on("close", () => run.clients.delete(res));
-        return;
-      }
-      if (method === "POST" && parts[0] === "api" && parts[1] === "runs" && parts[3] === "respond") {
-        const run = runs.get(parts[2]);
-        if (!run) {
-          return json2(res, 404, {
-            error: { code: "RUN_NOT_FOUND", message: "Run not found" }
-          });
-        }
-        const body = await readJson(req);
-        const type = typeof body.type === "string" ? body.type : "";
-        if (type === "choose") {
-          const requestId = typeof body.request_id === "string" ? body.request_id : "";
-          const optionId = typeof body.option_id === "string" ? body.option_id : "";
-          if (!requestId || !optionId) {
-            return json2(res, 400, {
-              error: { code: "BAD_REQUEST", message: "request_id and option_id are required" }
-            });
-          }
-          const result = runManager.answer(run.id, requestId, optionId);
-          if (result.status !== 200) {
-            return json2(res, result.status, {
-              error: {
-                code: result.status === 404 ? "RUN_NOT_FOUND" : result.status === 400 ? "BAD_REQUEST" : "ASK_NOT_PENDING",
-                message: result.error
-              }
-            });
-          }
-          return json2(res, 200, {
-            run_id: result.run.id,
-            request_id: requestId,
-            status: result.run.status
-          });
-        }
-        if (type === "approve") {
-          return json2(res, 200, {
-            run_id: run.id,
-            request_id: typeof body.request_id === "string" ? body.request_id : null,
-            status: "accepted"
-          });
-        }
-        if (type === "cancel") {
-          runManager.cancel(run.id);
-          return json2(res, 200, {
-            run_id: run.id,
-            status: "cancelled"
-          });
-        }
-        return json2(res, 400, {
-          error: { code: "BAD_REQUEST", message: "type must be choose, approve, or cancel" }
-        });
-      }
-      return json2(res, 404, {
-        error: { code: "NOT_FOUND", message: "Route not found" }
-      });
-    } catch (error51) {
-      return json2(res, 500, {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: error51 instanceof Error ? error51.message : "Unknown error"
-        }
-      });
-    }
-  };
-}
-
-// apps/server/state.ts
-var import_node_fs3 = require("node:fs");
-var import_node_path5 = require("node:path");
-function loadState({ statePath, sessions, runs }) {
-  if (!(0, import_node_fs3.existsSync)(statePath)) return;
+// apps/server/storage/permissions.ts
+var import_node_fs4 = require("node:fs");
+var import_node_path6 = require("node:path");
+function loadWorkspaceRootPermissions(permissionsPath) {
+  if (!(0, import_node_fs4.existsSync)(permissionsPath)) return [];
   try {
-    const parsed = JSON.parse((0, import_node_fs3.readFileSync)(statePath, "utf8"));
+    const parsed = JSON.parse((0, import_node_fs4.readFileSync)(permissionsPath, "utf8"));
+    return dedupeRoots(
+      (parsed.workspace_roots || []).map((permission) => ({
+        path: (0, import_node_path6.resolve)(permission.path),
+        added_at: typeof permission.added_at === "string" ? permission.added_at : (/* @__PURE__ */ new Date()).toISOString()
+      })).filter((permission) => permission.path)
+    );
+  } catch (error51) {
+    console.warn(`Failed to load permissions from ${permissionsPath}:`, error51);
+    return [];
+  }
+}
+function saveWorkspaceRootPermissions(permissionsPath, permissions) {
+  const payload = {
+    workspace_roots: dedupeRoots(permissions).sort((left, right) => left.path.localeCompare(right.path))
+  };
+  try {
+    (0, import_node_fs4.mkdirSync)((0, import_node_path6.dirname)(permissionsPath), { recursive: true });
+    (0, import_node_fs4.writeFileSync)(permissionsPath, `${JSON.stringify(payload, null, 2)}
+`);
+  } catch (error51) {
+    console.warn(`Failed to save permissions to ${permissionsPath}:`, error51);
+  }
+}
+function upsertWorkspaceRootPermission(permissions, root, now4 = (/* @__PURE__ */ new Date()).toISOString()) {
+  const normalizedRoot = (0, import_node_path6.resolve)(root);
+  const existing = permissions.find((permission) => samePath(permission.path, normalizedRoot));
+  if (existing) return permissions;
+  permissions.push({
+    path: normalizedRoot,
+    added_at: now4
+  });
+  return permissions;
+}
+function dedupeRoots(permissions) {
+  const result = [];
+  for (const permission of permissions) {
+    if (!result.some((item) => samePath(item.path, permission.path))) result.push(permission);
+  }
+  return result;
+}
+function samePath(left, right) {
+  return (0, import_node_path6.resolve)(left).toLowerCase() === (0, import_node_path6.resolve)(right).toLowerCase();
+}
+
+// apps/server/storage/state.ts
+var import_node_fs5 = require("node:fs");
+var import_node_path7 = require("node:path");
+function loadState({ statePath, sessions, runs }) {
+  if (!(0, import_node_fs5.existsSync)(statePath)) return;
+  try {
+    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(statePath, "utf8"));
     for (const session of parsed.sessions || []) {
       if (!session.id) continue;
       sessions.set(session.id, session);
@@ -108770,8 +109429,8 @@ function createStateSaver({ statePath, sessions, runs }) {
       runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run)
     };
     try {
-      (0, import_node_fs3.mkdirSync)((0, import_node_path5.dirname)(statePath), { recursive: true });
-      (0, import_node_fs3.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
+      (0, import_node_fs5.mkdirSync)((0, import_node_path7.dirname)(statePath), { recursive: true });
+      (0, import_node_fs5.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
 `);
     } catch (error51) {
       console.warn(`Failed to save state to ${statePath}:`, error51);
@@ -108789,41 +109448,44 @@ function createStateSaver({ statePath, sessions, runs }) {
 }
 
 // apps/server/app.ts
+function closeHttpServer(server) {
+  if (!server.listening) return Promise.resolve();
+  return new Promise((resolveClose, rejectClose) => {
+    server.close((error51) => {
+      if (error51) rejectClose(error51);
+      else resolveClose();
+    });
+  });
+}
 async function createApp() {
-  const root = process.env.MOKE_WORKSPACE || process.cwd();
-  const envPaths = [
-    process.env.MOKE_ENV_PATH,
-    (0, import_node_path6.join)(root, ".env")
-  ].filter((path6) => Boolean(path6));
-  for (const envPath of envPaths) {
-    if ((0, import_node_fs4.existsSync)(envPath)) {
-      process.loadEnvFile(envPath);
-      break;
-    }
-  }
-  const port = Number(process.env.PORT || 4010);
-  const statePath = process.env.MOKE_STATE_PATH || (0, import_node_path6.join)(root, ".moke/state.json");
-  const mcpConfigPath = process.env.MOKE_MCP_CONFIG || (0, import_node_path6.join)(root, ".moke/mcp.json");
+  const initialWorkspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+  const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialWorkspace));
+  if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
+  const config2 = resolveServerConfig();
+  const { mcpConfigPath, permissionsPath, port, statePath, workspace } = config2;
   const sessions = /* @__PURE__ */ new Map();
   const runs = /* @__PURE__ */ new Map();
-  const workspace = root;
-  const system = new LocalSystemBackend(workspace);
   const browserBridge = new BrowserBridge();
-  const browserBackend = new BrowserBridgeBackend(browserBridge);
-  const skillLoader = new SkillLoader(workspace);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
-  const toolRegistry = new ToolRegistry().register(createListSkillsTool(skillLoader)).register(createReadSkillTool(skillLoader));
-  registerAgentTools(toolRegistry, system);
-  registerBrowserTools(toolRegistry, browserBackend);
+  const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
+  const persistentWorkspaceRoots = loadWorkspaceRootPermissions(permissionsPath);
+  for (const permission of persistentWorkspaceRoots) {
+    system.approveWorkspaceRoot(permission.path);
+  }
   loadState({ statePath, sessions, runs });
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
-  const runManager = new RunManager({
+  const runManager = createRunManager({
     sessions,
     runs,
-    agent: new ReActAgent(),
     toolRegistry,
     workspace,
-    createSkillContentManager: () => new ContentManager(),
+    approveWorkspaceRoot: (root, scope) => {
+      system.approveWorkspaceRoot(root);
+      if (scope === "persistent") {
+        upsertWorkspaceRootPermission(persistentWorkspaceRoots, root);
+        saveWorkspaceRootPermissions(permissionsPath, persistentWorkspaceRoots);
+      }
+    },
     onChange: stateSaver.saveStateSoon
   });
   const server = import_node_http.default.createServer(
@@ -108840,8 +109502,10 @@ async function createApp() {
     port,
     server,
     close: async () => {
+      browserBridge.close();
       stateSaver.flush();
       await mcpManager?.close();
+      await closeHttpServer(server);
     }
   };
 }

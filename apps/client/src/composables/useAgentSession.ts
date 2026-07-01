@@ -21,10 +21,29 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const runError = ref('')
   let eventSource: EventSource | null = null
+  const seenEventKeys = new Set<string>()
 
   const sortedSessions = computed(() =>
     [...sessions.value].sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)),
   )
+
+  function resetEvents() {
+    events.value = []
+    seenEventKeys.clear()
+  }
+
+  function eventKey(event: AgentEvent) {
+    return event.id || `${event.seq || ''}:${event.type}:${event.ts || ''}`
+  }
+
+  function appendEvent(event: AgentEvent) {
+    const key = eventKey(event)
+    if (seenEventKeys.has(key)) return false
+
+    seenEventKeys.add(key)
+    events.value.push(event)
+    return true
+  }
 
   async function checkServer() {
     serverStatus.value = 'checking'
@@ -58,7 +77,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const data = await response.json()
     sessionId.value = data.session.id
     messages.value = []
-    events.value = []
+    resetEvents()
     streamingText.value = ''
     pendingApproval.value = null
     pendingAsk.value = null
@@ -107,7 +126,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     sessionId.value = ''
     messages.value = []
-    events.value = []
+    resetEvents()
     streamingText.value = ''
     pendingApproval.value = null
     pendingAsk.value = null
@@ -131,7 +150,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     if (id === sessionId.value || isRunning.value) return false
     if (!(await loadSessionMessages(id))) return false
 
-    events.value = []
+    resetEvents()
     streamingText.value = ''
     pendingApproval.value = null
     pendingAsk.value = null
@@ -160,7 +179,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     await loadSessions()
     sessionId.value = nextSessionId
     messages.value = data.messages || []
-    events.value = []
+    resetEvents()
     streamingText.value = ''
     pendingApproval.value = null
     pendingAsk.value = null
@@ -179,7 +198,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     if (!sessionId.value) return false
 
     messages.value.push({ role: 'user', content: trimmedContent, created_at: new Date().toISOString() })
-    events.value = []
+    resetEvents()
     streamingText.value = ''
     pendingApproval.value = null
     pendingAsk.value = null
@@ -248,7 +267,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     for (const type of eventTypes) {
       source.addEventListener(type, (message) => {
         const event = JSON.parse((message as MessageEvent).data) as AgentEvent
-        events.value.push(event)
+        if (!appendEvent(event)) return
 
         if (event.type === 'agent.message.delta') {
           streamingText.value += event.payload.content || ''

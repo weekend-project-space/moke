@@ -102,6 +102,20 @@ test('execute allows absolute command paths inside approved roots', async () => 
   assert.equal(backend.calls.length, 1);
 });
 
+test('execute separates stdout and stderr for local commands', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-execute-root-'));
+  try {
+    const system = new LocalSystemBackend(root);
+    const result = await system.execute('node', ['-e', "process.stdout.write('out'); process.stderr.write('err')"]);
+
+    assert.equal(result.exit_code, 0);
+    assert.equal(result.stdout, 'out');
+    assert.equal(result.stderr, 'err');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('execute rejects UNC paths', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');

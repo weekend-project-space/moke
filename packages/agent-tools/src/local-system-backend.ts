@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { lstat, mkdir, writeFile as writeLocalFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -180,18 +181,32 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   async execute(command: string, args: string[] = [], options?: SystemExecuteOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
     const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
-    const commandText = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
+    const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
     this.assertCommandPathsStayInApprovedRoots(commandText);
-    const result = await withTimeout(
-      this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`),
-      options?.timeoutMs,
-      command,
-    );
+    if (this.useLocalFsWrites) {
+      return this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+    }
 
+    const result = await withTimeout(this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`), options?.timeoutMs, command);
     return {
       exit_code: result.exitCode ?? 1,
       stdout: result.output,
       stderr: '',
+      duration_ms: Date.now() - startedAt,
+    };
+  }
+
+  private async executeLocalCommand(
+    commandText: string,
+    cwd: string,
+    startedAt: number,
+    timeoutMs: number | undefined,
+  ): Promise<SystemExecuteResult> {
+    const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
       duration_ms: Date.now() - startedAt,
     };
   }
@@ -298,6 +313,18 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function formatCommandText(command: string, args: string[], useLocalShell: boolean) {
+  if (useLocalShell && process.platform === 'win32') {
+    return `& ${[command, ...args].map(powerShellQuote).join(' ')}`;
+  }
+
+  return [command, ...args].map(shellQuote).join(' ');
+}
+
+function powerShellQuote(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
 function findAbsolutePathTokens(commandText: string) {
   const tokens = new Set<string>();
   const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
@@ -332,6 +359,77 @@ function findDriveRelativePathTokens(commandText: string) {
 
 function stripTrailingPunctuation(value: string) {
   return value.replace(/[),\].]+$/, '');
+}
+
+type LocalCommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
+function runLocalShellCommand(commandText: string, cwd: string, timeoutMs: number | undefined): Promise<LocalCommandResult> {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const windowsCommand = [
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+      '$OutputEncoding = [System.Text.Encoding]::UTF8',
+      '$null = chcp.com 65001',
+      commandText,
+    ].join('; ');
+    const child = isWindows
+      ? spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsCommand], {
+          cwd,
+          env: {
+            ...process.env,
+            DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
+            PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
+          },
+          windowsHide: true,
+        })
+      : spawn(commandText, {
+          cwd,
+          env: process.env,
+          shell: true,
+        });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve({
+        exitCode: code ?? 1,
+        stdout,
+        stderr,
+      });
+    });
+
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.kill();
+        reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
+      }, timeoutMs);
+    }
+  });
 }
 
 async function writeLocalTextFile(filePath: string, content: string) {
