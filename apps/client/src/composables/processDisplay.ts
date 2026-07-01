@@ -7,7 +7,7 @@ import type {
   ToolStepSummary,
   ToolStepViewItem,
 } from '../types/conversation'
-import { summarizeOutput, shortText } from './toolDisplay'
+import { summarizeOutput } from './toolDisplay'
 
 const DONE = '\u5df2\u5b8c\u6210'
 
@@ -94,7 +94,7 @@ function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined
     if (outputSummary && outputSummary !== DONE) return `${inputLabel} · ${outputSummary}`
   } catch {
     const text = outputRaw.replace(/\s+/g, ' ').trim()
-    if (text && text !== DONE) return `${inputLabel} · ${shortText(text, 72)}`
+    if (text && text !== DONE) return inputLabel
   }
 
   return inputLabel
@@ -193,7 +193,7 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
   try {
     const parsed = JSON.parse(outputRaw)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { preview: shortText(String(parsed ?? ''), 180) }
+      return { preview: String(parsed ?? '') }
     }
 
     const output = parsed as Record<string, any>
@@ -220,8 +220,8 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
     if (renderer === 'command') {
       return {
         exitCode: typeof output.exit_code === 'number' ? output.exit_code : undefined,
-        stderr: typeof output.stderr === 'string' ? shortText(output.stderr, 500) : undefined,
-        stdout: typeof output.stdout === 'string' ? shortText(output.stdout, 500) : undefined,
+        stderr: typeof output.stderr === 'string' ? output.stderr : undefined,
+        stdout: typeof output.stdout === 'string' ? output.stdout : undefined,
       }
     }
 
@@ -239,7 +239,7 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
 
     return { preview: summarizeOutput(output) }
   } catch {
-    return { preview: shortText(outputRaw, 240) }
+    return { preview: outputRaw }
   }
 }
 
@@ -258,7 +258,7 @@ function extractResultFiles(matches: unknown[]) {
         })
         .filter(Boolean),
     ),
-  ].slice(0, 8)
+  ]
 }
 
 function extractDirectoryEntries(entries: unknown[]) {
@@ -275,13 +275,12 @@ function extractDirectoryEntries(entries: unknown[]) {
       return ''
     })
     .filter(Boolean)
-    .slice(0, 12)
 }
 
 function previewFromOutput(output: Record<string, any>) {
   for (const key of ['content', 'text', 'stdout', 'data']) {
     const value = output[key]
-    if (typeof value === 'string' && value.trim()) return shortText(value, 500)
+    if (typeof value === 'string' && value.trim()) return value
   }
 
   return summarizeOutput(output)
@@ -296,8 +295,8 @@ function browserResultPreview(output: Record<string, any>) {
   if (title && url) return `${title} · ${url}`
   if (title) return title
   if (url) return url
-  if (text) return shortText(text, 240)
-  if (message) return shortText(message, 180)
+  if (text) return text
+  if (message) return message
   return summarizeOutput(output)
 }
 

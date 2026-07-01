@@ -142,8 +142,10 @@ function setJumpToBottomVisible(visible: boolean) {
 function shouldShowProcessDivider(item: DisplayItem, index: number) {
   if (item.type !== 'process-group') return false
 
-  const nextItem = props.displayItems[index + 1]
-  return nextItem?.type === 'message' && nextItem.message.role === 'assistant'
+  const nextItem = props.displayItems.slice(index + 1).find((candidate) => candidate.type !== 'time')
+  if (nextItem?.type === 'message' && nextItem.message.role === 'assistant') return true
+
+  return !nextItem && Boolean(props.streamingText)
 }
 
 watch(

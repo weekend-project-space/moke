@@ -161,9 +161,8 @@
   align-self: center;
   width: var(--content-width);
   max-width: min(var(--content-width), calc(100% - 24px));
-  height: 1px;
-  margin: 4px 0 8px;
-  background: rgba(60, 60, 67, 0.1);
+  margin: 6px 0 10px;
+  border-top: 1px solid rgba(60, 60, 67, 0.16);
 }
 
 .process-toggle-label {
@@ -359,7 +358,7 @@
   display: grid;
   gap: 7px;
   min-width: 0;
-  max-width: min(100%, 620px);
+  width: 100%;
   padding: 10px 10px 7px;
   border: 1px solid rgba(60, 60, 67, 0.08);
   border-radius: 6px;
@@ -375,35 +374,6 @@
   background: color-mix(in srgb, rgba(255, 59, 48, 0.05), rgba(246, 246, 248, 0.7) 65%);
 }
 
-.tool-result-console.command {
-  gap: 8px;
-}
-
-.tool-command-prompt {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: color-mix(in srgb, var(--ink-muted), var(--ink) 18%);
-  white-space: pre-wrap;
-}
-
-.tool-command-output {
-  max-height: 168px;
-  min-height: 40px;
-  margin: 0;
-  padding: 0;
-  overflow: auto;
-  border: 0;
-  color: color-mix(in srgb, var(--ink-soft), transparent 2%);
-  background: transparent;
-  font: inherit;
-  line-height: inherit;
-  white-space: pre-wrap;
-}
-
-.tool-command-output.error {
-  color: color-mix(in srgb, var(--danger), var(--ink-muted) 18%);
-}
-
 .tool-result-lines {
   display: grid;
   gap: 2px;
@@ -411,6 +381,97 @@
   max-height: 168px;
   overflow: auto;
   align-content: start;
+}
+
+.tool-command-card {
+  display: grid;
+  grid-template-rows: auto minmax(72px, auto) auto;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--ink-soft), transparent 2%);
+  background: #ededee;
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.tool-command-card.error {
+  background: color-mix(in srgb, rgba(255, 59, 48, 0.06), #ededee 82%);
+}
+
+.tool-command-header {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px 2px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 14%);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.tool-command-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-height: 190px;
+  padding: 5px 10px 8px;
+  overflow: auto;
+  scrollbar-color: rgba(60, 60, 67, 0.16) transparent;
+  scrollbar-width: thin;
+}
+
+.tool-command-prompt {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--ink), transparent 4%);
+}
+
+.tool-command-symbol {
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 16%);
+}
+
+.tool-command-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.tool-command-output {
+  min-height: 24px;
+  margin: 0 0 0 16px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 18%);
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.tool-command-output.error {
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 18%);
+}
+
+.tool-command-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+  padding: 4px 10px 7px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 18%);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.tool-command-card.error .tool-command-footer span:last-child {
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 28%);
 }
 
 .tool-result-line,
@@ -441,8 +502,34 @@
 }
 
 .tool-detail-output {
-  max-height: 180px;
-  margin-top: 0;
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 9px;
+  overflow: auto;
+  border: 1px solid rgba(60, 60, 67, 0.08);
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--ink-soft), transparent 4%);
+  background: rgba(246, 246, 248, 0.58);
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.tool-detail-output.compact {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.tool-content-oversize {
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  background: rgba(246, 246, 248, 0.68);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .tool-detail-output.error {
@@ -852,6 +939,13 @@
 
 .markdown h2 {
   font-size: 14px;
+}
+
+.markdown hr {
+  width: 100%;
+  margin: 0.5rem 0;
+  border: 0;
+  border-top: 1px solid rgba(60, 60, 67, 0.14);
 }
 
 .markdown ul,

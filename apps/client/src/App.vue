@@ -216,7 +216,7 @@ const timelineNote = computed(() => {
   if (runError.value) return runError.value
   if (pendingAsk.value) return 'Moke 正在等待你的回应'
   if (pendingApproval.value) return '需要你确认后继续执行'
-  if (isRunning.value) return 'Moke 正在思考和执行'
+  if (isRunning.value) return ''
   return ''
 })
 const showThinking = computed(
