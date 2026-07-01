@@ -259,7 +259,7 @@ function viewActionLabel(name: string) {
 }
 
 function changeActionLabel(name: string) {
-  if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return '\u53d8\u66f4\u6587\u4ef6'
+  if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return name
   if (['show_browser', 'hide_browser'].includes(name)) return '\u53d8\u66f4\u754c\u9762'
   return '\u53d8\u66f4\u9875\u9762'
 }

@@ -230,7 +230,10 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
     }
 
     if (renderer === 'file-change') {
-      return { preview: summarizeOutput(output) || '\u5df2\u5b8c\u6210' }
+      return {
+        path: typeof output.path === 'string' ? output.path : undefined,
+        preview: output.error ? String(output.error) : undefined,
+      }
     }
 
     if (renderer === 'browser') {
@@ -242,7 +245,6 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
     return { preview: outputRaw }
   }
 }
-
 function extractResultFiles(matches: unknown[]) {
   return [
     ...new Set(

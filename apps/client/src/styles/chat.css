@@ -354,15 +354,89 @@
   line-height: 1.45;
 }
 
+.tool-panel-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(60, 60, 67, 0.08);
+  border-radius: 6px;
+  background: rgba(246, 246, 248, 0.44);
+}
+
+.tool-panel-header {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 9px;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.09);
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 10%);
+  background: rgba(235, 235, 238, 0.78);
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.tool-panel-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-panel-header strong {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--success), var(--ink) 10%);
+  font-size: 12px;
+  font-weight: 520;
+}
+
+.tool-file-change-content {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tool-file-change-output {
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--ink-soft), transparent 3%);
+  background: transparent;
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.tool-file-change-output span {
+  display: block;
+  min-width: max-content;
+  padding: 0 9px 0 8px;
+  border-left: 3px solid transparent;
+}
+
+.tool-file-change-output .removed {
+  border-left-color: #d92d20;
+  color: #9f1d15;
+  background: rgba(255, 59, 48, 0.13);
+}
+
+.tool-file-change-output .added {
+  border-left-color: #16a34a;
+  color: #116b36;
+  background: rgba(52, 199, 89, 0.16);
+}
+
 .tool-result-console {
   display: grid;
   gap: 7px;
   min-width: 0;
   width: 100%;
-  padding: 10px 10px 7px;
-  border: 1px solid rgba(60, 60, 67, 0.08);
-  border-radius: 6px;
-  background: rgba(246, 246, 248, 0.62);
   color: color-mix(in srgb, var(--ink-soft), transparent 2%);
   font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
   font-size: 12.5px;
@@ -379,6 +453,7 @@
   gap: 2px;
   min-height: 84px;
   max-height: 168px;
+  padding: 8px 10px 0;
   overflow: auto;
   align-content: start;
 }
@@ -388,10 +463,7 @@
   grid-template-rows: auto minmax(72px, auto) auto;
   min-width: 0;
   width: 100%;
-  overflow: hidden;
-  border-radius: 8px;
   color: color-mix(in srgb, var(--ink-soft), transparent 2%);
-  background: #ededee;
   font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
   font-size: 12.5px;
   line-height: 1.55;
@@ -399,17 +471,6 @@
 
 .tool-command-card.error {
   background: color-mix(in srgb, rgba(255, 59, 48, 0.06), #ededee 82%);
-}
-
-.tool-command-header {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 4px 10px 2px;
-  color: color-mix(in srgb, var(--ink-muted), transparent 14%);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1.2;
 }
 
 .tool-command-body {
@@ -460,7 +521,7 @@
 
 .tool-command-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   min-height: 26px;
   padding: 4px 10px 7px;
@@ -472,6 +533,37 @@
 
 .tool-command-card.error .tool-command-footer span:last-child {
   color: color-mix(in srgb, var(--danger), var(--ink-muted) 28%);
+}
+
+.tool-cli-card {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #ededee;
+}
+
+.tool-cli-card.error {
+  background: color-mix(in srgb, rgba(255, 59, 48, 0.06), #ededee 82%);
+}
+
+.tool-cli-card pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 9px 10px;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--ink-soft), transparent 2%);
+  background: transparent;
+  font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.tool-cli-card.error pre {
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 18%);
 }
 
 .tool-result-line,
@@ -514,6 +606,12 @@
   font-size: 12.5px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.tool-panel-card .tool-detail-output {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .tool-detail-output.compact {

@@ -1,7 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ArrowDown } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import ActivityPanel from './components/ActivityPanel.vue'
 import ApprovalInlineBar from './components/ApprovalInlineBar.vue'
 import AskInlineBar from './components/AskInlineBar.vue'
 import BrowserPanel from './components/BrowserPanel.vue'
@@ -12,9 +11,8 @@ import SidebarPanel from './components/SidebarPanel.vue'
 import { useAgentSession } from './composables/useAgentSession'
 import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
 import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
-import { summarizeOutput } from './composables/toolDisplay'
 import { useResizablePanels } from './composables/useResizablePanels'
-import type { AgentEvent, Message, SessionSummary, TaskTemplate, TraceStep } from './types/conversation'
+import type { Message, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
@@ -121,7 +119,6 @@ const taskTemplates: TaskTemplate[] = [
     prompt: '帮我检查这段报错，先分析原因，再给出最小修复方案。',
   },
 ]
-const traceSteps = computed(() => events.value.map(toTraceStep).filter((step): step is TraceStep => Boolean(step)))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => (currentSession.value ? sessionLabel(currentSession.value) : '新会话'))
 const sessionSubtitle = computed(() => {
@@ -152,45 +149,6 @@ const toolLabels: Record<string, string> = {
   sed: '读取片段',
   view_image: '查看图片',
 }
-const progressLabels: Record<string, string> = {
-  编辑内容: '编辑',
-  运行命令: '处理',
-  读取文件: '读取',
-  查找内容: '查找',
-  浏览文件: '浏览',
-  运行检查: '检查',
-  读取片段: '读取',
-  查看图片: '查看',
-}
-const recentToolNames = computed(() => {
-  const names: string[] = []
-
-  for (const event of [...events.value].reverse()) {
-    if (event.type !== 'tool.call') continue
-
-    const rawName = String(event.payload.tool || '').trim()
-    const name = toolLabels[rawName] || rawName
-    if (!name || names.includes(name)) continue
-
-    names.push(name)
-  }
-
-  return names
-})
-const toolSummary = computed(() => {
-  const name = recentToolNames.value[0]
-  if (!name) return ''
-
-  return progressLabels[name] || name
-})
-const progressPanelSummary = computed(() => {
-  if (pendingApproval.value) return '需要确认'
-  if (pendingAsk.value) return '等待回应'
-  if (runError.value) return '遇到问题'
-  if (toolSummary.value) return isRunning.value ? `正在${toolSummary.value}` : '刚刚完成'
-  if (isRunning.value) return '处理中'
-  return '待命'
-})
 const {
   displayItems,
   lastAssistantMessage,
@@ -294,112 +252,6 @@ function formatTimelineTime(time: number) {
 
 function resizeComposer() {
   composerBox.value?.resize()
-}
-
-function toTraceStep(event: AgentEvent): TraceStep | null {
-  const payload = event.payload
-
-  if (event.type === 'agent.started') {
-    return {
-      id: event.id,
-      kind: 'input',
-      title: '理解任务',
-      detail: payload.input || 'Moke 正在理解你的任务',
-    }
-  }
-
-  if (event.type === 'agent.plan') {
-    return {
-      id: event.id,
-      kind: 'plan',
-      title: '安排步骤',
-      detail: 'Moke 正在决定先看哪里、后做什么',
-    }
-  }
-
-  if (event.type === 'agent.state') {
-    const labels: Record<string, string> = {
-      reason: '判断下一步',
-      act: '执行一步',
-      respond: '整理结果',
-    }
-    return {
-      id: event.id,
-      kind: payload.state || 'state',
-      title: labels[payload.state] || '继续处理',
-      detail: payload.state === 'respond' ? 'Moke 正在把结果整理成你能直接看的内容' : labels[payload.state] || 'Moke 正在继续处理',
-    }
-  }
-
-  if (event.type === 'tool.call') {
-    const title = toolLabels[payload.tool] || '处理内容'
-
-    return {
-      id: event.id,
-      kind: 'tool',
-      title,
-      detail: `正在${title}，不会在未确认时做高风险改动`,
-    }
-  }
-
-  if (event.type === 'tool.result') {
-    return {
-      id: event.id,
-      kind: payload.status === 'ok' ? 'observation' : 'error',
-      title: payload.status === 'ok' ? '完成一步' : '处理失败',
-      detail: summarizeOutput(payload.output),
-    }
-  }
-
-  if (event.type === 'approval.required') {
-    return {
-      id: event.id,
-      kind: 'approval',
-      title: '等待确认',
-      detail: payload.reason || '需要你确认后继续',
-    }
-  }
-
-  if (event.type === 'ask_user.required') {
-    return {
-      id: event.id,
-      kind: 'ask',
-      title: '等待回应',
-      detail: payload.question || 'Moke 需要更多信息',
-    }
-  }
-
-  if (event.type === 'agent.message.done') {
-    const message = payload.message as Message | undefined
-    if (!isFinalAssistantMessage(message)) return null
-
-    return {
-      id: event.id,
-      kind: 'final',
-      title: '交付结果',
-      detail: '已经把结果整理到对话里',
-    }
-  }
-
-  if (event.type === 'agent.done') {
-    return {
-      id: event.id,
-      kind: 'done',
-      title: '完成',
-      detail: '这次任务已结束，可以继续追问或复制结果',
-    }
-  }
-
-  if (event.type === 'agent.error') {
-    return {
-      id: event.id,
-      kind: 'error',
-      title: '遇到问题',
-      detail: payload.message || '未知问题',
-    }
-  }
-
-  return null
 }
 
 async function selectSession(id: string) {
@@ -601,9 +453,8 @@ onUnmounted(() => {
     ></div>
 
     <aside class="workspace">
-      <!-- Progress panel switching is disabled for now; the right workspace only hosts the browser. -->
-      <ActivityPanel v-if="false" :steps="traceSteps" :summary="progressPanelSummary" />
       <BrowserPanel ref="browserPanel" :active="!traceCollapsed" />
     </aside>
   </main>
 </template>
+

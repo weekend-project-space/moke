@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { computed } from 'vue'
 import type { ToolStepViewItem } from '../types/conversation'
 import { formatBytes, guardToolContent } from '../composables/toolContentGuard'
+import { createCliTextResultView, createFileChangeResultView } from '../composables/toolResultView'
 
 const props = defineProps<{
   step: ToolStepViewItem
@@ -20,20 +21,32 @@ const commandExitCode = computed(() =>
   typeof props.step.summary.exitCode === 'number' ? props.step.summary.exitCode : props.step.tone === 'error' ? 1 : 0,
 )
 const isCommandError = computed(() => props.step.tone === 'error' || Boolean(props.step.summary.stderr && !props.step.summary.stdout))
-const genericText = computed(() => props.step.summary.preview || (props.step.outputRaw ? '' : '\u7b49\u5f85\u7ed3\u679c'))
 const browserText = computed(() => props.step.summary.preview || browserFallbackText(props.step.toolName))
-const fileChangeText = computed(() => props.step.summary.preview || doneText)
-const guardedGenericText = computed(() => guardToolContent(genericText.value))
 const guardedBrowserText = computed(() => guardToolContent(browserText.value))
-const guardedFileChangeText = computed(() => guardToolContent(fileChangeText.value))
 const guardedFileReadText = computed(() => guardToolContent(props.step.summary.preview || ''))
 const guardedInputRaw = computed(() => guardToolContent(props.step.inputRaw || ''))
 const guardedOutputRaw = computed(() => guardToolContent(outputText.value))
+const fileChangeView = computed(() => createFileChangeResultView(props.step))
+const cliTextView = computed(() => createCliTextResultView(props.step))
+const guardedFileChangeContent = computed(() => guardToolContent(fileChangeView.value.contentText))
+const fileChangeLines = computed(() => guardedFileChangeContent.value.text.split('\n'))
+const isDiffFileChange = computed(() => props.step.toolName === 'edit_file')
+const fileHeaderPath = computed(() => fileChangeView.value.path || props.step.summary.path || props.step.objectLabel)
+const fileHeaderName = computed(() => fileName(fileHeaderPath.value))
+const fileHeaderStats = computed(() => {
+  if (isDiffFileChange.value) return diffStats(fileChangeLines.value)
+  if (props.step.renderer === 'file-change') return fileChangeView.value.metaItems.join(' ')
+  return ''
+})
+const guardedCliText = computed(() => guardToolContent(cliTextView.value.text))
 const resultCount = computed(() => props.step.summary.count ?? resultItems.value.length)
 const resultUnit = computed(() => (props.step.renderer === 'directory' ? '\u9879' : '\u6761'))
 const resultStatusText = computed(() => (props.step.tone === 'error' ? '\u5931\u8d25' : '\u6210\u529f'))
 const resultEmptyText = computed(() => {
-  if (props.step.tone === 'error') return props.step.summary.preview || (props.step.renderer === 'directory' ? '\u8bfb\u53d6\u76ee\u5f55\u5931\u8d25' : '\u641c\u7d22\u5931\u8d25')
+  if (props.step.tone === 'error') {
+    return props.step.summary.preview || (props.step.renderer === 'directory' ? '\u8bfb\u53d6\u76ee\u5f55\u5931\u8d25' : '\u641c\u7d22\u5931\u8d25')
+  }
+
   return props.step.renderer === 'directory' ? '\u76ee\u5f55\u4e3a\u7a7a' : '\u6ca1\u6709\u627e\u5230\u76f8\u5173\u7ed3\u679c'
 })
 
@@ -46,12 +59,37 @@ function browserFallbackText(toolName: string) {
   if (toolName === 'wait_for') return '\u5df2\u7b49\u5230\u76ee\u6807\u72b6\u6001'
   return doneText
 }
+
+function fileChangeLineText(line: string) {
+  if (!isDiffFileChange.value) return line
+  if (line.startsWith('- ') || line.startsWith('+ ')) return line.slice(2)
+  return line
+}
+
+function fileName(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) || path || props.step.toolName
+}
+
+function diffStats(lines: string[]) {
+  const added = lines.filter((line) => line.startsWith('+ ')).length
+  const removed = lines.filter((line) => line.startsWith('- ')).length
+  const parts: string[] = []
+
+  if (added) parts.push(`+${added}`)
+  if (removed) parts.push(`-${removed}`)
+
+  return parts.join(' ')
+}
 </script>
 
 <template>
   <div class="tool-detail">
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
-      <div class="tool-result-console" :class="{ error: step.tone === 'error' }">
+      <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
+        <div class="tool-panel-header">
+          <span>{{ step.summary.path || step.summary.query || step.objectLabel || step.actionLabel }}</span>
+          <strong>{{ resultCount }} {{ resultUnit }}</strong>
+        </div>
         <div class="tool-result-lines">
           <div v-if="guardedResultItems.isOversize" class="tool-content-oversize">
             Content is {{ formatBytes(guardedResultItems.bytes) }}. It is larger than 100 kB and is not rendered inline.
@@ -69,9 +107,10 @@ function browserFallbackText(toolName: string) {
     </template>
 
     <template v-else-if="step.renderer === 'command'">
-      <div class="tool-command-card" :class="{ error: isCommandError }">
-        <div class="tool-command-header">
+      <div class="tool-panel-card tool-command-card" :class="{ error: isCommandError }">
+        <div class="tool-panel-header">
           <span>Shell</span>
+          <strong>Exit {{ commandExitCode }}</strong>
         </div>
         <div class="tool-command-body">
           <div class="tool-command-prompt">
@@ -84,26 +123,42 @@ function browserFallbackText(toolName: string) {
           <div v-else class="tool-command-output" :class="{ error: isCommandError }">{{ guardedCommandOutput.text }}</div>
         </div>
         <div class="tool-command-footer">
-          <span>Exit {{ commandExitCode }}</span>
           <span>{{ commandStatusText }}</span>
         </div>
       </div>
     </template>
 
     <template v-else-if="step.renderer === 'file-read'">
-      <p v-if="guardedFileReadText.isOversize" class="tool-content-oversize">
-        Content is {{ formatBytes(guardedFileReadText.bytes) }}. It is larger than 100 kB and is not rendered inline.
-      </p>
-      <pre v-else-if="guardedFileReadText.text" class="tool-detail-output">{{ guardedFileReadText.text }}</pre>
-      <p v-else class="tool-detail-note">读取内容为空</p>
+      <div class="tool-panel-card">
+        <div class="tool-panel-header">
+          <span>{{ fileHeaderName }}</span>
+        </div>
+        <p v-if="guardedFileReadText.isOversize" class="tool-content-oversize">
+          Content is {{ formatBytes(guardedFileReadText.bytes) }}. It is larger than 100 kB and is not rendered inline.
+        </p>
+        <pre v-else-if="guardedFileReadText.text" class="tool-detail-output">{{ guardedFileReadText.text }}</pre>
+        <p v-else class="tool-detail-note">\u8bfb\u53d6\u5185\u5bb9\u4e3a\u7a7a</p>
+      </div>
     </template>
 
     <template v-else-if="step.renderer === 'file-change'">
-      <p v-if="fileChangeText === doneText" class="tool-detail-note">{{ fileChangeText }}</p>
-      <p v-else-if="guardedFileChangeText.isOversize" class="tool-content-oversize">
-        Content is {{ formatBytes(guardedFileChangeText.bytes) }}. It is larger than 100 kB and is not rendered inline.
-      </p>
-      <pre v-else class="tool-detail-output">{{ guardedFileChangeText.text }}</pre>
+      <div class="tool-panel-card">
+        <div class="tool-panel-header">
+          <span>{{ fileHeaderName }}</span>
+          <strong v-if="fileHeaderStats">{{ fileHeaderStats }}</strong>
+        </div>
+        <p v-if="guardedFileChangeContent.isOversize" class="tool-content-oversize">
+          Content is {{ formatBytes(guardedFileChangeContent.bytes) }}. It is larger than 100 kB and is not rendered inline.
+        </p>
+        <div v-else-if="guardedFileChangeContent.text" class="tool-file-change-content">
+          <pre class="tool-file-change-output"><span
+            v-for="(line, index) in fileChangeLines"
+            :key="index"
+            :class="{ removed: isDiffFileChange && line.startsWith('- '), added: isDiffFileChange && line.startsWith('+ ') }"
+          >{{ fileChangeLineText(line) }}</span></pre>
+        </div>
+        <p v-else class="tool-detail-note">{{ fileChangeView.emptyText }}</p>
+      </div>
     </template>
 
     <template v-else-if="step.renderer === 'browser'">
@@ -114,11 +169,12 @@ function browserFallbackText(toolName: string) {
     </template>
 
     <template v-else>
-      <p v-if="guardedGenericText.isOversize" class="tool-content-oversize">
-        Content is {{ formatBytes(guardedGenericText.bytes) }}. It is larger than 100 kB and is not rendered inline.
-      </p>
-      <pre v-else-if="guardedGenericText.text && guardedGenericText.text !== doneText" class="tool-detail-output">{{ guardedGenericText.text }}</pre>
-      <p v-else class="tool-detail-note">{{ genericText || doneText }}</p>
+      <div class="tool-cli-card" :class="{ error: step.tone === 'error' }">
+        <p v-if="guardedCliText.isOversize" class="tool-content-oversize">
+          Content is {{ formatBytes(guardedCliText.bytes) }}. It is larger than 100 kB and is not rendered inline.
+        </p>
+        <pre v-else>{{ guardedCliText.text }}</pre>
+      </div>
     </template>
 
     <details v-if="hasRawData" class="tool-detail-raw">
@@ -131,14 +187,14 @@ function browserFallbackText(toolName: string) {
       </summary>
       <div class="tool-detail-raw-grid">
         <div v-if="step.inputRaw" class="process-json-block">
-          <span>输入</span>
+          <span>\u8f93\u5165</span>
           <p v-if="guardedInputRaw.isOversize" class="tool-content-oversize">
             Content is {{ formatBytes(guardedInputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
           </p>
           <pre v-else>{{ guardedInputRaw.text }}</pre>
         </div>
         <div class="process-json-block">
-          <span>输出</span>
+          <span>\u8f93\u51fa</span>
           <p v-if="guardedOutputRaw.isOversize" class="tool-content-oversize">
             Content is {{ formatBytes(guardedOutputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
           </p>
