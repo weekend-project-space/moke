@@ -85383,11 +85383,6 @@ function getMessageText(message) {
 function isAI(message) {
   return AIMessage.isInstance(message);
 }
-function createFinishReminder(aiMessage) {
-  const content = getMessageText(aiMessage).trim();
-  const answer = content ? ` Use this answer as finish.content if it is already complete: ${JSON.stringify(content)}` : "";
-  return new SystemMessage(`You must call the ${FINISH_TOOL_NAME} tool to end this run.${answer}`);
-}
 
 // node_modules/@langchain/openai/dist/utils/errors.js
 function addLangChainErrorFields2(error51, lc_error_code) {
@@ -100128,6 +100123,26 @@ function messageId() {
 function toToolCallArgs(args) {
   return args && typeof args === "object" && !Array.isArray(args) ? args : {};
 }
+async function streamModelStep(input) {
+  const chunks = [];
+  await withTimeout(
+    (async () => {
+      const stream = await input.model.stream(input.messages, { signal: input.signal });
+      for await (const chunk of stream) {
+        throwIfAborted(input.signal);
+        chunks.push(chunk);
+        const content = getMessageText(chunk);
+        if (content) input.eventBus.emit("agent.message.delta", { content });
+      }
+    })(),
+    input.timeoutMs,
+    input.signal
+  );
+  if (chunks.length === 0) {
+    throw new Error("LLM stream completed without output");
+  }
+  return chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]);
+}
 var ReActAgent = class {
   constructor(config2 = {}) {
     this.config = config2;
@@ -100152,6 +100167,7 @@ var ReActAgent = class {
     ];
     let toolCalls = 0;
     let finalContent = "";
+    let finalContentStreamed = false;
     let hasObservation = false;
     eventBus.emit("agent.started", { input });
     eventBus.emit("agent.plan", {
@@ -100164,18 +100180,21 @@ var ReActAgent = class {
       throwIfAborted(context2.abortSignal);
       eventBus.emit("agent.state", { state: "reason" });
       messages[0] = createSystemMessage(runtimeTools, context2);
-      const aiMessage = await withTimeout(modelWithTools.invoke(messages, { signal: context2.abortSignal }), timeoutMs, context2.abortSignal);
+      const aiMessage = await streamModelStep({
+        eventBus,
+        messages,
+        model: modelWithTools,
+        signal: context2.abortSignal,
+        timeoutMs
+      });
       throwIfAborted(context2.abortSignal);
       messages.push(aiMessage);
       const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
       if (calls.length === 0) {
         const content2 = getMessageText(aiMessage).trim();
-        if (!hasObservation) {
-          finalContent = content2 || "\u6211\u6682\u65F6\u6CA1\u6709\u66F4\u591A\u53EF\u8865\u5145\u7684\u4FE1\u606F\u3002";
-          break;
-        }
-        messages.push(createFinishReminder(aiMessage));
-        continue;
+        finalContent = content2 || "\u6211\u6682\u65F6\u6CA1\u6709\u66F4\u591A\u53EF\u8865\u5145\u7684\u4FE1\u606F\u3002";
+        finalContentStreamed = Boolean(content2);
+        break;
       }
       const callEntries = calls.map((call3) => ({
         call: call3,
@@ -100311,7 +100330,7 @@ var ReActAgent = class {
     const content = finalContent;
     const message = createFinalMessage(content);
     eventBus.emit("agent.state", { state: "respond" });
-    eventBus.emit("agent.message.delta", { content });
+    if (!finalContentStreamed) eventBus.emit("agent.message.delta", { content });
     eventBus.emit("agent.message.done", { message });
     return { toolCalls, message };
   }

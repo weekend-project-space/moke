@@ -478,6 +478,7 @@ onUnmounted(() => {
         :display-items="displayItems"
         :last-assistant-content="lastAssistantMessage?.content || ''"
         :scroll-key="conversationScrollKey"
+        :is-running="isRunning"
         :show-empty-state="showEmptyState"
         :show-result-actions="showResultActions"
         :show-thinking="showThinking"

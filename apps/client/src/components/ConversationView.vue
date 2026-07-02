@@ -13,6 +13,7 @@ const props = defineProps<{
   lastAssistantContent: string
   scrollKey: string
   showEmptyState: boolean
+  isRunning: boolean
   showResultActions: boolean
   showThinking: boolean
   streamingText: string
@@ -202,7 +203,7 @@ defineExpose({
 
     <div v-if="streamingText" class="message-row assistant">
       <article class="bubble assistant">
-        <div class="markdown streaming" v-html="renderMarkdown(streamingText)"></div>
+        <div class="markdown" :class="{ streaming: isRunning }" v-html="renderMarkdown(streamingText)"></div>
       </article>
     </div>
     <div v-else-if="showThinking" class="message-row assistant">
