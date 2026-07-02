@@ -7,6 +7,7 @@ import BrowserPanel from './components/BrowserPanel.vue'
 import ChatHeader from './components/ChatHeader.vue'
 import ComposerBox from './components/ComposerBox.vue'
 import ConversationView from './components/ConversationView.vue'
+import SettingsPage from './components/SettingsPage.vue'
 import SidebarPanel from './components/SidebarPanel.vue'
 import { useAgentSession } from './composables/useAgentSession'
 import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
@@ -20,6 +21,7 @@ const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const copiedKey = ref('')
 const showJumpToBottom = ref(false)
+const showSettings = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 let runtimeTimer: number | undefined
@@ -124,8 +126,12 @@ const taskTemplates: TaskTemplate[] = [
   },
 ]
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
-const currentTitle = computed(() => (currentSession.value ? sessionLabel(currentSession.value) : '新会话'))
+const currentTitle = computed(() => {
+  if (showSettings.value) return '设置'
+  return currentSession.value ? sessionLabel(currentSession.value) : '新会话'
+})
 const sessionSubtitle = computed(() => {
+  if (showSettings.value) return '模型、权限和浏览器'
   if (pendingAsk.value) return '等待回应'
   if (pendingApproval.value) return '等待确认'
   if (isRunning.value) return '处理中'
@@ -286,6 +292,7 @@ function resizeComposer() {
 async function selectSession(id: string) {
   conversationView.value?.resetAutoScroll()
   if (await selectAgentSession(id)) {
+    showSettings.value = false
     writeSessionIdToHash(id)
     closeTransientPanels()
   }
@@ -293,6 +300,7 @@ async function selectSession(id: string) {
 
 async function startNewSession() {
   if (await createSession()) {
+    showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
   }
@@ -301,6 +309,7 @@ async function startNewSession() {
 async function forkMessage(messageId: string) {
   conversationView.value?.resetAutoScroll()
   if (await forkSession(messageId)) {
+    showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
   }
@@ -310,6 +319,15 @@ async function archiveSelectedSession(id: string) {
   if (await archiveSession(id)) {
     writeSessionIdToHash(sessionId.value)
   }
+}
+
+function openSettings() {
+  showSettings.value = true
+  closeTransientPanels()
+}
+
+function closeSettings() {
+  showSettings.value = false
 }
 
 function sendOnEnter(event: KeyboardEvent) {
@@ -422,10 +440,10 @@ onUnmounted(() => {
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
       @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
-      :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :session-label="sessionLabel"
+      :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
       :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
       @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
-      @pin-session="pinSession" />
+      @pin-session="pinSession" @open-settings="openSettings" />
     <div
       class="sidebar-resizer"
       role="separator"
@@ -447,7 +465,14 @@ onUnmounted(() => {
         @toggle-workspace="toggleWorkspace"
       />
 
+      <SettingsPage
+        v-if="showSettings"
+        :api-base="apiBase"
+        @close="closeSettings"
+        @open-browser-url="openLinkInBrowser"
+      />
       <ConversationView
+        v-else
         ref="conversationView"
         :copied-key="copiedKey"
         :display-items="displayItems"
@@ -467,7 +492,7 @@ onUnmounted(() => {
         @toggle-process-group="toggleProcessGroup"
       />
       <button
-        v-if="showJumpToBottom"
+        v-if="showJumpToBottom && !showSettings"
         class="jump-inline"
         type="button"
         aria-label="跳到底部"
@@ -477,12 +502,12 @@ onUnmounted(() => {
         <ArrowDown :size="15" stroke-width="2.2" />
       </button>
       <ApprovalInlineBar
-        v-if="pendingApproval"
+        v-if="pendingApproval && !showSettings"
         :approval="pendingApproval"
         @approve="decideApproval($event.decision, $event.scope)"
       />
-      <AskInlineBar v-if="pendingAsk" :ask="pendingAsk" @select="selectAskOption" />
-      <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
+      <AskInlineBar v-if="pendingAsk && !showSettings" :ask="pendingAsk" @select="selectAskOption" />
+      <ComposerBox v-if="!showSettings" ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
         :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
         @enter="sendOnEnter" @submit="handlePrimaryAction" />
     </section>

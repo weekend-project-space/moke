@@ -3,6 +3,7 @@ import type { RoutesContext } from './context.js';
 import { registerBrowserRoutes } from './browser.js';
 import { registerHealthRoutes } from './health.js';
 import { registerRunRoutes } from './runs.js';
+import { registerSettingRoutes } from './settings.js';
 import { registerSessionRoutes } from './sessions.js';
 import { registerToolRoutes } from './tools.js';
 
@@ -13,6 +14,7 @@ export function createRoutes(context: RoutesContext) {
   registerToolRoutes(router);
   registerBrowserRoutes(router);
   registerSessionRoutes(router);
+  registerSettingRoutes(router);
   registerRunRoutes(router);
 
   return router.handler(context);

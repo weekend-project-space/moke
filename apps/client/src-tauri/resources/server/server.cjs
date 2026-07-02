@@ -5997,7 +5997,7 @@ async function onAttemptFailure({ error: error51, attemptNumber, retriesConsumed
   const delayTime = calculateDelay(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
   if (finalDelay > 0) {
-    await new Promise((resolve4, reject) => {
+    await new Promise((resolve5, reject) => {
       const onAbort = () => {
         clearTimeout(timeoutToken);
         options.signal?.removeEventListener("abort", onAbort);
@@ -6005,7 +6005,7 @@ async function onAttemptFailure({ error: error51, attemptNumber, retriesConsumed
       };
       const timeoutToken = setTimeout(() => {
         options.signal?.removeEventListener("abort", onAbort);
-        resolve4();
+        resolve5();
       }, finalDelay);
       if (options.unref) {
         timeoutToken.unref?.();
@@ -6267,11 +6267,11 @@ var require_p_finally = __commonJS({
       onFinally = onFinally || (() => {
       });
       return promise2.then(
-        (val) => new Promise((resolve4) => {
-          resolve4(onFinally());
+        (val) => new Promise((resolve5) => {
+          resolve5(onFinally());
         }).then(() => val),
-        (err) => new Promise((resolve4) => {
-          resolve4(onFinally());
+        (err) => new Promise((resolve5) => {
+          resolve5(onFinally());
         }).then(() => {
           throw err;
         })
@@ -6291,18 +6291,18 @@ var require_p_timeout = __commonJS({
         this.name = "TimeoutError";
       }
     };
-    var pTimeout = (promise2, milliseconds, fallback) => new Promise((resolve4, reject) => {
+    var pTimeout = (promise2, milliseconds, fallback) => new Promise((resolve5, reject) => {
       if (typeof milliseconds !== "number" || milliseconds < 0) {
         throw new TypeError("Expected `milliseconds` to be a positive number");
       }
       if (milliseconds === Infinity) {
-        resolve4(promise2);
+        resolve5(promise2);
         return;
       }
       const timer = setTimeout(() => {
         if (typeof fallback === "function") {
           try {
-            resolve4(fallback());
+            resolve5(fallback());
           } catch (error51) {
             reject(error51);
           }
@@ -6317,7 +6317,7 @@ var require_p_timeout = __commonJS({
       }, milliseconds);
       pFinally(
         // eslint-disable-next-line promise/prefer-await-to-then
-        promise2.then(resolve4, reject),
+        promise2.then(resolve5, reject),
         () => {
           clearTimeout(timer);
         }
@@ -6535,7 +6535,7 @@ var require_dist = __commonJS({
       Adds a sync or async task to the queue. Always returns a promise.
       */
       async add(fn, options = {}) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const run = async () => {
             this._pendingCount++;
             this._intervalCount++;
@@ -6546,7 +6546,7 @@ var require_dist = __commonJS({
                 }
                 return void 0;
               });
-              resolve4(await operation);
+              resolve5(await operation);
             } catch (error51) {
               reject(error51);
             }
@@ -6597,11 +6597,11 @@ var require_dist = __commonJS({
         if (this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           const existingResolve = this._resolveEmpty;
           this._resolveEmpty = () => {
             existingResolve();
-            resolve4();
+            resolve5();
           };
         });
       }
@@ -6614,11 +6614,11 @@ var require_dist = __commonJS({
         if (this._pendingCount === 0 && this._queue.size === 0) {
           return;
         }
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           const existingResolve = this._resolveIdle;
           this._resolveIdle = () => {
             existingResolve();
-            resolve4();
+            resolve5();
           };
         });
       }
@@ -7772,8 +7772,8 @@ parentPort.on("message", (msg) => {
         if (!ok)
           return null;
         const id4 = this.nextId++;
-        return new Promise((resolve4, reject) => {
-          this.pending.set(id4, { resolve: resolve4, reject });
+        return new Promise((resolve5, reject) => {
+          this.pending.set(id4, { resolve: resolve5, reject });
           try {
             this.worker.postMessage({ id: id4, op: "serialize", payload });
           } catch (e) {
@@ -7905,7 +7905,7 @@ var init_client = __esm({
       if (response?.status === 429) {
         const retryAfter = parseInt(response.headers.get("retry-after") ?? "10", 10) * 1e3;
         if (retryAfter > 0) {
-          await new Promise((resolve4) => setTimeout(resolve4, retryAfter));
+          await new Promise((resolve5) => setTimeout(resolve5, retryAfter));
           return true;
         }
       }
@@ -7942,8 +7942,8 @@ var init_client = __esm({
       }
       push(item) {
         let itemPromiseResolve;
-        const itemPromise = new Promise((resolve4) => {
-          itemPromiseResolve = resolve4;
+        const itemPromise = new Promise((resolve5) => {
+          itemPromiseResolve = resolve5;
         });
         const size = estimateSerializedSize(item.item).size;
         if (this.sizeBytes + size > this.maxSizeBytes && this.items.length > 0) {
@@ -12579,7 +12579,7 @@ Message: ${Array.isArray(result.detail) ? result.detail.join("\n") : "Unspecifie
           console.warn("[WARNING]: When tracing in manual flush mode, you must call `await client.flush()` manually to submit trace batches.");
           return Promise.resolve();
         }
-        await new Promise((resolve4) => setTimeout(resolve4, 1));
+        await new Promise((resolve5) => setTimeout(resolve5, 1));
         while (this._pendingDrains.size > 0) {
           await Promise.all([...this._pendingDrains]);
         }
@@ -15478,11 +15478,11 @@ var init_stream = __esm({
         this.generator = params.generator;
         this.config = params.config;
         this.signal = params.signal ?? this.config?.signal;
-        this.setup = new Promise((resolve4, reject) => {
+        this.setup = new Promise((resolve5, reject) => {
           AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(params.config), async () => {
             this.firstResult = this.signal ? raceWithSignal(params.generator.next(), this.signal) : params.generator.next();
-            if (params.startSetup) this.firstResult.then(params.startSetup).then(resolve4, reject);
-            else this.firstResult.then((_result) => resolve4(void 0), reject);
+            if (params.startSetup) this.firstResult.then(params.startSetup).then(resolve5, reject);
+            else this.firstResult.then((_result) => resolve5(void 0), reject);
           }, true);
         });
       }
@@ -16332,8 +16332,8 @@ var init_event_stream = __esm({
         let tappedPromise = this.tappedPromises.get(runId);
         if (tappedPromise === void 0) {
           let tappedPromiseResolver;
-          tappedPromise = new Promise((resolve4) => {
-            tappedPromiseResolver = resolve4;
+          tappedPromise = new Promise((resolve5) => {
+            tappedPromiseResolver = resolve5;
           });
           this.tappedPromises.set(runId, tappedPromise);
           try {
@@ -16706,7 +16706,7 @@ async function onAttemptFailure2({ error: error51, attemptNumber, retriesConsume
   }
   const delayTime = calculateDelay2(retriesConsumed, options);
   const finalDelay = Math.min(delayTime, remainingTime);
-  if (finalDelay > 0) await new Promise((resolve4, reject) => {
+  if (finalDelay > 0) await new Promise((resolve5, reject) => {
     const onAbort = () => {
       clearTimeout(timeoutToken);
       options.signal?.removeEventListener("abort", onAbort);
@@ -16714,7 +16714,7 @@ async function onAttemptFailure2({ error: error51, attemptNumber, retriesConsume
     };
     const timeoutToken = setTimeout(() => {
       options.signal?.removeEventListener("abort", onAbort);
-      resolve4();
+      resolve5();
     }, finalDelay);
     if (options.unref) timeoutToken.unref?.();
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -38076,7 +38076,7 @@ var init_base4 = __esm({
         return new RunnableLambda2({ func });
       }
       async _invoke(input, config2, runManager) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const childConfig = patchConfig(config2, {
             callbacks: runManager?.getChild(),
             recursionLimit: (config2?.recursionLimit ?? 25) - 1
@@ -38115,7 +38115,7 @@ var init_base4 = __esm({
                 }
                 output = finalOutput;
               }
-              resolve4(output);
+              resolve5(output);
             } catch (e) {
               reject(e);
             }
@@ -38137,10 +38137,10 @@ var init_base4 = __esm({
           callbacks: runManager?.getChild(),
           recursionLimit: (config2?.recursionLimit ?? 25) - 1
         });
-        const output = await new Promise((resolve4, reject) => {
+        const output = await new Promise((resolve5, reject) => {
           AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(childConfig), async () => {
             try {
-              resolve4(await this.func(finalChunk, {
+              resolve5(await this.func(finalChunk, {
                 ...childConfig,
                 config: childConfig
               }));
@@ -42904,12 +42904,12 @@ var init_stream2 = __esm({
             if (this.error) throw this.error;
             return;
           }
-          await new Promise((resolve4) => {
+          await new Promise((resolve5) => {
             if (cursor < this.events.length || this.finished) {
-              resolve4();
+              resolve5();
               return;
             }
-            this.waiters.push(resolve4);
+            this.waiters.push(resolve5);
           });
         }
       }
@@ -46584,11 +46584,11 @@ function tool(func, fields) {
     ...fields,
     description: fields.description ?? fields.schema?.description ?? `${fields.name} tool`,
     func: async (input, runManager, config2) => {
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve5, reject) => {
         const childConfig = patchConfig(config2, { callbacks: runManager?.getChild() });
         AsyncLocalStorageProviderSingleton2.runWithConfig(pickRunnableConfigKeys(childConfig), async () => {
           try {
-            resolve4(func(input, childConfig));
+            resolve5(func(input, childConfig));
           } catch (e) {
             reject(e);
           }
@@ -46603,7 +46603,7 @@ function tool(func, fields) {
     description,
     schema,
     func: async (input, runManager, config2) => {
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve5, reject) => {
         let listener;
         const cleanup = () => {
           if (config2?.signal && listener) config2.signal.removeEventListener("abort", listener);
@@ -46620,7 +46620,7 @@ function tool(func, fields) {
           try {
             const result = await func(input, childConfig);
             if (isAsyncGenerator(result)) {
-              resolve4(result);
+              resolve5(result);
               return;
             }
             if (config2?.signal?.aborted) {
@@ -46628,7 +46628,7 @@ function tool(func, fields) {
               return;
             }
             cleanup();
-            resolve4(result);
+            resolve5(result);
           } catch (e) {
             cleanup();
             reject(e);
@@ -53011,8 +53011,8 @@ var init_chat_models2 = __esm({
         if (this.sleep !== void 0) await this._sleep();
       }
       async _sleep() {
-        return new Promise((resolve4) => {
-          setTimeout(() => resolve4(), this.sleep);
+        return new Promise((resolve5) => {
+          setTimeout(() => resolve5(), this.sleep);
         });
       }
       _createResponseChunk(text, generationInfo) {
@@ -53212,7 +53212,7 @@ var init_llms2 = __esm({
         const response = this.responses?.[0];
         this.responses = this.responses?.slice(1);
         for (const c of response ?? input) {
-          await new Promise((resolve4) => setTimeout(resolve4, this.sleep));
+          await new Promise((resolve5) => setTimeout(resolve5, this.sleep));
           yield {
             text: c,
             generationInfo: {}
@@ -54435,20 +54435,20 @@ var init_batch = __esm({
         if (this.processingTask) await this.processingTask;
       }
       enqueueOperation(operation) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const key = this.nextKey;
           this.nextKey += 1;
           this.queue.set(key, {
             operation,
-            resolve: resolve4,
+            resolve: resolve5,
             reject
           });
         });
       }
       async processBatchQueue() {
         while (this.running) {
-          await new Promise((resolve4) => {
-            setTimeout(resolve4, 0);
+          await new Promise((resolve5) => {
+            setTimeout(resolve5, 0);
           });
           if (this.queue.size === 0) continue;
           const batch = new Map(this.queue);
@@ -54456,8 +54456,8 @@ var init_batch = __esm({
           try {
             const operations = Array.from(batch.values()).map(({ operation }) => operation);
             const results = await this.store.batch(operations);
-            batch.forEach(({ resolve: resolve4 }, key) => {
-              resolve4(results[Array.from(batch.keys()).indexOf(key)]);
+            batch.forEach(({ resolve: resolve5 }, key) => {
+              resolve5(results[Array.from(batch.keys()).indexOf(key)]);
             });
           } catch (e) {
             batch.forEach(({ reject }) => {
@@ -55551,7 +55551,7 @@ var init_stream_channel = __esm({
                 done: true
               };
             }
-            await new Promise((resolve4) => this.#waiters.push(resolve4));
+            await new Promise((resolve5) => this.#waiters.push(resolve5));
           }
         } };
       }
@@ -56527,8 +56527,8 @@ var init_run_stream = __esm({
         this.#eventStart = eventStart;
         this.extensions = extensions ?? {};
         this.#abortController = abortController ?? new AbortController();
-        this.#valuesDone = new Promise((resolve4, reject) => {
-          this.#resolveValuesFn = resolve4;
+        this.#valuesDone = new Promise((resolve5, reject) => {
+          this.#resolveValuesFn = resolve5;
           this.#rejectValuesFn = reject;
         });
         this.#valuesDone.catch(() => {
@@ -57165,11 +57165,11 @@ var init_utils8 = __esm({
         this.recurse = fields.recurse ?? this.recurse;
       }
       async _tracedInvoke(input, config2, runManager) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const childConfig = patchConfig(config2, { callbacks: runManager?.getChild() });
           AsyncLocalStorageProviderSingleton2.runWithConfig(childConfig, async () => {
             try {
-              resolve4(await this.func(input, childConfig));
+              resolve5(await this.func(input, childConfig));
             } catch (e) {
               reject(e);
             }
@@ -58661,8 +58661,8 @@ var init_stream5 = __esm({
       }
       constructor(params) {
         let streamControllerPromiseResolver;
-        const streamControllerPromise = new Promise((resolve4) => {
-          streamControllerPromiseResolver = resolve4;
+        const streamControllerPromise = new Promise((resolve5) => {
+          streamControllerPromiseResolver = resolve5;
         });
         super({ start: (controller) => {
           streamControllerPromiseResolver(controller);
@@ -59765,7 +59765,7 @@ async function _runWithRetry(pregelTask, retryPolicy, configurable, signal) {
       if (!(resolvedRetryPolicy.retryOn ?? DEFAULT_RETRY_ON_HANDLER)(error51)) break;
       interval = Math.min(resolvedRetryPolicy.maxInterval ?? 128e3, interval * (resolvedRetryPolicy.backoffFactor ?? 2));
       const intervalWithJitter = resolvedRetryPolicy.jitter ? Math.floor(interval + Math.random() * 1e3) : interval;
-      await new Promise((resolve4) => setTimeout(resolve4, intervalWithJitter));
+      await new Promise((resolve5) => setTimeout(resolve5, intervalWithJitter));
       const errorName = error51.name ?? error51.constructor.unminifiable_name ?? error51.constructor.name;
       if (resolvedRetryPolicy?.logWarning ?? true) console.log(`Retrying task "${String(pregelTask.name)}" after ${interval.toFixed(2)}ms (attempt ${attempts}) after ${errorName}: ${error51}`);
       config2 = patchConfigurable2(config2, { [CONFIG_KEY_RESUMING]: true });
@@ -59819,10 +59819,10 @@ function createPromiseBarrier() {
     next: () => void 0,
     wait: Promise.resolve(PROMISE_ADDED_SYMBOL)
   };
-  function waitHandler(resolve4) {
+  function waitHandler(resolve5) {
     barrier.next = () => {
       barrier.wait = new Promise(waitHandler);
-      resolve4(PROMISE_ADDED_SYMBOL);
+      resolve5(PROMISE_ADDED_SYMBOL);
     };
   }
   barrier.wait = new Promise(waitHandler);
@@ -61221,8 +61221,8 @@ var init_pregel = __esm({
               loopError = loopError ?? e;
             }
             if (loopError) {
-              await new Promise((resolve4) => {
-                queueMicrotask(resolve4);
+              await new Promise((resolve5) => {
+                queueMicrotask(resolve5);
               });
               stream.error(loopError);
             } else stream.close();
@@ -73713,8 +73713,8 @@ var init_multi_cursor_buffer = __esm({
                 done: true,
                 value: void 0
               };
-              await new Promise((resolve4) => {
-                this.#wakeups.add(resolve4);
+              await new Promise((resolve5) => {
+                this.#wakeups.add(resolve5);
               });
             }
           },
@@ -73881,8 +73881,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve4) => {
-                  waiters.push(resolve4);
+                await new Promise((resolve5) => {
+                  waiters.push(resolve5);
                 });
               }
             } };
@@ -73900,8 +73900,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve4) => {
-                  waiters.push(resolve4);
+                await new Promise((resolve5) => {
+                  waiters.push(resolve5);
                 });
               }
             } }) }) {
@@ -73928,8 +73928,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve4) => {
-                  waiters.push(resolve4);
+                await new Promise((resolve5) => {
+                  waiters.push(resolve5);
                 });
               }
             } };
@@ -73947,8 +73947,8 @@ var init_messages6 = __esm({
                   done: true,
                   value: void 0
                 };
-                await new Promise((resolve4) => {
-                  waiters.push(resolve4);
+                await new Promise((resolve5) => {
+                  waiters.push(resolve5);
                 });
               }
             } }) }) {
@@ -75662,41 +75662,41 @@ var require_queue = __commonJS({
       queue2.drained = drained;
       return queue2;
       function push2(value) {
-        var p = new Promise(function(resolve4, reject) {
+        var p = new Promise(function(resolve5, reject) {
           pushCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve4(result);
+            resolve5(result);
           });
         });
         p.catch(noop2);
         return p;
       }
       function unshift(value) {
-        var p = new Promise(function(resolve4, reject) {
+        var p = new Promise(function(resolve5, reject) {
           unshiftCb(value, function(err, result) {
             if (err) {
               reject(err);
               return;
             }
-            resolve4(result);
+            resolve5(result);
           });
         });
         p.catch(noop2);
         return p;
       }
       function drained() {
-        var p = new Promise(function(resolve4) {
+        var p = new Promise(function(resolve5) {
           process.nextTick(function() {
             if (queue2.idle()) {
-              resolve4();
+              resolve5();
             } else {
               var previousDrain = queue2.drain;
               queue2.drain = function() {
                 if (typeof previousDrain === "function") previousDrain();
-                resolve4();
+                resolve5();
                 queue2.drain = previousDrain;
               };
             }
@@ -76182,9 +76182,9 @@ var require_stream3 = __commonJS({
         });
       }
       _getStat(filepath) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           this._stat(filepath, this._fsStatSettings, (error51, stats) => {
-            return error51 === null ? resolve4(stats) : reject(error51);
+            return error51 === null ? resolve5(stats) : reject(error51);
           });
         });
       }
@@ -76208,10 +76208,10 @@ var require_async5 = __commonJS({
         this._readerStream = new stream_1.default(this._settings);
       }
       dynamic(root, options) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           this._walkAsync(root, options, (error51, entries) => {
             if (error51 === null) {
-              resolve4(entries);
+              resolve5(entries);
             } else {
               reject(error51);
             }
@@ -76221,10 +76221,10 @@ var require_async5 = __commonJS({
       async static(patterns, options) {
         const entries = [];
         const stream = this._readerStream.static(patterns, options);
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           stream.once("error", reject);
           stream.on("data", (entry) => entries.push(entry));
-          stream.once("end", () => resolve4(entries));
+          stream.once("end", () => resolve5(entries));
         });
       }
     };
@@ -79832,7 +79832,7 @@ var require_compile2 = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve4.call(this, root, ref);
+      let _sch = resolve5.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a5 = root.localRefs) === null || _a5 === void 0 ? void 0 : _a5[ref];
         const { schemaId } = this.opts;
@@ -79859,7 +79859,7 @@ var require_compile2 = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve4(root, ref) {
+    function resolve5(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -80490,7 +80490,7 @@ var require_fast_uri = __commonJS({
       }
       return uri2;
     }
-    function resolve4(baseURI, relativeURI, options) {
+    function resolve5(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse9(baseURI, schemelessOptions), parse9(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -80748,7 +80748,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve: resolve4,
+      resolve: resolve5,
       resolveComponent,
       equal,
       serialize: serialize2,
@@ -83831,12 +83831,12 @@ var require_isexe = __commonJS({
         if (typeof Promise !== "function") {
           throw new TypeError("callback not provided");
         }
-        return new Promise(function(resolve4, reject) {
+        return new Promise(function(resolve5, reject) {
           isexe(path7, options || {}, function(er, is) {
             if (er) {
               reject(er);
             } else {
-              resolve4(is);
+              resolve5(is);
             }
           });
         });
@@ -83902,27 +83902,27 @@ var require_which = __commonJS({
         opt = {};
       const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt);
       const found = [];
-      const step = (i) => new Promise((resolve4, reject) => {
+      const step = (i) => new Promise((resolve5, reject) => {
         if (i === pathEnv.length)
-          return opt.all && found.length ? resolve4(found) : reject(getNotFoundError(cmd));
+          return opt.all && found.length ? resolve5(found) : reject(getNotFoundError(cmd));
         const ppRaw = pathEnv[i];
         const pathPart = /^".*"$/.test(ppRaw) ? ppRaw.slice(1, -1) : ppRaw;
         const pCmd = path7.join(pathPart, cmd);
         const p = !pathPart && /^\.[\\\/]/.test(cmd) ? cmd.slice(0, 2) + pCmd : pCmd;
-        resolve4(subStep(p, i, 0));
+        resolve5(subStep(p, i, 0));
       });
-      const subStep = (p, i, ii) => new Promise((resolve4, reject) => {
+      const subStep = (p, i, ii) => new Promise((resolve5, reject) => {
         if (ii === pathExt.length)
-          return resolve4(step(i + 1));
+          return resolve5(step(i + 1));
         const ext = pathExt[ii];
         isexe(p + ext, { pathExt: pathExtExe }, (er, is) => {
           if (!er && is) {
             if (opt.all)
               found.push(p + ext);
             else
-              return resolve4(p + ext);
+              return resolve5(p + ext);
           }
-          return resolve4(subStep(p, i, ii + 1));
+          return resolve5(subStep(p, i, ii + 1));
         });
       });
       return cb ? step(0).then((res) => cb(null, res), cb) : step(0);
@@ -84260,6 +84260,7 @@ function resolveServerConfig() {
     mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, workspace, (0, import_node_path.join)(".moke", "mcp.json")),
     permissionsPath: resolvePath(process.env.MOKE_PERMISSIONS_PATH, workspace, (0, import_node_path.join)(".moke", "permissions.json")),
     port: resolvePort(process.env.PORT),
+    settingsPath: resolvePath(process.env.MOKE_SETTINGS_PATH, workspace, (0, import_node_path.join)(".moke", "settings.json")),
     statePath: resolvePath(process.env.MOKE_STATE_PATH, workspace, (0, import_node_path.join)(".moke", "state.json")),
     workspace
   };
@@ -84890,7 +84891,8 @@ var RunManager = class {
           abortSignal: abortController.signal,
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
-          approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input)
+          approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
+          approveTool: (input) => this.approveTool(run, eventBus, input)
         },
         limits
       });
@@ -84947,10 +84949,34 @@ var RunManager = class {
     };
     eventBus.emit("approval.required", run.pending_approval);
     this.config.onChange?.();
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
-        resolve: resolve4,
+        resolve: resolve5,
+        reject
+      });
+    });
+  }
+  approveTool(run, eventBus, input) {
+    const approvalId = id2("apv");
+    run.status = "awaiting_approval";
+    run.pending_approval = {
+      approval_id: approvalId,
+      kind: "tool",
+      reason: input.reason,
+      risk: input.risk,
+      action: {
+        tool: input.tool,
+        input: input.input
+      },
+      created_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    eventBus.emit("approval.required", run.pending_approval);
+    this.config.onChange?.();
+    return new Promise((resolve5, reject) => {
+      this.pendingApprovals.set(approvalId, {
+        runId: run.id,
+        resolve: resolve5,
         reject
       });
     });
@@ -84966,10 +84992,10 @@ var RunManager = class {
       created_at: (/* @__PURE__ */ new Date()).toISOString()
     };
     eventBus.emit("ask_user.required", run.pending_ask);
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       this.pendingAsks.set(askId, {
         runId: run.id,
-        resolve: resolve4,
+        resolve: resolve5,
         reject
       });
     });
@@ -85612,7 +85638,7 @@ var safeJSON = (text) => {
 };
 
 // node_modules/openai/internal/utils/sleep.mjs
-var sleep2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+var sleep2 = (ms) => new Promise((resolve5) => setTimeout(resolve5, ms));
 
 // node_modules/openai/version.mjs
 var VERSION = "6.42.0";
@@ -86691,8 +86717,8 @@ function addRequestID(value, response) {
 var _APIPromise_client;
 var APIPromise = class _APIPromise extends Promise {
   constructor(client2, responsePromise, parseResponse2 = defaultParseResponse) {
-    super((resolve4) => {
-      resolve4(null);
+    super((resolve5) => {
+      resolve5(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse2;
@@ -87387,12 +87413,12 @@ var EventStream = class {
     _EventStream_errored.set(this, false);
     _EventStream_aborted.set(this, false);
     _EventStream_catchingPromiseCreated.set(this, false);
-    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve4, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve4, "f");
+    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve5, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve5, "f");
       __classPrivateFieldSet(this, _EventStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve4, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve4, "f");
+    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve5, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve5, "f");
       __classPrivateFieldSet(this, _EventStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet(this, _EventStream_connectedPromise, "f").catch(() => {
@@ -87476,11 +87502,11 @@ var EventStream = class {
    *   const message = await stream.emitted('message') // rejects if the stream errors
    */
   emitted(event) {
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       __classPrivateFieldSet(this, _EventStream_catchingPromiseCreated, true, "f");
       if (event !== "error")
         this.once("error", reject);
-      this.once(event, resolve4);
+      this.once(event, resolve5);
     });
   }
   async done() {
@@ -88419,7 +88445,7 @@ var ChatCompletionStream = class _ChatCompletionStream extends AbstractChatCompl
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve5, reject) => readQueue.push({ resolve: resolve5, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -91518,7 +91544,7 @@ var AssistantStream = class extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve5, reject) => readQueue.push({ resolve: resolve5, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -93587,7 +93613,7 @@ var ResponseStream = class _ResponseStream extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve5, reject) => readQueue.push({ resolve: resolve5, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
         }
         const event = pushQueue.shift();
         return { value: event, done: false };
@@ -100018,17 +100044,26 @@ init_tools2();
 init_singletons();
 
 // packages/agent-re-act/src/llm-client.ts
-function createChatModel() {
-  if (!process.env.OPENAI_API_KEY) {
+function resolveChatModelSettings(input = {}) {
+  return {
+    apiKey: input.apiKey || process.env.OPENAI_API_KEY || "",
+    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    model: input.model || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 15e3)
+  };
+}
+function createChatModel(input = {}) {
+  const settings = resolveChatModelSettings(input);
+  if (!settings.apiKey) {
     throw new Error("OPENAI_API_KEY is not set");
   }
   return new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    apiKey: settings.apiKey,
+    model: settings.model,
     temperature: 0,
-    timeout: Number(process.env.OPENAI_TIMEOUT_MS || 15e3),
+    timeout: settings.timeoutMs,
     configuration: {
-      baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"
+      baseURL: settings.apiBaseUrl
     }
   });
 }
@@ -100094,12 +100129,17 @@ function toToolCallArgs(args) {
   return args && typeof args === "object" && !Array.isArray(args) ? args : {};
 }
 var ReActAgent = class {
+  constructor(config2 = {}) {
+    this.config = config2;
+  }
+  config;
   async run({ input, history = [], eventBus, toolRegistry, context: context2, limits: rawLimits }) {
-    if (!process.env.OPENAI_API_KEY) {
+    const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
+    if (!modelSettings.apiKey) {
       throw new Error("OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.");
     }
     const limits = normalizeLimits(rawLimits);
-    const model = createChatModel();
+    const model = createChatModel(modelSettings);
     const timeoutMs = limits.timeout_ms;
     const runtimeTools = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
@@ -100117,7 +100157,7 @@ var ReActAgent = class {
     eventBus.emit("agent.plan", {
       mode: "react",
       planner: "manual-model-loop",
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: modelSettings.model,
       tools: runtimeTools.map((tool2) => tool2.name)
     });
     for (let step = 0; step < limits.max_steps; step++) {
@@ -100311,6 +100351,267 @@ function createEditFileTool(system) {
   };
 }
 
+// packages/agent-tools/src/command-safety.ts
+var import_node_path2 = __toESM(require("node:path"), 1);
+var import_node_os = require("node:os");
+function analyzeCommandSafety(input) {
+  const issues = [];
+  const commandText = maskUrls(input.commandText);
+  for (const rawPath of findDriveRelativePathTokens(commandText)) {
+    issues.push({
+      code: "drive_relative_path",
+      path: rawPath,
+      suggestedRoot: input.cwd,
+      reason: `Command path is ambiguous outside workspace: ${rawPath}`
+    });
+  }
+  for (const rawPath of findLocationChangeTargetTokens(commandText)) {
+    const fullPath = resolveShellPathToken(rawPath, input.cwd);
+    if (fullPath && !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "working_directory_escapes_workspace",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command changes working directory outside workspace: ${rawPath}`
+      });
+    }
+  }
+  for (const rawPath of findEnvironmentPathTokens(commandText)) {
+    const fullPath = resolveEnvironmentPathToken(rawPath);
+    if (!fullPath || !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "environment_path",
+        path: fullPath || rawPath,
+        suggestedRoot: fullPath ? suggestApprovalRoot(fullPath) : input.cwd,
+        reason: `Command path uses an environment variable and requires approval: ${rawPath}`
+      });
+    }
+  }
+  for (const rawPath of findHomePathTokens(commandText)) {
+    const fullPath = resolveHomePathToken(rawPath);
+    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "home_path",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command path uses the home directory and requires approval: ${rawPath}`
+      });
+    }
+  }
+  for (const rawPath of findDynamicPathRootTokens(commandText)) {
+    const fullPath = resolveShellPathToken(rawPath, input.cwd);
+    if (fullPath && !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "dynamic_path",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command builds a path outside workspace and requires approval: ${rawPath}`
+      });
+    }
+  }
+  for (const rawPath of findAbsolutePathTokens(commandText)) {
+    const fullPath = import_node_path2.default.resolve(rawPath);
+    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: rawPath.startsWith("\\\\") ? "unc_path" : "absolute_path_outside_workspace",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command path requires approval: ${rawPath}`
+      });
+    }
+  }
+  const absoluteRawPaths = new Set(findAbsolutePathTokens(commandText));
+  for (const rawPath of findRelativePathTokens(commandText)) {
+    if (absoluteRawPaths.has(rawPath) || isWindowsDrivePath(rawPath) || rawPath.startsWith("\\\\")) continue;
+    const fullPath = import_node_path2.default.resolve(input.cwd, rawPath);
+    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "relative_path_escapes_workspace",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command relative path escapes workspace: ${rawPath}`
+      });
+    }
+  }
+  for (const rawPath of findRedirectionTargetTokens(commandText)) {
+    const fullPath = import_node_path2.default.isAbsolute(rawPath) || isWindowsDrivePath(rawPath) ? import_node_path2.default.resolve(rawPath) : import_node_path2.default.resolve(input.cwd, rawPath);
+    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: "redirection_target_escapes_workspace",
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command redirection target requires approval: ${rawPath}`
+      });
+    }
+  }
+  return { issues };
+}
+function analyzeCommandComplexity(commandText) {
+  const issues = [];
+  const maskedCommand = maskUrls(commandText);
+  const controlOperator = /(?:&&|\|\||[;|])/g;
+  const substitution = /(?:\$\(|`[^`]+`)/g;
+  const encodedCommand = /(?:^|[\s-])(?:encodedcommand|enc)\b/gi;
+  const backgroundProcess = /(?:^|[\s|&;])(?:start-process|start\s+\/?b)\b/gi;
+  for (const match of maskedCommand.matchAll(controlOperator)) {
+    issues.push({
+      code: "shell_control_operator",
+      token: match[0],
+      reason: `Command uses shell control operator: ${match[0]}`
+    });
+  }
+  for (const match of maskedCommand.matchAll(substitution)) {
+    issues.push({
+      code: "substitution",
+      token: match[0],
+      reason: "Command uses shell substitution"
+    });
+  }
+  for (const match of maskedCommand.matchAll(encodedCommand)) {
+    issues.push({
+      code: "encoded_command",
+      token: match[0].trim(),
+      reason: "Command uses encoded shell content"
+    });
+  }
+  for (const match of maskedCommand.matchAll(backgroundProcess)) {
+    issues.push({
+      code: "background_process",
+      token: match[0].trim(),
+      reason: "Command starts a background process"
+    });
+  }
+  return { issues };
+}
+function maskUrls(commandText) {
+  return commandText.replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s"'`|&;<>]+/g, (url2) => " ".repeat(url2.length));
+}
+function isInsideRoot(root, fullPath) {
+  const relative = import_node_path2.default.relative(root, fullPath);
+  return relative === "" || !relative.startsWith("..") && !import_node_path2.default.isAbsolute(relative);
+}
+function suggestApprovalRoot(fullPath) {
+  const parsed = import_node_path2.default.parse(import_node_path2.default.resolve(fullPath));
+  const relative = import_node_path2.default.relative(parsed.root, fullPath);
+  const [firstSegment] = relative.split(import_node_path2.default.sep).filter(Boolean);
+  return firstSegment ? import_node_path2.default.join(parsed.root, firstSegment) : parsed.root;
+}
+function isInsideApprovedRoots(approvedRoots, fullPath) {
+  return approvedRoots.some((root) => isInsideRoot(root, fullPath));
+}
+function findAbsolutePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
+  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]*/g;
+  const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
+  for (const match of commandText.matchAll(uncPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  for (const match of commandText.matchAll(windowsDrivePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  for (const match of commandText.matchAll(unixPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  return [...tokens];
+}
+function findLocationChangeTargetTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const locationCommand = /(?:^|[\s|&;])(?:cd|chdir|sl|set-location|push-location)\s+(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>]+))/gi;
+  for (const match of commandText.matchAll(locationCommand)) {
+    const token = stripTrailingCommandPunctuation(match[1] || match[2] || match[3] || "");
+    if (token && token !== "-") tokens.add(token);
+  }
+  return [...tokens];
+}
+function findEnvironmentPathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const powerShellEnvPath = /\$env:[a-zA-Z_][\w]*[\\/][^\s"'`|&;<>)]*/g;
+  const cmdEnvPath = /%[a-zA-Z_][\w]*%[\\/][^\s"'`|&;<>)]*/g;
+  for (const match of commandText.matchAll(powerShellEnvPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  for (const match of commandText.matchAll(cmdEnvPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  return [...tokens];
+}
+function findHomePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const homePath = /(?:^|[\s"'`])(~[\\/][^\s"'`|&;<>)]*)/g;
+  for (const match of commandText.matchAll(homePath)) {
+    const token = stripTrailingPunctuation(match[1] || "");
+    if (token) tokens.add(token);
+  }
+  return [...tokens];
+}
+function findDynamicPathRootTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const joinPath = /(?:^|[\s|&;(])join-path\s+(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>)]*))/gi;
+  for (const match of commandText.matchAll(joinPath)) {
+    const token = stripTrailingPunctuation(match[1] || match[2] || match[3] || "");
+    if (token) tokens.add(token);
+  }
+  return [...tokens];
+}
+function findDriveRelativePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const driveRelativePath = /\b[a-zA-Z]:(?![\\/])(?:[^\s"'`|&;<>]+)/g;
+  for (const match of commandText.matchAll(driveRelativePath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+  return [...tokens];
+}
+function findRelativePathTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const relativePath = /(?:^|[\s"'`])((?:\.{1,2}[\\/])+(?:[^\s"'`|&;<>]+)?)/g;
+  for (const match of commandText.matchAll(relativePath)) {
+    const token = stripTrailingPunctuation(match[1] || "");
+    if (token && token.includes("..")) tokens.add(token);
+  }
+  return [...tokens];
+}
+function findRedirectionTargetTokens(commandText) {
+  const tokens = /* @__PURE__ */ new Set();
+  const redirection = /(?:^|[^\d])(?:\d?>{1,2})\s*(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>]+))/g;
+  for (const match of commandText.matchAll(redirection)) {
+    const token = stripTrailingPunctuation(match[1] || match[2] || match[3] || "");
+    if (token && token !== "$null" && token !== "/dev/null") tokens.add(token);
+  }
+  return [...tokens];
+}
+function isWindowsDrivePath(value) {
+  return /^[a-zA-Z]:[\\/]/.test(value);
+}
+function resolveShellPathToken(rawPath, cwd) {
+  if (rawPath.startsWith("$env:") || rawPath.startsWith("%")) return resolveEnvironmentPathToken(rawPath);
+  if (rawPath.startsWith("~")) return resolveHomePathToken(rawPath);
+  if (import_node_path2.default.isAbsolute(rawPath) || isWindowsDrivePath(rawPath)) return import_node_path2.default.resolve(rawPath);
+  return import_node_path2.default.resolve(cwd, rawPath);
+}
+function resolveEnvironmentPathToken(rawPath) {
+  const powerShellMatch = rawPath.match(/^\$env:([a-zA-Z_][\w]*)([\\/].*)$/);
+  if (powerShellMatch) {
+    const root = process.env[powerShellMatch[1]];
+    return root ? import_node_path2.default.join(root, powerShellMatch[2].replace(/^[\\/]+/, "")) : "";
+  }
+  const cmdMatch = rawPath.match(/^%([a-zA-Z_][\w]*)%([\\/].*)$/);
+  if (cmdMatch) {
+    const root = process.env[cmdMatch[1]];
+    return root ? import_node_path2.default.join(root, cmdMatch[2].replace(/^[\\/]+/, "")) : "";
+  }
+  return "";
+}
+function resolveHomePathToken(rawPath) {
+  return import_node_path2.default.join((0, import_node_os.homedir)(), rawPath.replace(/^~[\\/]+/, ""));
+}
+function stripTrailingPunctuation(value) {
+  return value.replace(/[),\].]+$/, "");
+}
+function stripTrailingCommandPunctuation(value) {
+  return value.replace(/[),\]]+$/, "");
+}
+
 // packages/agent-tools/src/execute.ts
 var executeSchema = external_exports2.object({
   command: external_exports2.string().min(1),
@@ -100324,13 +100625,72 @@ function createExecuteTool(system) {
     description: "Run a shell command in the workspace environment.",
     risk: "dangerous",
     schema: executeSchema,
-    async handler(input) {
+    async handler(input, context2) {
+      const commandText = input.args?.length ? [input.command, ...input.args].join(" ") : input.command;
+      const complexity = shouldCheckCommandComplexity(input.command, input.args) ? analyzeCommandComplexity(commandText) : { issues: [] };
+      if (complexity.issues.length > 0 && !isAllowlistedComplexCommand(commandText)) {
+        if (!context2.approveTool) {
+          throw new ToolExecutionError("Complex shell command requires approval", {
+            error: {
+              code: "TOOL_APPROVAL_REQUIRED",
+              message: "Complex shell command requires approval",
+              tool: "execute"
+            }
+          });
+        }
+        const decision = await context2.approveTool({
+          tool: "execute",
+          input,
+          risk: "dangerous",
+          callId: context2.currentToolCall?.callId,
+          reason: `\u590D\u6742\u547D\u4EE4\u9700\u8981\u786E\u8BA4\uFF1A${complexityReason(complexity.issues[0].code)}`
+        });
+        if (!decision.approved) {
+          throw new ToolExecutionError(decision.message || "User rejected the command", {
+            error: {
+              code: "TOOL_ACCESS_REJECTED",
+              message: decision.message || "User rejected the command",
+              tool: "execute"
+            }
+          });
+        }
+      }
       return system.execute(input.command, input.args, {
         cwd: input.cwd,
         timeoutMs: input.timeout_ms
       });
     }
   };
+}
+function shouldCheckCommandComplexity(command, args = []) {
+  return args.length === 0 || isShellExecutable(command);
+}
+function isShellExecutable(command) {
+  const name = command.split(/[\\/]/).at(-1)?.toLowerCase().replace(/\.(exe|cmd|bat)$/, "") || command.toLowerCase();
+  return ["bash", "cmd", "powershell", "pwsh", "sh", "zsh"].includes(name);
+}
+function isAllowlistedComplexCommand(commandText) {
+  const normalized = commandText.replace(/\s+/g, " ").trim();
+  if (!normalized.includes("&&")) return false;
+  if (/[;|]|\|\||\$\(|`/.test(normalized)) return false;
+  return normalized.split("&&").every((part) => isAllowlistedSimpleCommand(part.trim()));
+}
+function isAllowlistedSimpleCommand(commandText) {
+  return [
+    /^npm test$/,
+    /^npm run build$/,
+    /^npm run test:server$/,
+    /^npm run build:server$/
+  ].some((pattern) => pattern.test(commandText));
+}
+function complexityReason(code) {
+  const labels = {
+    background_process: "\u542F\u52A8\u540E\u53F0\u8FDB\u7A0B",
+    encoded_command: "\u5305\u542B\u7F16\u7801\u547D\u4EE4",
+    shell_control_operator: "\u5305\u542B shell \u63A7\u5236\u7B26",
+    substitution: "\u5305\u542B\u547D\u4EE4\u66FF\u6362"
+  };
+  return labels[code];
 }
 
 // packages/agent-tools/src/glob.ts
@@ -100493,7 +100853,7 @@ init_media();
 init_errors();
 var import_promises3 = __toESM(require("node:fs/promises"), 1);
 var import_node_fs2 = __toESM(require("node:fs"), 1);
-var import_node_path2 = __toESM(require("node:path"), 1);
+var import_node_path3 = __toESM(require("node:path"), 1);
 var import_node_child_process = __toESM(require("node:child_process"), 1);
 var import_fast_glob = __toESM(require_out4(), 1);
 init_langsmith();
@@ -101235,11 +101595,11 @@ function raiseForWsError(msg, commandId = "") {
 }
 async function connectWs(url2, headers) {
   const { WebSocket: WS } = await ensureWs();
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const ws = new WS(url2, { headers });
     ws.on("open", () => {
       ws.removeAllListeners("error");
-      resolve4(ws);
+      resolve5(ws);
     });
     ws.on("error", (err) => {
       ws.removeAllListeners("open");
@@ -101249,16 +101609,16 @@ async function connectWs(url2, headers) {
 }
 async function* readWsMessages(ws) {
   const messageQueue = [];
-  let resolve4 = null;
+  let resolve5 = null;
   let error51 = null;
   let done = false;
   const onMessage = (data) => {
     const raw = typeof data === "string" ? data : data.toString();
     const msg = JSON.parse(raw);
     messageQueue.push(msg);
-    if (resolve4) {
-      const r = resolve4;
-      resolve4 = null;
+    if (resolve5) {
+      const r = resolve5;
+      resolve5 = null;
       r();
     }
   };
@@ -101269,9 +101629,9 @@ async function* readWsMessages(ws) {
     } else if (code !== 1e3) {
       error51 = new LangSmithSandboxConnectionError(`WebSocket connection closed unexpectedly (code: ${code}, reason: ${reason.toString()})`);
     }
-    if (resolve4) {
-      const r = resolve4;
-      resolve4 = null;
+    if (resolve5) {
+      const r = resolve5;
+      resolve5 = null;
       r();
     }
   };
@@ -101280,9 +101640,9 @@ async function* readWsMessages(ws) {
     if (!error51) {
       error51 = new LangSmithSandboxConnectionError(`WebSocket connection error: ${err.message}`);
     }
-    if (resolve4) {
-      const r = resolve4;
-      resolve4 = null;
+    if (resolve5) {
+      const r = resolve5;
+      resolve5 = null;
       r();
     }
   };
@@ -101301,7 +101661,7 @@ async function* readWsMessages(ws) {
         return;
       }
       await new Promise((r) => {
-        resolve4 = r;
+        resolve5 = r;
       });
     }
   } finally {
@@ -101757,14 +102117,14 @@ var Sandbox = class {
 init_src();
 function sleepWithSignal(ms, signal) {
   if (!signal) {
-    return new Promise((resolve4) => setTimeout(resolve4, ms));
+    return new Promise((resolve5) => setTimeout(resolve5, ms));
   }
   const abortSignal = signal;
   abortSignal.throwIfAborted();
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const timer = setTimeout(() => {
       abortSignal.removeEventListener("abort", onAbort);
-      resolve4();
+      resolve5();
     }, ms);
     function onAbort() {
       clearTimeout(timer);
@@ -103035,7 +103395,7 @@ var FilesystemBackend = class {
   maxFileSizeBytes;
   constructor(options = {}) {
     const { rootDir, virtualMode = false, maxFileSizeMb = 10 } = options;
-    this.cwd = rootDir ? import_node_path2.default.resolve(rootDir) : process.cwd();
+    this.cwd = rootDir ? import_node_path3.default.resolve(rootDir) : process.cwd();
     this.virtualMode = virtualMode;
     this.maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
   }
@@ -103055,13 +103415,13 @@ var FilesystemBackend = class {
     if (this.virtualMode) {
       const vpath = key.startsWith("/") ? key : "/" + key;
       if (vpath.includes("..") || vpath.startsWith("~")) throw new Error("Path traversal not allowed");
-      const full = import_node_path2.default.resolve(this.cwd, vpath.substring(1));
-      const relative = import_node_path2.default.relative(this.cwd, full);
-      if (relative.startsWith("..") || import_node_path2.default.isAbsolute(relative)) throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
+      const full = import_node_path3.default.resolve(this.cwd, vpath.substring(1));
+      const relative = import_node_path3.default.relative(this.cwd, full);
+      if (relative.startsWith("..") || import_node_path3.default.isAbsolute(relative)) throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
       return full;
     }
-    if (import_node_path2.default.isAbsolute(key)) return key;
-    return import_node_path2.default.resolve(this.cwd, key);
+    if (import_node_path3.default.isAbsolute(key)) return key;
+    return import_node_path3.default.resolve(this.cwd, key);
   }
   /**
   * List files and directories in the specified directory (non-recursive).
@@ -103076,9 +103436,9 @@ var FilesystemBackend = class {
       if (!(await import_promises3.default.stat(resolvedPath)).isDirectory()) return { files: [] };
       const entries = await import_promises3.default.readdir(resolvedPath, { withFileTypes: true });
       const results = [];
-      const cwdStr = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
+      const cwdStr = this.cwd.endsWith(import_node_path3.default.sep) ? this.cwd : this.cwd + import_node_path3.default.sep;
       for (const entry of entries) {
-        const fullPath = import_node_path2.default.join(resolvedPath, entry.name);
+        const fullPath = import_node_path3.default.join(resolvedPath, entry.name);
         try {
           const entryStat = await import_promises3.default.stat(fullPath);
           const isFile = entryStat.isFile();
@@ -103091,7 +103451,7 @@ var FilesystemBackend = class {
               modified_at: entryStat.mtime.toISOString()
             });
             else if (isDir) results.push({
-              path: fullPath + import_node_path2.default.sep,
+              path: fullPath + import_node_path3.default.sep,
               is_dir: true,
               size: 0,
               modified_at: entryStat.mtime.toISOString()
@@ -103101,7 +103461,7 @@ var FilesystemBackend = class {
             if (fullPath.startsWith(cwdStr)) relativePath = fullPath.substring(cwdStr.length);
             else if (fullPath.startsWith(this.cwd)) relativePath = fullPath.substring(this.cwd.length).replace(/^[/\\]/, "");
             else relativePath = fullPath;
-            relativePath = relativePath.split(import_node_path2.default.sep).join("/");
+            relativePath = relativePath.split(import_node_path3.default.sep).join("/");
             const virtPath = "/" + relativePath;
             if (isFile) results.push({
               path: virtPath,
@@ -103250,7 +103610,7 @@ var FilesystemBackend = class {
         return { error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.` };
       } catch {
       }
-      await import_promises3.default.mkdir(import_node_path2.default.dirname(resolvedPath), { recursive: true });
+      await import_promises3.default.mkdir(import_node_path3.default.dirname(resolvedPath), { recursive: true });
       if (SUPPORTS_NOFOLLOW) {
         const flags = import_node_fs2.default.constants.O_WRONLY | import_node_fs2.default.constants.O_CREAT | import_node_fs2.default.constants.O_TRUNC | import_node_fs2.default.constants.O_NOFOLLOW;
         const fd = await import_promises3.default.open(resolvedPath, flags, 420);
@@ -103359,7 +103719,7 @@ var FilesystemBackend = class {
   *          Returns null if ripgrep is unavailable or times out.
   */
   async ripgrepSearch(pattern, baseFull, includeGlob) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       const args = ["--json", "-F"];
       if (includeGlob) args.push("--glob", includeGlob);
       args.push("--", pattern, baseFull);
@@ -103371,7 +103731,7 @@ var FilesystemBackend = class {
       });
       proc.on("close", (code) => {
         if (code !== 0 && code !== 1) {
-          resolve4(null);
+          resolve5(null);
           return;
         }
         for (const line of output.split("\n")) {
@@ -103384,10 +103744,10 @@ var FilesystemBackend = class {
             if (!ftext) continue;
             let virtPath;
             if (this.virtualMode) try {
-              const resolved = import_node_path2.default.resolve(ftext);
-              const relative = import_node_path2.default.relative(this.cwd, resolved);
+              const resolved = import_node_path3.default.resolve(ftext);
+              const relative = import_node_path3.default.relative(this.cwd, resolved);
               if (relative.startsWith("..")) continue;
-              virtPath = "/" + relative.split(import_node_path2.default.sep).join("/");
+              virtPath = "/" + relative.split(import_node_path3.default.sep).join("/");
             } catch {
               continue;
             }
@@ -103401,10 +103761,10 @@ var FilesystemBackend = class {
             continue;
           }
         }
-        resolve4(results);
+        resolve5(results);
       });
       proc.on("error", () => {
-        resolve4(null);
+        resolve5(null);
       });
     });
   }
@@ -103421,14 +103781,14 @@ var FilesystemBackend = class {
   async literalSearch(pattern, baseFull, includeGlob) {
     const results = {};
     const files = await (0, import_fast_glob.default)("**/*", {
-      cwd: (await import_promises3.default.stat(baseFull)).isDirectory() ? baseFull : import_node_path2.default.dirname(baseFull),
+      cwd: (await import_promises3.default.stat(baseFull)).isDirectory() ? baseFull : import_node_path3.default.dirname(baseFull),
       absolute: true,
       onlyFiles: true,
       dot: true
     });
     for (const fp of files) try {
       if (!isTextMimeType(getMimeType(fp))) continue;
-      if (includeGlob && !import_micromatch.default.isMatch(import_node_path2.default.basename(fp), includeGlob)) continue;
+      if (includeGlob && !import_micromatch.default.isMatch(import_node_path3.default.basename(fp), includeGlob)) continue;
       if ((await import_promises3.default.stat(fp)).size > this.maxFileSizeBytes) continue;
       const lines = (await import_promises3.default.readFile(fp, "utf-8")).split("\n");
       for (let i = 0; i < lines.length; i++) {
@@ -103436,9 +103796,9 @@ var FilesystemBackend = class {
         if (line.includes(pattern)) {
           let virtPath;
           if (this.virtualMode) try {
-            const relative = import_node_path2.default.relative(this.cwd, fp);
+            const relative = import_node_path3.default.relative(this.cwd, fp);
             if (relative.startsWith("..")) continue;
-            virtPath = "/" + relative.split(import_node_path2.default.sep).join("/");
+            virtPath = "/" + relative.split(import_node_path3.default.sep).join("/");
           } catch {
             continue;
           }
@@ -103474,7 +103834,7 @@ var FilesystemBackend = class {
       for (const matchedPath of matches) try {
         const stat4 = await import_promises3.default.stat(matchedPath);
         if (!stat4.isFile()) continue;
-        const normalizedPath = matchedPath.split("/").join(import_node_path2.default.sep);
+        const normalizedPath = matchedPath.split("/").join(import_node_path3.default.sep);
         if (!this.virtualMode) results.push({
           path: normalizedPath,
           is_dir: false,
@@ -103482,12 +103842,12 @@ var FilesystemBackend = class {
           modified_at: stat4.mtime.toISOString()
         });
         else {
-          const cwdStr = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
+          const cwdStr = this.cwd.endsWith(import_node_path3.default.sep) ? this.cwd : this.cwd + import_node_path3.default.sep;
           let relativePath;
           if (normalizedPath.startsWith(cwdStr)) relativePath = normalizedPath.substring(cwdStr.length);
           else if (normalizedPath.startsWith(this.cwd)) relativePath = normalizedPath.substring(this.cwd.length).replace(/^[/\\]/, "");
           else relativePath = normalizedPath;
-          relativePath = relativePath.split(import_node_path2.default.sep).join("/");
+          relativePath = relativePath.split(import_node_path3.default.sep).join("/");
           const virt = "/" + relativePath;
           results.push({
             path: virt,
@@ -103514,7 +103874,7 @@ var FilesystemBackend = class {
     const responses = [];
     for (const [filePath, content] of files) try {
       const resolvedPath = this.resolvePath(filePath);
-      await import_promises3.default.mkdir(import_node_path2.default.dirname(resolvedPath), { recursive: true });
+      await import_promises3.default.mkdir(import_node_path3.default.dirname(resolvedPath), { recursive: true });
       await import_promises3.default.writeFile(resolvedPath, content);
       responses.push({
         path: filePath,
@@ -103665,7 +104025,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     const result = await super.ls(dirPath);
     if (result.error) return result;
     if (this.virtualMode) return result;
-    const cwdPrefix = this.cwd.endsWith(import_node_path2.default.sep) ? this.cwd : this.cwd + import_node_path2.default.sep;
+    const cwdPrefix = this.cwd.endsWith(import_node_path3.default.sep) ? this.cwd : this.cwd + import_node_path3.default.sep;
     return { files: (result.files || []).map((info) => ({
       ...info,
       path: info.path.startsWith(cwdPrefix) ? info.path.slice(cwdPrefix.length) : info.path
@@ -103676,7 +104036,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
   */
   async glob(pattern, searchPath = "/") {
     if (pattern.startsWith("/")) pattern = pattern.substring(1);
-    const resolvedSearchPath = searchPath === "/" || searchPath === "" ? this.cwd : this.virtualMode ? import_node_path2.default.resolve(this.cwd, searchPath.replace(/^\//, "")) : import_node_path2.default.resolve(this.cwd, searchPath);
+    const resolvedSearchPath = searchPath === "/" || searchPath === "" ? this.cwd : this.virtualMode ? import_node_path3.default.resolve(this.cwd, searchPath.replace(/^\//, "")) : import_node_path3.default.resolve(this.cwd, searchPath);
     try {
       if (!(await import_promises3.default.stat(resolvedSearchPath)).isDirectory()) return { files: [] };
     } catch {
@@ -103697,7 +104057,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     })]);
     const statFile = async (match) => {
       try {
-        const entryStat = await import_promises3.default.stat(import_node_path2.default.join(resolvedSearchPath, match));
+        const entryStat = await import_promises3.default.stat(import_node_path3.default.join(resolvedSearchPath, match));
         if (entryStat.isFile()) return {
           path: formatPath(match),
           is_dir: false,
@@ -103710,7 +104070,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
     };
     const statDir = async (match) => {
       try {
-        const entryStat = await import_promises3.default.stat(import_node_path2.default.join(resolvedSearchPath, match));
+        const entryStat = await import_promises3.default.stat(import_node_path3.default.join(resolvedSearchPath, match));
         if (entryStat.isDirectory()) return {
           path: formatPath(match),
           is_dir: true,
@@ -103746,7 +104106,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       exitCode: 1,
       truncated: false
     };
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
@@ -103767,7 +104127,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve4({
+        resolve5({
           output: `Error executing command: ${err.message}`,
           exitCode: 1,
           truncated: false
@@ -103776,7 +104136,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
       child.on("close", (code, signal) => {
         clearTimeout(timer);
         if (timedOut || signal === "SIGTERM") {
-          resolve4({
+          resolve5({
             output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
             exitCode: 124,
             truncated: false
@@ -103802,7 +104162,7 @@ var LocalShellBackend = class LocalShellBackend2 extends FilesystemBackend {
         if (exitCode !== 0) output = `${output.trimEnd()}
 
 Exit code: ${exitCode}`;
-        resolve4({
+        resolve5({
           output,
           exitCode,
           truncated
@@ -103929,121 +104289,6 @@ var AgentMemoryStateSchema = external_exports2.object({
   /** Project-specific context (loaded from project root) */
   projectMemory: external_exports2.string().optional()
 });
-
-// packages/agent-tools/src/command-safety.ts
-var import_node_path3 = __toESM(require("node:path"), 1);
-function analyzeCommandSafety(input) {
-  const issues = [];
-  const commandText = maskUrls(input.commandText);
-  for (const rawPath of findDriveRelativePathTokens(commandText)) {
-    issues.push({
-      code: "drive_relative_path",
-      path: rawPath,
-      suggestedRoot: input.cwd,
-      reason: `Command path is ambiguous outside workspace: ${rawPath}`
-    });
-  }
-  for (const rawPath of findAbsolutePathTokens(commandText)) {
-    const fullPath = import_node_path3.default.resolve(rawPath);
-    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
-      issues.push({
-        code: rawPath.startsWith("\\\\") ? "unc_path" : "absolute_path_outside_workspace",
-        path: fullPath,
-        suggestedRoot: suggestApprovalRoot(fullPath),
-        reason: `Command path requires approval: ${rawPath}`
-      });
-    }
-  }
-  const absoluteRawPaths = new Set(findAbsolutePathTokens(commandText));
-  for (const rawPath of findRelativePathTokens(commandText)) {
-    if (absoluteRawPaths.has(rawPath) || isWindowsDrivePath(rawPath) || rawPath.startsWith("\\\\")) continue;
-    const fullPath = import_node_path3.default.resolve(input.cwd, rawPath);
-    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
-      issues.push({
-        code: "relative_path_escapes_workspace",
-        path: fullPath,
-        suggestedRoot: suggestApprovalRoot(fullPath),
-        reason: `Command relative path escapes workspace: ${rawPath}`
-      });
-    }
-  }
-  for (const rawPath of findRedirectionTargetTokens(commandText)) {
-    const fullPath = import_node_path3.default.isAbsolute(rawPath) || isWindowsDrivePath(rawPath) ? import_node_path3.default.resolve(rawPath) : import_node_path3.default.resolve(input.cwd, rawPath);
-    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
-      issues.push({
-        code: "redirection_target_escapes_workspace",
-        path: fullPath,
-        suggestedRoot: suggestApprovalRoot(fullPath),
-        reason: `Command redirection target requires approval: ${rawPath}`
-      });
-    }
-  }
-  return { issues };
-}
-function maskUrls(commandText) {
-  return commandText.replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s"'`|&;<>]+/g, (url2) => " ".repeat(url2.length));
-}
-function isInsideRoot(root, fullPath) {
-  const relative = import_node_path3.default.relative(root, fullPath);
-  return relative === "" || !relative.startsWith("..") && !import_node_path3.default.isAbsolute(relative);
-}
-function suggestApprovalRoot(fullPath) {
-  const parsed = import_node_path3.default.parse(import_node_path3.default.resolve(fullPath));
-  const relative = import_node_path3.default.relative(parsed.root, fullPath);
-  const [firstSegment] = relative.split(import_node_path3.default.sep).filter(Boolean);
-  return firstSegment ? import_node_path3.default.join(parsed.root, firstSegment) : parsed.root;
-}
-function isInsideApprovedRoots(approvedRoots, fullPath) {
-  return approvedRoots.some((root) => isInsideRoot(root, fullPath));
-}
-function findAbsolutePathTokens(commandText) {
-  const tokens = /* @__PURE__ */ new Set();
-  const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
-  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]+/g;
-  const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
-  for (const match of commandText.matchAll(uncPath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-  for (const match of commandText.matchAll(windowsDrivePath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-  for (const match of commandText.matchAll(unixPath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-  return [...tokens];
-}
-function findDriveRelativePathTokens(commandText) {
-  const tokens = /* @__PURE__ */ new Set();
-  const driveRelativePath = /\b[a-zA-Z]:(?![\\/])(?:[^\s"'`|&;<>]+)/g;
-  for (const match of commandText.matchAll(driveRelativePath)) {
-    tokens.add(stripTrailingPunctuation(match[0]));
-  }
-  return [...tokens];
-}
-function findRelativePathTokens(commandText) {
-  const tokens = /* @__PURE__ */ new Set();
-  const relativePath = /(?:^|[\s"'`])((?:\.{1,2}[\\/])+(?:[^\s"'`|&;<>]+)?)/g;
-  for (const match of commandText.matchAll(relativePath)) {
-    const token = stripTrailingPunctuation(match[1] || "");
-    if (token && token.includes("..")) tokens.add(token);
-  }
-  return [...tokens];
-}
-function findRedirectionTargetTokens(commandText) {
-  const tokens = /* @__PURE__ */ new Set();
-  const redirection = /(?:^|[^\d])(?:\d?>{1,2})\s*(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>]+))/g;
-  for (const match of commandText.matchAll(redirection)) {
-    const token = stripTrailingPunctuation(match[1] || match[2] || match[3] || "");
-    if (token && token !== "$null" && token !== "/dev/null") tokens.add(token);
-  }
-  return [...tokens];
-}
-function isWindowsDrivePath(value) {
-  return /^[a-zA-Z]:[\\/]/.test(value);
-}
-function stripTrailingPunctuation(value) {
-  return value.replace(/[),\].]+$/, "");
-}
 
 // packages/agent-tools/src/local-system-backend.ts
 var DEFAULT_READ_LIMIT = 200;
@@ -104177,7 +104422,7 @@ var LocalSystemBackend = class {
     const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
     this.assertCommandPathsStayInApprovedRoots(commandText, cwd);
     if (this.useLocalFsWrites) {
-      return this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+      return args.length > 0 ? this.executeLocalProcess(command, args, cwd, startedAt, options?.timeoutMs) : this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
     }
     const result = await withTimeout2(this.backend.execute(`cd ${shellQuote2(cwd)} && ${commandText}`), options?.timeoutMs, command);
     return {
@@ -104189,6 +104434,15 @@ var LocalSystemBackend = class {
   }
   async executeLocalCommand(commandText, cwd, startedAt, timeoutMs) {
     const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration_ms: Date.now() - startedAt
+    };
+  }
+  async executeLocalProcess(command, args, cwd, startedAt, timeoutMs) {
+    const result = await runLocalProcess(command, args, cwd, timeoutMs);
     return {
       exit_code: result.exitCode,
       stdout: result.stdout,
@@ -104280,7 +104534,7 @@ function powerShellQuote(value) {
   return `'${value.replaceAll("'", "''")}'`;
 }
 function runLocalShellCommand(commandText, cwd, timeoutMs) {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const isWindows = process.platform === "win32";
     const windowsCommand = [
       "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
@@ -104299,45 +104553,85 @@ function runLocalShellCommand(commandText, cwd, timeoutMs) {
     }) : (0, import_node_child_process2.spawn)(commandText, {
       cwd,
       env: process.env,
+      detached: true,
       shell: true
     });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    let timer;
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error51) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      reject(error51);
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      resolve4({
-        exitCode: code ?? 1,
-        stdout,
-        stderr
-      });
-    });
-    if (timeoutMs) {
-      timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        child.kill();
-        reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
-      }, timeoutMs);
-    }
+    collectLocalProcessResult(child, timeoutMs, commandText, resolve5, reject);
   });
+}
+function runLocalProcess(command, args, cwd, timeoutMs) {
+  return new Promise((resolve5, reject) => {
+    const isWindows = process.platform === "win32";
+    const child = (0, import_node_child_process2.spawn)(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || "en",
+        PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8"
+      },
+      detached: !isWindows,
+      shell: false,
+      windowsHide: true
+    });
+    collectLocalProcessResult(child, timeoutMs, formatCommandText(command, args, true), resolve5, reject);
+  });
+}
+function collectLocalProcessResult(child, timeoutMs, commandText, resolve5, reject) {
+  let stdout = "";
+  let stderr = "";
+  let settled = false;
+  let timer;
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  child.on("error", (error51) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    reject(error51);
+  });
+  child.on("close", (code) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    resolve5({
+      exitCode: code ?? 1,
+      stdout,
+      stderr
+    });
+  });
+  if (timeoutMs) {
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killProcessTree(child.pid);
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
+    }, timeoutMs);
+  }
+}
+function killProcessTree(pid) {
+  if (!pid) return;
+  if (process.platform === "win32") {
+    (0, import_node_child_process2.spawn)("taskkill.exe", ["/pid", String(pid), "/t", "/f"], {
+      stdio: "ignore",
+      windowsHide: true
+    }).on("error", () => {
+    });
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+    }
+  }
 }
 async function writeLocalTextFile(filePath, content) {
   try {
@@ -104984,12 +105278,12 @@ data: ${JSON.stringify({ status: "connected" })}
     if (!this.client) throw new Error("In-app browser is not connected");
     const id4 = `browser_req_${++this.requestSeq}`;
     const request = { id: id4, method, params };
-    const result = new Promise((resolve4, reject) => {
+    const result = new Promise((resolve5, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id4);
         reject(new Error(`Browser request timed out: ${method}`));
       }, timeoutMs);
-      this.pending.set(id4, { resolve: resolve4, reject, timer });
+      this.pending.set(id4, { resolve: resolve5, reject, timer });
     });
     this.client.write(`event: browser_request
 data: ${JSON.stringify(request)}
@@ -105099,7 +105393,7 @@ function createRunManager(input) {
   return new RunManager({
     sessions: input.sessions,
     runs: input.runs,
-    agent: new ReActAgent(),
+    agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
     workspace: input.workspace,
     createSkillContentManager: () => new ContentManager(),
@@ -105258,6 +105552,7 @@ function summarizeSession(session) {
   return {
     ...summary,
     archived: metadata?.archived === true,
+    pinned: metadata?.pinned === true,
     preview: messages.find((message) => message.role === "user")?.content.slice(0, 42) || "",
     message_count: messages.length
   };
@@ -105301,8 +105596,18 @@ function applySessionUpdate(session, input) {
     };
     changed = true;
   }
+  if (Object.hasOwn(input, "pinned")) {
+    if (typeof input.pinned !== "boolean") {
+      return { ok: false, status: 400, code: "BAD_REQUEST", message: "pinned must be a boolean" };
+    }
+    session.metadata = {
+      ...session.metadata,
+      pinned: input.pinned
+    };
+    changed = true;
+  }
   if (!changed) {
-    return { ok: false, status: 400, code: "BAD_REQUEST", message: "title or archived is required" };
+    return { ok: false, status: 400, code: "BAD_REQUEST", message: "title, archived, or pinned is required" };
   }
   return { ok: true, changed: true };
 }
@@ -105371,6 +105676,17 @@ function registerHealthRoutes(router) {
 
 // apps/server/routes/runs.ts
 function registerRunRoutes(router) {
+  router.get("/api/runs/active", ({ context: context2, json: json3 }) => {
+    const runs = [...context2.runs.values()].filter((run) => !isTerminalRun(run)).map((run) => ({
+      session_id: run.session_id,
+      run_id: run.id,
+      status: run.status,
+      events_url: `/api/runs/${run.id}/events`,
+      pending_ask: run.pending_ask,
+      pending_approval: run.pending_approval
+    }));
+    return json3(200, { runs });
+  });
   router.get("/api/runs/:id/events", ({ context: context2, params, raw }) => {
     const run = getRun(context2, params.id);
     raw.res.writeHead(200, {
@@ -105456,6 +105772,47 @@ function handleApprove(context2, run, body, json3) {
     run_id: result.run.id,
     request_id: requestId,
     status: result.run.status
+  });
+}
+
+// apps/server/routes/settings.ts
+function registerSettingRoutes(router) {
+  router.get(
+    "/api/settings",
+    ({ context: context2, json: json3 }) => json3(200, {
+      model: context2.settingsService.getModelSettings()
+    })
+  );
+  router.patch(
+    "/api/settings/model",
+    async ({ body, context: context2, json: json3 }) => json3(200, {
+      model: context2.settingsService.updateModel(await body())
+    })
+  );
+  router.post(
+    "/api/settings/model/test",
+    async ({ body, context: context2, json: json3 }) => json3(200, await context2.settingsService.testModel(await body()))
+  );
+  router.post(
+    "/api/settings/model/list",
+    async ({ body, context: context2, json: json3 }) => json3(200, await context2.settingsService.listModels(await body()))
+  );
+  router.get(
+    "/api/settings/permissions",
+    ({ context: context2, json: json3 }) => json3(200, {
+      workspace_roots: context2.permissionsService.listWorkspaceRoots()
+    })
+  );
+  router.post("/api/settings/permissions/revoke", async ({ body, context: context2, json: json3 }) => {
+    const requestBody = await body();
+    const root = typeof requestBody.path === "string" ? requestBody.path : "";
+    if (!root) throw new HttpError(400, "BAD_REQUEST", "path is required");
+    if (!context2.permissionsService.revokeWorkspaceRoot(root)) {
+      throw new HttpError(404, "PERMISSION_NOT_FOUND", "Permission not found");
+    }
+    return json3(200, {
+      workspace_roots: context2.permissionsService.listWorkspaceRoots()
+    });
   });
 }
 
@@ -105559,6 +105916,7 @@ function createRoutes(context2) {
   registerToolRoutes(router);
   registerBrowserRoutes(router);
   registerSessionRoutes(router);
+  registerSettingRoutes(router);
   registerRunRoutes(router);
   return router.handler(context2);
 }
@@ -107686,7 +108044,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task3.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+        await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -107703,7 +108061,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task: task2, relatedTask } = options ?? {};
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -107781,7 +108139,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve4(parseResult.data);
+            resolve5(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -108042,12 +108400,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve4, interval);
+      const timeoutId = setTimeout(resolve5, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -108998,7 +109356,7 @@ var StdioClientTransport = class {
     if (this._process) {
       throw new Error("StdioClientTransport already started! If using Client class, note that connect() calls start() automatically.");
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       this._process = (0, import_cross_spawn.default)(this._serverParams.command, this._serverParams.args ?? [], {
         // merge default env with server env because mcp server needs some env vars
         env: {
@@ -109015,7 +109373,7 @@ var StdioClientTransport = class {
         this.onerror?.(error51);
       });
       this._process.on("spawn", () => {
-        resolve4();
+        resolve5();
       });
       this._process.on("close", (_code) => {
         this._process = void 0;
@@ -109074,22 +109432,22 @@ var StdioClientTransport = class {
     if (this._process) {
       const processToClose = this._process;
       this._process = void 0;
-      const closePromise = new Promise((resolve4) => {
+      const closePromise = new Promise((resolve5) => {
         processToClose.once("close", () => {
-          resolve4();
+          resolve5();
         });
       });
       try {
         processToClose.stdin?.end();
       } catch {
       }
-      await Promise.race([closePromise, new Promise((resolve4) => setTimeout(resolve4, 2e3).unref())]);
+      await Promise.race([closePromise, new Promise((resolve5) => setTimeout(resolve5, 2e3).unref())]);
       if (processToClose.exitCode === null) {
         try {
           processToClose.kill("SIGTERM");
         } catch {
         }
-        await Promise.race([closePromise, new Promise((resolve4) => setTimeout(resolve4, 2e3).unref())]);
+        await Promise.race([closePromise, new Promise((resolve5) => setTimeout(resolve5, 2e3).unref())]);
       }
       if (processToClose.exitCode === null) {
         try {
@@ -109101,15 +109459,15 @@ var StdioClientTransport = class {
     this._readBuffer.clear();
   }
   send(message) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       if (!this._process?.stdin) {
         throw new Error("Not connected");
       }
       const json3 = serializeMessage(message);
       if (this._process.stdin.write(json3)) {
-        resolve4();
+        resolve5();
       } else {
-        this._process.stdin.once("drain", resolve4);
+        this._process.stdin.once("drain", resolve5);
       }
     });
   }
@@ -109421,6 +109779,9 @@ async function registerMcpTools(toolRegistry, mcpConfigPath, workspace) {
   }
 }
 
+// apps/server/services/permissions-service.ts
+var import_node_path8 = require("node:path");
+
 // apps/server/storage/permissions.ts
 var import_node_fs4 = require("node:fs");
 var import_node_path7 = require("node:path");
@@ -109472,13 +109833,192 @@ function samePath(left, right) {
   return (0, import_node_path7.resolve)(left).toLowerCase() === (0, import_node_path7.resolve)(right).toLowerCase();
 }
 
-// apps/server/storage/state.ts
+// apps/server/services/permissions-service.ts
+var PermissionsService = class {
+  constructor(permissionsPath, options) {
+    this.permissionsPath = permissionsPath;
+    this.options = options;
+    this.workspaceRoots = loadWorkspaceRootPermissions(permissionsPath);
+  }
+  permissionsPath;
+  options;
+  workspaceRoots;
+  listWorkspaceRoots() {
+    return this.workspaceRoots.map((permission) => ({ ...permission }));
+  }
+  upsertWorkspaceRoot(root) {
+    upsertWorkspaceRootPermission(this.workspaceRoots, root);
+    saveWorkspaceRootPermissions(this.permissionsPath, this.workspaceRoots);
+    return this.listWorkspaceRoots();
+  }
+  revokeWorkspaceRoot(root) {
+    const normalizedRoot = (0, import_node_path8.resolve)(root).toLowerCase();
+    const index2 = this.workspaceRoots.findIndex((permission) => (0, import_node_path8.resolve)(permission.path).toLowerCase() === normalizedRoot);
+    if (index2 < 0) return false;
+    this.workspaceRoots.splice(index2, 1);
+    this.options.revokeWorkspaceRoot(root);
+    saveWorkspaceRootPermissions(this.permissionsPath, this.workspaceRoots);
+    return true;
+  }
+};
+
+// apps/server/storage/settings.ts
 var import_node_fs5 = require("node:fs");
-var import_node_path8 = require("node:path");
-function loadState({ statePath, sessions, runs }) {
-  if (!(0, import_node_fs5.existsSync)(statePath)) return;
+var import_node_path9 = require("node:path");
+function defaultModelSettings() {
+  return {
+    apiKey: process.env.OPENAI_API_KEY || "",
+    apiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 15e3)
+  };
+}
+function normalizeModelSettings(input = {}, fallback = defaultModelSettings()) {
+  const timeoutMs = Number(input.timeoutMs);
+  return {
+    apiKey: typeof input.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
+    apiBaseUrl: typeof input.apiBaseUrl === "string" && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
+    model: typeof input.model === "string" && input.model.trim() ? input.model.trim() : fallback.model,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback.timeoutMs
+  };
+}
+function createDefaultRuntimeSettings() {
+  return {
+    model: defaultModelSettings()
+  };
+}
+function loadRuntimeSettings(settingsPath) {
+  const defaults2 = createDefaultRuntimeSettings();
+  if (!(0, import_node_fs5.existsSync)(settingsPath)) return defaults2;
   try {
-    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(statePath, "utf8"));
+    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(settingsPath, "utf8"));
+    return {
+      model: normalizeModelSettings(parsed.model || {}, defaults2.model)
+    };
+  } catch (error51) {
+    console.warn(`Failed to load settings from ${settingsPath}:`, error51);
+    return defaults2;
+  }
+}
+function saveRuntimeSettings(settingsPath, settings) {
+  try {
+    (0, import_node_fs5.mkdirSync)((0, import_node_path9.dirname)(settingsPath), { recursive: true });
+    (0, import_node_fs5.writeFileSync)(settingsPath, `${JSON.stringify(settings, null, 2)}
+`);
+  } catch (error51) {
+    console.warn(`Failed to save settings to ${settingsPath}:`, error51);
+  }
+}
+
+// apps/server/services/settings-service.ts
+var SettingsService = class {
+  constructor(settingsPath) {
+    this.settingsPath = settingsPath;
+    this.settings = loadRuntimeSettings(settingsPath);
+  }
+  settingsPath;
+  settings;
+  get() {
+    return this.settings;
+  }
+  getModelSettings() {
+    return this.settings.model;
+  }
+  updateModel(input) {
+    this.settings.model = normalizeModelSettings(input, this.settings.model);
+    saveRuntimeSettings(this.settingsPath, this.settings);
+    return this.settings.model;
+  }
+  async testModel(input) {
+    const settings = normalizeModelSettings(input, this.settings.model);
+    const startedAt = Date.now();
+    const result = await this.listModels(input);
+    if (!result.ok) return { ...result, duration_ms: Date.now() - startedAt };
+    const found = result.models.includes(settings.model);
+    return {
+      ok: found,
+      stage: found ? "done" : "model",
+      model: settings.model,
+      model_count: result.models.length,
+      message: found ? "Model is available" : `Model "${settings.model}" was not found in /models`,
+      duration_ms: Date.now() - startedAt
+    };
+  }
+  async listModels(input) {
+    const settings = normalizeModelSettings(input, this.settings.model);
+    const startedAt = Date.now();
+    const result = await listModelSettings(settings);
+    return {
+      ...result,
+      duration_ms: Date.now() - startedAt
+    };
+  }
+};
+async function listModelSettings(settings) {
+  if (!settings.apiKey) {
+    return {
+      ok: false,
+      stage: "auth",
+      models: [],
+      message: "API Key is required"
+    };
+  }
+  const controller = new AbortController();
+  const timeoutMs = Math.max(1e3, Math.min(settings.timeoutMs || 15e3, 3e4));
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${settings.apiBaseUrl.replace(/\/+$/, "")}/models`, {
+      headers: {
+        Authorization: `Bearer ${settings.apiKey}`
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        stage: response.status === 401 || response.status === 403 ? "auth" : "models",
+        status: response.status,
+        models: [],
+        message: await readErrorMessage(response)
+      };
+    }
+    const data = await response.json();
+    const modelIds = Array.isArray(data.data) ? data.data.map((item) => typeof item.id === "string" ? item.id : "").filter(Boolean) : [];
+    return {
+      ok: true,
+      stage: "models",
+      models: modelIds,
+      model_count: modelIds.length,
+      message: modelIds.length > 0 ? "Models loaded" : "No models returned"
+    };
+  } catch (error51) {
+    return {
+      ok: false,
+      stage: "network",
+      models: [],
+      message: error51 instanceof Error && error51.name === "AbortError" ? `Request timed out after ${timeoutMs}ms` : error51 instanceof Error ? error51.message : "Unable to test model"
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function readErrorMessage(response) {
+  try {
+    const data = await response.json();
+    const message = data.error?.message || data.message;
+    return typeof message === "string" && message.trim() ? message.trim() : `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+// apps/server/storage/state.ts
+var import_node_fs6 = require("node:fs");
+var import_node_path10 = require("node:path");
+function loadState({ statePath, sessions, runs }) {
+  if (!(0, import_node_fs6.existsSync)(statePath)) return;
+  try {
+    const parsed = JSON.parse((0, import_node_fs6.readFileSync)(statePath, "utf8"));
     for (const session of parsed.sessions || []) {
       if (!session.id) continue;
       sessions.set(session.id, session);
@@ -109511,8 +110051,8 @@ function createStateSaver({ statePath, sessions, runs }) {
       runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run)
     };
     try {
-      (0, import_node_fs5.mkdirSync)((0, import_node_path8.dirname)(statePath), { recursive: true });
-      (0, import_node_fs5.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
+      (0, import_node_fs6.mkdirSync)((0, import_node_path10.dirname)(statePath), { recursive: true });
+      (0, import_node_fs6.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
 `);
     } catch (error51) {
       console.warn(`Failed to save state to ${statePath}:`, error51);
@@ -109544,14 +110084,17 @@ async function createApp() {
   const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialWorkspace));
   if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
   const config2 = resolveServerConfig();
-  const { mcpConfigPath, permissionsPath, port, statePath, workspace } = config2;
+  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, workspace } = config2;
   const sessions = /* @__PURE__ */ new Map();
   const runs = /* @__PURE__ */ new Map();
   const browserBridge = new BrowserBridge();
+  const settingsService = new SettingsService(settingsPath);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
-  const persistentWorkspaceRoots = loadWorkspaceRootPermissions(permissionsPath);
-  for (const permission of persistentWorkspaceRoots) {
+  const permissionsService = new PermissionsService(permissionsPath, {
+    revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root)
+  });
+  for (const permission of permissionsService.listWorkspaceRoots()) {
     system.approveWorkspaceRoot(permission.path);
   }
   loadState({ statePath, sessions, runs });
@@ -109567,10 +110110,10 @@ async function createApp() {
         return approval.added ? () => system.revokeWorkspaceRoot(root) : void 0;
       }
       if (scope === "persistent") {
-        upsertWorkspaceRootPermission(persistentWorkspaceRoots, root);
-        saveWorkspaceRootPermissions(permissionsPath, persistentWorkspaceRoots);
+        permissionsService.upsertWorkspaceRoot(root);
       }
     },
+    getModelSettings: () => settingsService.getModelSettings(),
     onChange: stateSaver.saveStateSoon
   });
   const server = import_node_http.default.createServer(
@@ -109580,6 +110123,8 @@ async function createApp() {
       runManager,
       toolRegistry,
       browserBridge,
+      permissionsService,
+      settingsService,
       onChange: stateSaver.saveStateSoon
     })
   );

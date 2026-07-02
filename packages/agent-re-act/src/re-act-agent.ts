@@ -25,7 +25,12 @@ import {
   getMessageText,
   isAI,
 } from './messages.js';
-import { createChatModel, withTimeout } from './llm-client.js';
+import {
+  createChatModel,
+  resolveChatModelSettings,
+  withTimeout,
+  type ChatModelSettings,
+} from './llm-client.js';
 
 function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
   return {
@@ -77,13 +82,20 @@ function toToolCallArgs(args: unknown): Record<string, unknown> {
 }
 
 export class ReActAgent {
+  constructor(
+    private readonly config: {
+      getModelSettings?: () => Partial<ChatModelSettings>;
+    } = {},
+  ) {}
+
   async run({ input, history = [], eventBus, toolRegistry, context, limits: rawLimits }: AgentRunInput): Promise<AgentRunResult> {
-    if (!process.env.OPENAI_API_KEY) {
+    const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
+    if (!modelSettings.apiKey) {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
     }
 
     const limits = normalizeLimits(rawLimits);
-    const model = createChatModel();
+    const model = createChatModel(modelSettings);
     const timeoutMs = limits.timeout_ms;
     const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
@@ -102,7 +114,7 @@ export class ReActAgent {
     eventBus.emit('agent.plan', {
       mode: 'react',
       planner: 'manual-model-loop',
-      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      model: modelSettings.model,
       tools: runtimeTools.map((tool) => tool.name),
     });
 

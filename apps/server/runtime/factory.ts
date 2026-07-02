@@ -8,6 +8,7 @@ import {
   SkillLoader,
 } from '../../../packages/agent-skills/src/index.js';
 import { registerBrowserTools } from '../../../packages/browser-tools/src/index.js';
+import type { ChatModelSettings } from '../../../packages/agent-re-act/src/llm-client.js';
 import type { Run, Session } from '../../../packages/protocol/src/index.js';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
 
@@ -31,12 +32,13 @@ export function createRunManager(input: {
   toolRegistry: ToolRegistry;
   workspace: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
+  getModelSettings: () => Partial<ChatModelSettings>;
   onChange: () => void;
 }) {
   return new RunManager({
     sessions: input.sessions,
     runs: input.runs,
-    agent: new ReActAgent(),
+    agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
     workspace: input.workspace,
     createSkillContentManager: () => new ContentManager(),

@@ -6,6 +6,7 @@ export type ServerConfig = {
   mcpConfigPath: string;
   permissionsPath: string;
   port: number;
+  settingsPath: string;
   statePath: string;
   workspace: string;
 };
@@ -36,6 +37,7 @@ export function resolveServerConfig(): ServerConfig {
     mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, workspace, join('.moke', 'mcp.json')),
     permissionsPath: resolvePath(process.env.MOKE_PERMISSIONS_PATH, workspace, join('.moke', 'permissions.json')),
     port: resolvePort(process.env.PORT),
+    settingsPath: resolvePath(process.env.MOKE_SETTINGS_PATH, workspace, join('.moke', 'settings.json')),
     statePath: resolvePath(process.env.MOKE_STATE_PATH, workspace, join('.moke', 'state.json')),
     workspace,
   };

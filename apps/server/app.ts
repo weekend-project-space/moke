@@ -12,12 +12,8 @@ import { createToolRegistry, createRunManager } from './runtime/factory.js';
 import { createRoutes } from './routes/index.js';
 import { BrowserBridge } from './services/browser-bridge.js';
 import { registerMcpTools } from './services/mcp-tools.js';
-import {
-  loadWorkspaceRootPermissions,
-  saveWorkspaceRootPermissions,
-  upsertWorkspaceRootPermission,
-  type WorkspaceRootPermission,
-} from './storage/permissions.js';
+import { PermissionsService } from './services/permissions-service.js';
+import { SettingsService } from './services/settings-service.js';
 import { createStateSaver, loadState } from './storage/state.js';
 
 export {
@@ -52,15 +48,18 @@ export async function createApp(): Promise<ServerApp> {
   if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
 
   const config: ServerConfig = resolveServerConfig();
-  const { mcpConfigPath, permissionsPath, port, statePath, workspace } = config;
+  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, workspace } = config;
 
   const sessions = new Map<string, Session>();
   const runs = new Map<string, Run>();
   const browserBridge = new BrowserBridge();
+  const settingsService = new SettingsService(settingsPath);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
-  const persistentWorkspaceRoots: WorkspaceRootPermission[] = loadWorkspaceRootPermissions(permissionsPath);
-  for (const permission of persistentWorkspaceRoots) {
+  const permissionsService = new PermissionsService(permissionsPath, {
+    revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
+  });
+  for (const permission of permissionsService.listWorkspaceRoots()) {
     system.approveWorkspaceRoot(permission.path);
   }
 
@@ -78,12 +77,13 @@ export async function createApp(): Promise<ServerApp> {
         return approval.added ? () => system.revokeWorkspaceRoot(root) : undefined;
       }
       if (scope === 'persistent') {
-        upsertWorkspaceRootPermission(persistentWorkspaceRoots, root);
-        saveWorkspaceRootPermissions(permissionsPath, persistentWorkspaceRoots);
+        permissionsService.upsertWorkspaceRoot(root);
       }
     },
+    getModelSettings: () => settingsService.getModelSettings(),
     onChange: stateSaver.saveStateSoon,
   });
+
   const server = http.createServer(
     createRoutes({
       sessions,
@@ -91,6 +91,8 @@ export async function createApp(): Promise<ServerApp> {
       runManager,
       toolRegistry,
       browserBridge,
+      permissionsService,
+      settingsService,
       onChange: stateSaver.saveStateSoon,
     }),
   );

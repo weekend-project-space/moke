@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, PanelLeftClose, Pencil, Pin, PinOff, Plus, Search } from 'lucide-vue-next'
+import { Archive, PanelLeftClose, Pencil, Pin, PinOff, Plus, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
@@ -18,6 +18,7 @@ const props = defineProps<{
   activeSessionId: string
   disabled: boolean
   runningSessionIds: string[]
+  settingsActive: boolean
   sessionLabel: (session: SessionSummary) => string
   sessionMeta: (session: SessionSummary) => string
 }>()
@@ -26,6 +27,7 @@ const emit = defineEmits<{
   archiveSession: [id: string]
   close: []
   newSession: []
+  openSettings: []
   pinSession: [id: string, pinned: boolean]
   renameSession: [id: string, title: string]
   selectSession: [id: string]
@@ -217,6 +219,20 @@ onUnmounted(() => {
         </button>
       </article>
     </section>
+
+    <footer class="sidebar-footer">
+      <button
+        class="sidebar-settings"
+        type="button"
+        :class="{ active: settingsActive }"
+        aria-label="设置"
+        title="设置"
+        @click="emit('openSettings')"
+      >
+        <Settings :size="15" stroke-width="2.1" />
+        <span>设置</span>
+      </button>
+    </footer>
   </aside>
 
   <Teleport to="body">

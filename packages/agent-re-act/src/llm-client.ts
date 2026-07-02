@@ -1,17 +1,34 @@
 import { ChatOpenAI } from '@langchain/openai';
 
-export function createChatModel() {
-  if (!process.env.OPENAI_API_KEY) {
+export type ChatModelSettings = {
+  apiKey: string;
+  apiBaseUrl: string;
+  model: string;
+  timeoutMs: number;
+};
+
+export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {}): ChatModelSettings {
+  return {
+    apiKey: input.apiKey || process.env.OPENAI_API_KEY || '',
+    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    model: input.model || process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 15000),
+  };
+}
+
+export function createChatModel(input: Partial<ChatModelSettings> = {}) {
+  const settings = resolveChatModelSettings(input);
+  if (!settings.apiKey) {
     throw new Error('OPENAI_API_KEY is not set');
   }
 
   return new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    apiKey: settings.apiKey,
+    model: settings.model,
     temperature: 0,
-    timeout: Number(process.env.OPENAI_TIMEOUT_MS || 15000),
+    timeout: settings.timeoutMs,
     configuration: {
-      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      baseURL: settings.apiBaseUrl,
     },
   });
 }
