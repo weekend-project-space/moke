@@ -47,6 +47,7 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+const SESSION_HASH_KEY = 'session'
 const {
   cancelRun,
   archiveSession,
@@ -253,22 +254,62 @@ function formatTimelineTime(time: number) {
   return `${date.getFullYear()}年${dateLabel} ${timeLabel}`
 }
 
+function readSessionIdFromHash() {
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  return params.get(SESSION_HASH_KEY) || ''
+}
+
+function writeSessionIdToHash(id: string) {
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  if (id) {
+    params.set(SESSION_HASH_KEY, id)
+  } else {
+    params.delete(SESSION_HASH_KEY)
+  }
+
+  const nextHash = params.toString()
+  const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  if (nextUrl !== currentUrl) window.history.replaceState(null, '', nextUrl)
+}
+
+function initialSessionFromHash() {
+  const hashSessionId = readSessionIdFromHash()
+  if (!hashSessionId) return sortedSessions.value[0]
+  return sortedSessions.value.find((session) => session.id === hashSessionId) || sortedSessions.value[0]
+}
+
 function resizeComposer() {
   composerBox.value?.resize()
 }
 
 async function selectSession(id: string) {
   conversationView.value?.resetAutoScroll()
-  if (await selectAgentSession(id)) closeTransientPanels()
+  if (await selectAgentSession(id)) {
+    writeSessionIdToHash(id)
+    closeTransientPanels()
+  }
 }
 
 async function startNewSession() {
-  if (await createSession()) closeTransientPanels()
+  if (await createSession()) {
+    writeSessionIdToHash(sessionId.value)
+    closeTransientPanels()
+  }
 }
 
 async function forkMessage(messageId: string) {
   conversationView.value?.resetAutoScroll()
-  if (await forkSession(messageId)) closeTransientPanels()
+  if (await forkSession(messageId)) {
+    writeSessionIdToHash(sessionId.value)
+    closeTransientPanels()
+  }
+}
+
+async function archiveSelectedSession(id: string) {
+  if (await archiveSession(id)) {
+    writeSessionIdToHash(sessionId.value)
+  }
 }
 
 function sendOnEnter(event: KeyboardEvent) {
@@ -357,11 +398,11 @@ onMounted(async () => {
   if (await checkServer()) {
     await loadSessions()
     await loadActiveRuns()
-    const latestSession = sortedSessions.value[0]
-    if (latestSession) {
-      await selectSession(latestSession.id)
+    const initialSession = initialSessionFromHash()
+    if (initialSession) {
+      await selectSession(initialSession.id)
     } else {
-      await createSession()
+      await startNewSession()
     }
   }
 })
@@ -383,7 +424,7 @@ onUnmounted(() => {
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :session-label="sessionLabel"
       :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
-      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSession"
+      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
       @pin-session="pinSession" />
     <div
       class="sidebar-resizer"
