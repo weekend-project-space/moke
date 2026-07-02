@@ -57,13 +57,16 @@ const {
   events,
   forkSession,
   isRunning,
+  loadActiveRuns,
   loadSessions,
   messages,
   pendingApproval,
   pendingAsk,
+  pinSession,
   renameSession,
   runError,
   runId,
+  runningSessionIds,
   selectAskOption,
   selectSession: selectAgentSession,
   sendMessage,
@@ -260,7 +263,6 @@ async function selectSession(id: string) {
 }
 
 async function startNewSession() {
-  if (isRunning.value) return
   if (await createSession()) closeTransientPanels()
 }
 
@@ -354,6 +356,7 @@ onMounted(async () => {
 
   if (await checkServer()) {
     await loadSessions()
+    await loadActiveRuns()
     const latestSession = sortedSessions.value[0]
     if (latestSession) {
       await selectSession(latestSession.id)
@@ -378,9 +381,10 @@ onUnmounted(() => {
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
       @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
-      :disabled="serverStatus !== 'online' || isRunning" :is-running="isRunning" :session-label="sessionLabel"
+      :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :session-label="sessionLabel"
       :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
-      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSession" />
+      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSession"
+      @pin-session="pinSession" />
     <div
       class="sidebar-resizer"
       role="separator"

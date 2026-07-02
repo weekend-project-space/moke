@@ -14,6 +14,7 @@ export type ForkSessionInput = {
 export type SessionUpdateInput = {
   title?: unknown;
   archived?: unknown;
+  pinned?: unknown;
 };
 
 export type SessionUpdateResult =
@@ -40,6 +41,7 @@ export function summarizeSession(session: Session) {
   return {
     ...summary,
     archived: metadata?.archived === true,
+    pinned: metadata?.pinned === true,
     preview: messages.find((message) => message.role === 'user')?.content.slice(0, 42) || '',
     message_count: messages.length,
   };
@@ -98,8 +100,20 @@ export function applySessionUpdate(session: Session, input: SessionUpdateInput):
     changed = true;
   }
 
+  if (Object.hasOwn(input, 'pinned')) {
+    if (typeof input.pinned !== 'boolean') {
+      return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'pinned must be a boolean' };
+    }
+
+    session.metadata = {
+      ...session.metadata,
+      pinned: input.pinned,
+    };
+    changed = true;
+  }
+
   if (!changed) {
-    return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'title or archived is required' };
+    return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'title, archived, or pinned is required' };
   }
 
   return { ok: true, changed: true };

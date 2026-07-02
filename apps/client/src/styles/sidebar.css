@@ -227,7 +227,8 @@
   display: inline-block;
   width: 6px;
   height: 6px;
-  margin-left: 6px;
+  flex: 0 0 auto;
+  margin-left: 2px;
   border-radius: 50%;
   vertical-align: 1px;
   background: var(--accent);
@@ -235,14 +236,28 @@
 }
 
 .session small {
-  display: block;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
   color: var(--ink);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
+}
+
+.session-title-text {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-pin {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  opacity: 0.72;
 }
 
 .session-archive-hover {
@@ -269,14 +284,14 @@
     background 0.14s ease;
 }
 
-.session:hover .session-archive-hover,
-.session:focus-within .session-archive-hover {
+.session.archivable:hover .session-archive-hover,
+.session.archivable:focus-within .session-archive-hover {
   opacity: 1;
   pointer-events: auto;
 }
 
-.session:hover time,
-.session:focus-within time {
+.session.archivable:hover time,
+.session.archivable:focus-within time {
   opacity: 0;
 }
 
@@ -320,6 +335,16 @@
 
 .session-context-menu button:hover {
   background: rgba(118, 118, 128, 0.1);
+}
+
+.session-context-menu button:disabled {
+  cursor: default;
+  color: var(--ink-muted);
+  opacity: 0.48;
+}
+
+.session-context-menu button:disabled:hover {
+  background: transparent;
 }
 
 .session-context-menu svg {

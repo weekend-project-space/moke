@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Session } from '../../../packages/protocol/src/index.js';
-import { applySessionUpdate, forkSession, maybeSetTitleFromFirstUserMessage, titleFromFirstUserMessage } from './sessions.js';
+import {
+  applySessionUpdate,
+  forkSession,
+  maybeSetTitleFromFirstUserMessage,
+  summarizeSession,
+  titleFromFirstUserMessage,
+} from './sessions.js';
 
 function createSession(): Session {
   return {
@@ -30,6 +36,15 @@ test('applySessionUpdate archives without removing existing metadata', () => {
 
   assert.deepEqual(result, { ok: true, changed: true });
   assert.deepEqual(session.metadata, { kept: true, archived: true });
+});
+
+test('applySessionUpdate pins without removing existing metadata', () => {
+  const session = createSession();
+  const result = applySessionUpdate(session, { pinned: true });
+
+  assert.deepEqual(result, { ok: true, changed: true });
+  assert.deepEqual(session.metadata, { kept: true, pinned: true });
+  assert.equal(summarizeSession(session).pinned, true);
 });
 
 test('applySessionUpdate rejects empty title', () => {

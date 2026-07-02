@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, PanelLeftClose, Pencil, Plus, Search } from 'lucide-vue-next'
+import { Archive, PanelLeftClose, Pencil, Pin, PinOff, Plus, Search } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
@@ -8,6 +8,7 @@ type SessionSummary = {
   created_at: string
   updated_at: string
   archived?: boolean
+  pinned?: boolean
   preview?: string
   message_count?: number
 }
@@ -16,7 +17,7 @@ const props = defineProps<{
   sessions: SessionSummary[]
   activeSessionId: string
   disabled: boolean
-  isRunning: boolean
+  runningSessionIds: string[]
   sessionLabel: (session: SessionSummary) => string
   sessionMeta: (session: SessionSummary) => string
 }>()
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   archiveSession: [id: string]
   close: []
   newSession: []
+  pinSession: [id: string, pinned: boolean]
   renameSession: [id: string, title: string]
   selectSession: [id: string]
 }>()
@@ -35,6 +37,7 @@ const editingSessionId = ref('')
 const editingTitle = ref('')
 const editingInput = ref<HTMLInputElement | null>(null)
 const editingSession = ref<SessionSummary | null>(null)
+const runningSessionIdSet = computed(() => new Set(props.runningSessionIds))
 
 const filteredSessions = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -57,7 +60,7 @@ function openContextMenu(event: MouseEvent, session: SessionSummary) {
   contextMenu.value = {
     session,
     x: Math.min(event.clientX, window.innerWidth - 168),
-    y: Math.min(event.clientY, window.innerHeight - 104),
+    y: Math.min(event.clientY, window.innerHeight - 138),
   }
 }
 
@@ -66,6 +69,7 @@ function closeContextMenu() {
 }
 
 function startRename(session: SessionSummary) {
+  if (isSessionRunning(session.id)) return
   closeContextMenu()
   editingSessionId.value = session.id
   editingTitle.value = props.sessionLabel(session)
@@ -77,8 +81,18 @@ function startRename(session: SessionSummary) {
 }
 
 function archiveSession(session: SessionSummary) {
+  if (isSessionRunning(session.id)) return
   closeContextMenu()
   emit('archiveSession', session.id)
+}
+
+function togglePinned(session: SessionSummary) {
+  closeContextMenu()
+  emit('pinSession', session.id, !session.pinned)
+}
+
+function isSessionRunning(id: string) {
+  return runningSessionIdSet.value.has(id)
 }
 
 function cancelRename() {
@@ -154,7 +168,11 @@ onUnmounted(() => {
         v-else
         :key="session.id"
         class="session"
-        :class="{ active: session.id === activeSessionId, running: isRunning && session.id === activeSessionId }"
+        :class="{
+          active: session.id === activeSessionId,
+          running: isSessionRunning(session.id),
+          archivable: !disabled && editingSessionId !== session.id && !isSessionRunning(session.id),
+        }"
         @contextmenu="openContextMenu($event, session)"
       >
         <button
@@ -166,8 +184,9 @@ onUnmounted(() => {
         >
           <span class="session-line">
             <small>
-              {{ sessionLabel(session) }}
-              <i v-if="isRunning && session.id === activeSessionId" aria-hidden="true"></i>
+              <span class="session-title-text">{{ sessionLabel(session) }}</span>
+              <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
+              <i v-if="isSessionRunning(session.id)" aria-hidden="true"></i>
             </small>
             <time>{{ sessionMeta(session) }}</time>
           </span>
@@ -186,6 +205,7 @@ onUnmounted(() => {
           </span>
         </form>
         <button
+          v-if="!disabled && editingSessionId !== session.id && !isSessionRunning(session.id)"
           class="session-archive-hover"
           type="button"
           :disabled="disabled"
@@ -209,11 +229,26 @@ onUnmounted(() => {
       @click.stop
       @keydown.esc.prevent="closeContextMenu"
     >
-      <button type="button" role="menuitem" @click="startRename(contextMenu.session)">
+      <button type="button" role="menuitem" @click="togglePinned(contextMenu.session)">
+        <PinOff v-if="contextMenu.session.pinned" :size="14" stroke-width="2.1" />
+        <Pin v-else :size="14" stroke-width="2.1" />
+        <span>{{ contextMenu.session.pinned ? '取消置顶' : '置顶' }}</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        :disabled="isSessionRunning(contextMenu.session.id)"
+        @click="startRename(contextMenu.session)"
+      >
         <Pencil :size="14" stroke-width="2.1" />
         <span>重命名</span>
       </button>
-      <button type="button" role="menuitem" @click="archiveSession(contextMenu.session)">
+      <button
+        type="button"
+        role="menuitem"
+        :disabled="isSessionRunning(contextMenu.session.id)"
+        @click="archiveSession(contextMenu.session)"
+      >
         <Archive :size="14" stroke-width="2.1" />
         <span>归档</span>
       </button>

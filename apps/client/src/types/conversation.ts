@@ -27,6 +27,7 @@ export type SessionSummary = {
   created_at: string
   updated_at: string
   archived?: boolean
+  pinned?: boolean
   preview?: string
   message_count?: number
 }

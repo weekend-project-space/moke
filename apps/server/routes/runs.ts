@@ -4,6 +4,21 @@ import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';
 
 export function registerRunRoutes(router: Router<RoutesContext>) {
+  router.get('/api/runs/active', ({ context, json }) => {
+    const runs = [...context.runs.values()]
+      .filter((run) => !isTerminalRun(run))
+      .map((run) => ({
+        session_id: run.session_id,
+        run_id: run.id,
+        status: run.status,
+        events_url: `/api/runs/${run.id}/events`,
+        pending_ask: run.pending_ask,
+        pending_approval: run.pending_approval,
+      }));
+
+    return json(200, { runs });
+  });
+
   router.get('/api/runs/:id/events', ({ context, params, raw }) => {
     const run = getRun(context, params.id);
 
