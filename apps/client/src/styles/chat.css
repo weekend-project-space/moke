@@ -434,7 +434,7 @@
 
 .tool-result-console {
   display: grid;
-  gap: 7px;
+  gap: 0;
   min-width: 0;
   width: 100%;
   color: color-mix(in srgb, var(--ink-soft), transparent 2%);
@@ -453,7 +453,7 @@
   gap: 2px;
   min-height: 84px;
   max-height: 168px;
-  padding: 8px 10px 0;
+  padding: 8px 10px;
   overflow: auto;
   align-content: start;
 }
@@ -581,7 +581,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 6px;
+  padding: 5px 10px 7px;
   border-top: 1px solid rgba(60, 60, 67, 0.06);
   color: color-mix(in srgb, var(--ink-muted), transparent 8%);
   font-size: 12px;
@@ -1253,6 +1253,16 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-inline-reason {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
+  font-size: 14px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

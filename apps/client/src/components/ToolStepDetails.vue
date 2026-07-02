@@ -10,6 +10,9 @@ const props = defineProps<{
 }>()
 
 const doneText = '\u5df2\u5b8c\u6210'
+const emptyFileReadText = '\u8bfb\u53d6\u5185\u5bb9\u4e3a\u7a7a'
+const jsonInputLabel = '\u8f93\u5165'
+const jsonOutputLabel = '\u8f93\u51fa'
 const resultItems = computed(() => props.step.summary.files || [])
 const guardedResultItems = computed(() => guardToolContent(resultItems.value.join('\n')))
 const hasRawData = computed(() => Boolean(props.step.inputRaw || props.step.outputRaw))
@@ -88,7 +91,6 @@ function diffStats(lines: string[]) {
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">
           <span>{{ step.summary.path || step.summary.query || step.objectLabel || step.actionLabel }}</span>
-          <strong>{{ resultCount }} {{ resultUnit }}</strong>
         </div>
         <div class="tool-result-lines">
           <div v-if="guardedResultItems.isOversize" class="tool-content-oversize">
@@ -137,7 +139,7 @@ function diffStats(lines: string[]) {
           Content is {{ formatBytes(guardedFileReadText.bytes) }}. It is larger than 100 kB and is not rendered inline.
         </p>
         <pre v-else-if="guardedFileReadText.text" class="tool-detail-output">{{ guardedFileReadText.text }}</pre>
-        <p v-else class="tool-detail-note">\u8bfb\u53d6\u5185\u5bb9\u4e3a\u7a7a</p>
+        <p v-else class="tool-detail-note">{{ emptyFileReadText }}</p>
       </div>
     </template>
 
@@ -187,14 +189,14 @@ function diffStats(lines: string[]) {
       </summary>
       <div class="tool-detail-raw-grid">
         <div v-if="step.inputRaw" class="process-json-block">
-          <span>\u8f93\u5165</span>
+          <span>{{ jsonInputLabel }}</span>
           <p v-if="guardedInputRaw.isOversize" class="tool-content-oversize">
             Content is {{ formatBytes(guardedInputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
           </p>
           <pre v-else>{{ guardedInputRaw.text }}</pre>
         </div>
         <div class="process-json-block">
-          <span>\u8f93\u51fa</span>
+          <span>{{ jsonOutputLabel }}</span>
           <p v-if="guardedOutputRaw.isOversize" class="tool-content-oversize">
             Content is {{ formatBytes(guardedOutputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
           </p>

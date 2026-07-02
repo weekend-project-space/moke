@@ -192,7 +192,9 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
     this.assertCommandPathsStayInApprovedRoots(commandText, cwd);
     if (this.useLocalFsWrites) {
-      return this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+      return args.length > 0
+        ? this.executeLocalProcess(command, args, cwd, startedAt, options?.timeoutMs)
+        : this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
     }
 
     const result = await withTimeout(this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`), options?.timeoutMs, command);
@@ -211,6 +213,22 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     timeoutMs: number | undefined,
   ): Promise<SystemExecuteResult> {
     const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration_ms: Date.now() - startedAt,
+    };
+  }
+
+  private async executeLocalProcess(
+    command: string,
+    args: string[],
+    cwd: string,
+    startedAt: number,
+    timeoutMs: number | undefined,
+  ): Promise<SystemExecuteResult> {
+    const result = await runLocalProcess(command, args, cwd, timeoutMs);
     return {
       exit_code: result.exitCode,
       stdout: result.stdout,
@@ -344,47 +362,106 @@ function runLocalShellCommand(commandText: string, cwd: string, timeoutMs: numbe
       : spawn(commandText, {
           cwd,
           env: process.env,
+          detached: true,
           shell: true,
         });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-    let timer: NodeJS.Timeout | undefined;
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-    child.on('error', (error) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      reject(error);
-    });
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      resolve({
-        exitCode: code ?? 1,
-        stdout,
-        stderr,
-      });
-    });
-
-    if (timeoutMs) {
-      timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        child.kill();
-        reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
-      }, timeoutMs);
-    }
+    collectLocalProcessResult(child, timeoutMs, commandText, resolve, reject);
   });
+}
+
+function runLocalProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number | undefined,
+): Promise<LocalCommandResult> {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
+        PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
+      },
+      detached: !isWindows,
+      shell: false,
+      windowsHide: true,
+    });
+
+    collectLocalProcessResult(child, timeoutMs, formatCommandText(command, args, true), resolve, reject);
+  });
+}
+
+function collectLocalProcessResult(
+  child: ReturnType<typeof spawn>,
+  timeoutMs: number | undefined,
+  commandText: string,
+  resolve: (result: LocalCommandResult) => void,
+  reject: (error: Error) => void,
+) {
+  let stdout = '';
+  let stderr = '';
+  let settled = false;
+  let timer: NodeJS.Timeout | undefined;
+
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr?.on('data', (chunk) => {
+    stderr += chunk;
+  });
+  child.on('error', (error) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    reject(error);
+  });
+  child.on('close', (code) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    resolve({
+      exitCode: code ?? 1,
+      stdout,
+      stderr,
+    });
+  });
+
+  if (timeoutMs) {
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killProcessTree(child.pid);
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
+    }, timeoutMs);
+  }
+}
+
+function killProcessTree(pid: number | undefined) {
+  if (!pid) return;
+
+  if (process.platform === 'win32') {
+    spawn('taskkill.exe', ['/pid', String(pid), '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    }).on('error', () => {
+      // Best-effort cleanup; the timeout error has already been returned to the caller.
+    });
+    return;
+  }
+
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Best-effort cleanup.
+    }
+  }
 }
 
 async function writeLocalTextFile(filePath: string, content: string) {

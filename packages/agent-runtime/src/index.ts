@@ -4,6 +4,8 @@ export { RunManager } from './run-manager.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
 export type {
   RuntimeContentManager,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
   ToolContext,
   WorkspacePathApprovalDecision,
   WorkspacePathApprovalRequest,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
-import { analyzeCommandSafety } from './command-safety.js';
+import { analyzeCommandComplexity, analyzeCommandSafety } from './command-safety.js';
 
 const workspace = path.resolve('E:/work/test/moke');
 
@@ -44,4 +44,83 @@ test('analyzeCommandSafety rejects redirection targets outside workspace', () =>
   const issues = analyze('echo hello > ..\\a.md');
 
   assert.equal(issues.some((issue) => issue.code === 'redirection_target_escapes_workspace'), true);
+});
+
+test('analyzeCommandSafety rejects working directory changes outside workspace', () => {
+  const issues = analyze('cd ..; copy moke\\a.md a.md');
+
+  assert.equal(issues[0]?.code, 'working_directory_escapes_workspace');
+  assert.equal(issues[0]?.path, path.resolve('E:/work/test'));
+});
+
+test('analyzeCommandSafety allows working directory changes inside workspace', () => {
+  assert.deepEqual(analyze('cd apps; npm test'), []);
+});
+
+test('analyzeCommandSafety rejects PowerShell environment variable paths outside approved roots', () => {
+  process.env.MOKE_TEST_TEMP = path.resolve('E:/moke-temp');
+
+  const issues = analyze('copy a.md $env:MOKE_TEST_TEMP\\a.md');
+
+  assert.equal(issues[0]?.code, 'environment_path');
+  assert.equal(issues[0]?.path, path.resolve('E:/moke-temp/a.md'));
+});
+
+test('analyzeCommandSafety allows environment variable paths inside approved roots', () => {
+  process.env.MOKE_TEST_WORKSPACE = workspace;
+
+  assert.deepEqual(analyze('copy a.md $env:MOKE_TEST_WORKSPACE\\a.md'), []);
+});
+
+test('analyzeCommandSafety rejects cmd environment variable paths outside approved roots', () => {
+  process.env.MOKE_TEST_TEMP = path.resolve('E:/moke-temp');
+
+  const issues = analyze('copy a.md %MOKE_TEST_TEMP%\\a.md');
+
+  assert.equal(issues[0]?.code, 'environment_path');
+  assert.equal(issues[0]?.path, path.resolve('E:/moke-temp/a.md'));
+});
+
+test('analyzeCommandSafety rejects home directory paths outside approved roots', () => {
+  const issues = analyze('copy a.md ~\\a.md');
+
+  assert.equal(issues[0]?.code, 'home_path');
+});
+
+test('analyzeCommandSafety rejects Join-Path roots outside approved roots', () => {
+  const issues = analyze('copy a.md (Join-Path E:\\ a.md)');
+
+  assert.equal(issues[0]?.code, 'dynamic_path');
+  assert.equal(issues[0]?.path, path.resolve('E:/'));
+});
+
+test('analyzeCommandSafety rejects bare drive roots outside approved roots', () => {
+  const issues = analyze('copy a.md E:\\');
+
+  assert.equal(issues[0]?.code, 'absolute_path_outside_workspace');
+  assert.equal(issues[0]?.path, path.resolve('E:/'));
+});
+
+test('analyzeCommandComplexity flags shell control operators', () => {
+  const issues = analyzeCommandComplexity('npm test && npm run build').issues;
+
+  assert.equal(issues[0]?.code, 'shell_control_operator');
+});
+
+test('analyzeCommandComplexity flags substitutions', () => {
+  const issues = analyzeCommandComplexity('echo $(Get-Location)').issues;
+
+  assert.equal(issues[0]?.code, 'substitution');
+});
+
+test('analyzeCommandComplexity flags encoded commands', () => {
+  const issues = analyzeCommandComplexity('powershell -EncodedCommand AAAA').issues;
+
+  assert.equal(issues[0]?.code, 'encoded_command');
+});
+
+test('analyzeCommandComplexity flags background processes', () => {
+  const issues = analyzeCommandComplexity('Start-Process notepad').issues;
+
+  assert.equal(issues[0]?.code, 'background_process');
 });

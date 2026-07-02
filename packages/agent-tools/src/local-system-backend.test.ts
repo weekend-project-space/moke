@@ -217,6 +217,51 @@ test('execute rejects Windows drive-relative paths', async () => {
   );
 });
 
+test('execute rejects working directory changes outside workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('cd ..; copy moke\\a.md a.md'),
+    /Command changes working directory outside workspace: \.\./,
+  );
+});
+
+test('execute rejects environment variable paths outside approved roots', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  process.env.MOKE_TEST_TEMP = path.resolve('E:/moke-temp');
+
+  await assert.rejects(
+    () => system.execute('copy a.md $env:MOKE_TEST_TEMP\\a.md'),
+    /Command path uses an environment variable and requires approval: \$env:MOKE_TEST_TEMP\\a\.md/,
+  );
+});
+
+test('execute allows environment variable paths inside approved roots', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  process.env.MOKE_TEST_WORKSPACE = workspace;
+
+  await system.execute('copy a.md $env:MOKE_TEST_WORKSPACE\\a.md');
+
+  assert.equal(backend.calls.length, 1);
+});
+
+test('execute rejects dynamic path builders outside workspace', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('copy a.md (Join-Path E:\\ a.md)'),
+    /Command builds a path outside workspace and requires approval: E:\\/,
+  );
+});
+
 test('execute respects timeoutMs', async () => {
   const backend = createBackend({ executeDelayMs: 20 });
   const workspace = path.resolve('E:/work/test/moke');

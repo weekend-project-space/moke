@@ -28,7 +28,7 @@ export function formatProcessGroupLabel(group: ProcessGroupView, isActive = fals
   if (!group.startedAt) return '\u5904\u7406\u7ec6\u8282'
 
   const end = isActive ? runtimeNow : group.endedAt || group.startedAt
-  return `\u5904\u7406\u4e86 ${formatDuration(end - group.startedAt)}`
+  return `\u5df2\u5904\u7406 ${formatDuration(end - group.startedAt)}`
 }
 
 function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {

@@ -1,9 +1,14 @@
 import path from 'node:path';
+import { homedir } from 'node:os';
 
 export type CommandSafetyIssueCode =
   | 'absolute_path_outside_workspace'
   | 'relative_path_escapes_workspace'
   | 'drive_relative_path'
+  | 'working_directory_escapes_workspace'
+  | 'environment_path'
+  | 'home_path'
+  | 'dynamic_path'
   | 'unc_path'
   | 'redirection_target_escapes_workspace';
 
@@ -20,6 +25,18 @@ export type CommandSafetyInput = {
   approvedRoots: string[];
 };
 
+export type CommandComplexityIssueCode =
+  | 'shell_control_operator'
+  | 'substitution'
+  | 'encoded_command'
+  | 'background_process';
+
+export type CommandComplexityIssue = {
+  code: CommandComplexityIssueCode;
+  token: string;
+  reason: string;
+};
+
 export function analyzeCommandSafety(input: CommandSafetyInput) {
   const issues: CommandSafetyIssue[] = [];
   const commandText = maskUrls(input.commandText);
@@ -31,6 +48,54 @@ export function analyzeCommandSafety(input: CommandSafetyInput) {
       suggestedRoot: input.cwd,
       reason: `Command path is ambiguous outside workspace: ${rawPath}`,
     });
+  }
+
+  for (const rawPath of findLocationChangeTargetTokens(commandText)) {
+    const fullPath = resolveShellPathToken(rawPath, input.cwd);
+    if (fullPath && !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: 'working_directory_escapes_workspace',
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command changes working directory outside workspace: ${rawPath}`,
+      });
+    }
+  }
+
+  for (const rawPath of findEnvironmentPathTokens(commandText)) {
+    const fullPath = resolveEnvironmentPathToken(rawPath);
+    if (!fullPath || !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: 'environment_path',
+        path: fullPath || rawPath,
+        suggestedRoot: fullPath ? suggestApprovalRoot(fullPath) : input.cwd,
+        reason: `Command path uses an environment variable and requires approval: ${rawPath}`,
+      });
+    }
+  }
+
+  for (const rawPath of findHomePathTokens(commandText)) {
+    const fullPath = resolveHomePathToken(rawPath);
+    if (!isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: 'home_path',
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command path uses the home directory and requires approval: ${rawPath}`,
+      });
+    }
+  }
+
+  for (const rawPath of findDynamicPathRootTokens(commandText)) {
+    const fullPath = resolveShellPathToken(rawPath, input.cwd);
+    if (fullPath && !isInsideApprovedRoots(input.approvedRoots, fullPath)) {
+      issues.push({
+        code: 'dynamic_path',
+        path: fullPath,
+        suggestedRoot: suggestApprovalRoot(fullPath),
+        reason: `Command builds a path outside workspace and requires approval: ${rawPath}`,
+      });
+    }
   }
 
   for (const rawPath of findAbsolutePathTokens(commandText)) {
@@ -75,6 +140,49 @@ export function analyzeCommandSafety(input: CommandSafetyInput) {
   return { issues };
 }
 
+export function analyzeCommandComplexity(commandText: string) {
+  const issues: CommandComplexityIssue[] = [];
+  const maskedCommand = maskUrls(commandText);
+  const controlOperator = /(?:&&|\|\||[;|])/g;
+  const substitution = /(?:\$\(|`[^`]+`)/g;
+  const encodedCommand = /(?:^|[\s-])(?:encodedcommand|enc)\b/gi;
+  const backgroundProcess = /(?:^|[\s|&;])(?:start-process|start\s+\/?b)\b/gi;
+
+  for (const match of maskedCommand.matchAll(controlOperator)) {
+    issues.push({
+      code: 'shell_control_operator',
+      token: match[0],
+      reason: `Command uses shell control operator: ${match[0]}`,
+    });
+  }
+
+  for (const match of maskedCommand.matchAll(substitution)) {
+    issues.push({
+      code: 'substitution',
+      token: match[0],
+      reason: 'Command uses shell substitution',
+    });
+  }
+
+  for (const match of maskedCommand.matchAll(encodedCommand)) {
+    issues.push({
+      code: 'encoded_command',
+      token: match[0].trim(),
+      reason: 'Command uses encoded shell content',
+    });
+  }
+
+  for (const match of maskedCommand.matchAll(backgroundProcess)) {
+    issues.push({
+      code: 'background_process',
+      token: match[0].trim(),
+      reason: 'Command starts a background process',
+    });
+  }
+
+  return { issues };
+}
+
 function maskUrls(commandText: string) {
   return commandText.replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s"'`|&;<>]+/g, (url) => ' '.repeat(url.length));
 }
@@ -98,7 +206,7 @@ function isInsideApprovedRoots(approvedRoots: string[], fullPath: string) {
 function findAbsolutePathTokens(commandText: string) {
   const tokens = new Set<string>();
   const uncPath = /\\\\[^\\/\s"'`|&;<>]+[\\/][^\s"'`|&;<>]+/g;
-  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]+/g;
+  const windowsDrivePath = /[a-zA-Z]:[\\/][^\s"'`|&;<>]*/g;
   const unixPath = /(?<![\w:])\/(?:[^\s"'`|&;<>]+)/g;
 
   for (const match of commandText.matchAll(uncPath)) {
@@ -111,6 +219,59 @@ function findAbsolutePathTokens(commandText: string) {
 
   for (const match of commandText.matchAll(unixPath)) {
     tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  return [...tokens];
+}
+
+function findLocationChangeTargetTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const locationCommand =
+    /(?:^|[\s|&;])(?:cd|chdir|sl|set-location|push-location)\s+(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>]+))/gi;
+
+  for (const match of commandText.matchAll(locationCommand)) {
+    const token = stripTrailingCommandPunctuation(match[1] || match[2] || match[3] || '');
+    if (token && token !== '-') tokens.add(token);
+  }
+
+  return [...tokens];
+}
+
+function findEnvironmentPathTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const powerShellEnvPath = /\$env:[a-zA-Z_][\w]*[\\/][^\s"'`|&;<>)]*/g;
+  const cmdEnvPath = /%[a-zA-Z_][\w]*%[\\/][^\s"'`|&;<>)]*/g;
+
+  for (const match of commandText.matchAll(powerShellEnvPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  for (const match of commandText.matchAll(cmdEnvPath)) {
+    tokens.add(stripTrailingPunctuation(match[0]));
+  }
+
+  return [...tokens];
+}
+
+function findHomePathTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const homePath = /(?:^|[\s"'`])(~[\\/][^\s"'`|&;<>)]*)/g;
+
+  for (const match of commandText.matchAll(homePath)) {
+    const token = stripTrailingPunctuation(match[1] || '');
+    if (token) tokens.add(token);
+  }
+
+  return [...tokens];
+}
+
+function findDynamicPathRootTokens(commandText: string) {
+  const tokens = new Set<string>();
+  const joinPath = /(?:^|[\s|&;(])join-path\s+(?:"([^"]+)"|'([^']+)'|([^\s"'`|&;<>)]*))/gi;
+
+  for (const match of commandText.matchAll(joinPath)) {
+    const token = stripTrailingPunctuation(match[1] || match[2] || match[3] || '');
+    if (token) tokens.add(token);
   }
 
   return [...tokens];
@@ -155,6 +316,37 @@ function isWindowsDrivePath(value: string) {
   return /^[a-zA-Z]:[\\/]/.test(value);
 }
 
+function resolveShellPathToken(rawPath: string, cwd: string) {
+  if (rawPath.startsWith('$env:') || rawPath.startsWith('%')) return resolveEnvironmentPathToken(rawPath);
+  if (rawPath.startsWith('~')) return resolveHomePathToken(rawPath);
+  if (path.isAbsolute(rawPath) || isWindowsDrivePath(rawPath)) return path.resolve(rawPath);
+  return path.resolve(cwd, rawPath);
+}
+
+function resolveEnvironmentPathToken(rawPath: string) {
+  const powerShellMatch = rawPath.match(/^\$env:([a-zA-Z_][\w]*)([\\/].*)$/);
+  if (powerShellMatch) {
+    const root = process.env[powerShellMatch[1]];
+    return root ? path.join(root, powerShellMatch[2].replace(/^[\\/]+/, '')) : '';
+  }
+
+  const cmdMatch = rawPath.match(/^%([a-zA-Z_][\w]*)%([\\/].*)$/);
+  if (cmdMatch) {
+    const root = process.env[cmdMatch[1]];
+    return root ? path.join(root, cmdMatch[2].replace(/^[\\/]+/, '')) : '';
+  }
+
+  return '';
+}
+
+function resolveHomePathToken(rawPath: string) {
+  return path.join(homedir(), rawPath.replace(/^~[\\/]+/, ''));
+}
+
 function stripTrailingPunctuation(value: string) {
   return value.replace(/[),\].]+$/, '');
+}
+
+function stripTrailingCommandPunctuation(value: string) {
+  return value.replace(/[),\]]+$/, '');
 }

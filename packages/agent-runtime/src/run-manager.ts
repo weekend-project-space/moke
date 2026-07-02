@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Message, Run, Session } from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { RuntimeContentManager, WorkspacePathApprovalDecision, WorkspacePathApprovalRequest } from './tool-context.js';
+import type {
+  RuntimeContentManager,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
+  WorkspacePathApprovalDecision,
+  WorkspacePathApprovalRequest,
+} from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 function id(prefix: string) {
@@ -57,7 +63,7 @@ export class RunManager {
     string,
     {
       runId: string;
-      resolve: (decision: WorkspacePathApprovalDecision) => void;
+      resolve: (decision: WorkspacePathApprovalDecision | ToolApprovalDecision) => void;
       reject: (error: Error) => void;
     }
   >();
@@ -123,6 +129,7 @@ export class RunManager {
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
+          approveTool: (input) => this.approveTool(run, eventBus, input),
         },
         limits,
       });
@@ -190,6 +197,37 @@ export class RunManager {
     this.config.onChange?.();
 
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
+      this.pendingApprovals.set(approvalId, {
+        runId: run.id,
+        resolve,
+        reject,
+      });
+    });
+  }
+
+  private approveTool(
+    run: Run,
+    eventBus: EventBus,
+    input: ToolApprovalRequest,
+  ): Promise<ToolApprovalDecision> {
+    const approvalId = id('apv');
+    run.status = 'awaiting_approval';
+    run.pending_approval = {
+      approval_id: approvalId,
+      kind: 'tool',
+      reason: input.reason,
+      risk: input.risk,
+      action: {
+        tool: input.tool,
+        input: input.input,
+      },
+      created_at: new Date().toISOString(),
+    };
+
+    eventBus.emit('approval.required', run.pending_approval);
+    this.config.onChange?.();
+
+    return new Promise<ToolApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
         resolve,
