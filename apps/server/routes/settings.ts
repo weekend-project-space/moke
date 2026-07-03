@@ -3,15 +3,11 @@ import type { RoutesContext } from './context.js';
 
 export function registerSettingRoutes(router: Router<RoutesContext>) {
   router.get('/api/settings', ({ context, json }) =>
-    json(200, {
-      model: context.settingsService.getModelSettings(),
-    }),
+    json(200, context.settingsService.get()),
   );
 
-  router.patch('/api/settings/model', async ({ body, context, json }) =>
-    json(200, {
-      model: context.settingsService.updateModel(await body()),
-    }),
+  router.patch('/api/settings/model-providers', async ({ body, context, json }) =>
+    json(200, context.settingsService.updateModelProviders(await body())),
   );
 
   router.post('/api/settings/model/test', async ({ body, context, json }) =>

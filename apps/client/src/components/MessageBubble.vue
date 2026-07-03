@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Copy, GitBranchPlus } from 'lucide-vue-next'
+import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
 import type { Message } from '../types/conversation'
 
 defineProps<{
@@ -7,10 +7,12 @@ defineProps<{
   id: string
   message: Message
   renderMarkdown: (content: string) => string
+  showContinue?: boolean
 }>()
 
 const emit = defineEmits<{
   copy: [payload: { key: string; content: string }]
+  continue: []
   fork: [messageId: string]
 }>()
 </script>
@@ -42,6 +44,16 @@ const emit = defineEmits<{
         @click="emit('fork', message.id)"
       >
         <GitBranchPlus :size="14" stroke-width="2.2" />
+      </button>
+      <button
+        v-if="showContinue"
+        class="message-action"
+        type="button"
+        aria-label="继续整理"
+        title="继续整理"
+        @click="emit('continue')"
+      >
+        <ArrowRight :size="14" stroke-width="2.2" />
       </button>
     </div>
   </article>

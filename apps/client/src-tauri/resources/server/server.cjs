@@ -105798,15 +105798,11 @@ function handleApprove(context2, run, body, json3) {
 function registerSettingRoutes(router) {
   router.get(
     "/api/settings",
-    ({ context: context2, json: json3 }) => json3(200, {
-      model: context2.settingsService.getModelSettings()
-    })
+    ({ context: context2, json: json3 }) => json3(200, context2.settingsService.get())
   );
   router.patch(
-    "/api/settings/model",
-    async ({ body, context: context2, json: json3 }) => json3(200, {
-      model: context2.settingsService.updateModel(await body())
-    })
+    "/api/settings/model-providers",
+    async ({ body, context: context2, json: json3 }) => json3(200, context2.settingsService.updateModelProviders(await body()))
   );
   router.post(
     "/api/settings/model/test",
@@ -109882,19 +109878,38 @@ var PermissionsService = class {
 };
 
 // apps/server/storage/settings.ts
+var import_node_crypto6 = require("node:crypto");
 var import_node_fs5 = require("node:fs");
 var import_node_path9 = require("node:path");
-function defaultModelSettings() {
+function createProviderId() {
+  return `provider_${(0, import_node_crypto6.randomUUID)().slice(0, 8)}`;
+}
+function defaultProvider() {
   return {
+    id: createProviderId(),
+    name: process.env.OPENAI_PROVIDER_NAME || "OpenAI",
+    type: "openai-compatible",
     apiKey: process.env.OPENAI_API_KEY || "",
     apiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 15e3)
   };
 }
-function normalizeModelSettings(input = {}, fallback = defaultModelSettings()) {
-  const timeoutMs = Number(input.timeoutMs);
+function providerToModelSettings(provider) {
   return {
+    apiKey: provider.apiKey,
+    apiBaseUrl: provider.apiBaseUrl,
+    model: provider.model,
+    timeoutMs: provider.timeoutMs
+  };
+}
+function normalizeProvider(input = {}, fallback = defaultProvider()) {
+  const timeoutMs = Number(input.timeoutMs);
+  const type = input.type === "openai-compatible" ? input.type : fallback.type;
+  return {
+    id: typeof input.id === "string" && input.id.trim() ? input.id.trim() : fallback.id || createProviderId(),
+    name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : fallback.name,
+    type,
     apiKey: typeof input.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === "string" && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     model: typeof input.model === "string" && input.model.trim() ? input.model.trim() : fallback.model,
@@ -109902,21 +109917,30 @@ function normalizeModelSettings(input = {}, fallback = defaultModelSettings()) {
   };
 }
 function createDefaultRuntimeSettings() {
+  const provider = defaultProvider();
   return {
-    model: defaultModelSettings()
+    activeProviderId: provider.id,
+    providers: [provider]
+  };
+}
+function normalizeRuntimeSettings(input = {}) {
+  const defaults2 = createDefaultRuntimeSettings();
+  const rawProviders = Array.isArray(input.providers) ? input.providers : [];
+  const providers = rawProviders.map((provider, index2) => normalizeProvider(provider, index2 === 0 ? defaults2.providers[0] : defaultProvider())).filter((provider) => provider.id);
+  const normalizedProviders = providers.length > 0 ? providers : defaults2.providers;
+  const activeProviderId = typeof input.activeProviderId === "string" && normalizedProviders.some((provider) => provider.id === input.activeProviderId) ? input.activeProviderId : normalizedProviders[0].id;
+  return {
+    activeProviderId,
+    providers: normalizedProviders
   };
 }
 function loadRuntimeSettings(settingsPath) {
-  const defaults2 = createDefaultRuntimeSettings();
-  if (!(0, import_node_fs5.existsSync)(settingsPath)) return defaults2;
+  if (!(0, import_node_fs5.existsSync)(settingsPath)) return createDefaultRuntimeSettings();
   try {
-    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(settingsPath, "utf8"));
-    return {
-      model: normalizeModelSettings(parsed.model || {}, defaults2.model)
-    };
+    return normalizeRuntimeSettings(JSON.parse((0, import_node_fs5.readFileSync)(settingsPath, "utf8")));
   } catch (error51) {
     console.warn(`Failed to load settings from ${settingsPath}:`, error51);
-    return defaults2;
+    return createDefaultRuntimeSettings();
   }
 }
 function saveRuntimeSettings(settingsPath, settings) {
@@ -109938,43 +109962,47 @@ var SettingsService = class {
   settingsPath;
   settings;
   get() {
-    return this.settings;
+    return {
+      activeProviderId: this.settings.activeProviderId,
+      providers: this.settings.providers.map((provider) => ({ ...provider }))
+    };
   }
   getModelSettings() {
-    return this.settings.model;
+    const provider = this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
+    return providerToModelSettings(provider);
   }
-  updateModel(input) {
-    this.settings.model = normalizeModelSettings(input, this.settings.model);
+  updateModelProviders(input) {
+    this.settings = normalizeRuntimeSettings(input);
     saveRuntimeSettings(this.settingsPath, this.settings);
-    return this.settings.model;
+    return this.get();
   }
   async testModel(input) {
-    const settings = normalizeModelSettings(input, this.settings.model);
+    const provider = normalizeProvider(input);
     const startedAt = Date.now();
     const result = await this.listModels(input);
     if (!result.ok) return { ...result, duration_ms: Date.now() - startedAt };
-    const found = result.models.includes(settings.model);
+    const found = result.models.includes(provider.model);
     return {
       ok: found,
       stage: found ? "done" : "model",
-      model: settings.model,
+      model: provider.model,
       model_count: result.models.length,
-      message: found ? "Model is available" : `Model "${settings.model}" was not found in /models`,
+      message: found ? "Model is available" : `Model "${provider.model}" was not found in /models`,
       duration_ms: Date.now() - startedAt
     };
   }
   async listModels(input) {
-    const settings = normalizeModelSettings(input, this.settings.model);
+    const provider = normalizeProvider(input);
     const startedAt = Date.now();
-    const result = await listModelSettings(settings);
+    const result = await listProviderModels(provider);
     return {
       ...result,
       duration_ms: Date.now() - startedAt
     };
   }
 };
-async function listModelSettings(settings) {
-  if (!settings.apiKey) {
+async function listProviderModels(provider) {
+  if (!provider.apiKey) {
     return {
       ok: false,
       stage: "auth",
@@ -109983,12 +110011,12 @@ async function listModelSettings(settings) {
     };
   }
   const controller = new AbortController();
-  const timeoutMs = Math.max(1e3, Math.min(settings.timeoutMs || 15e3, 3e4));
+  const timeoutMs = Math.max(1e3, Math.min(provider.timeoutMs || 15e3, 3e4));
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${settings.apiBaseUrl.replace(/\/+$/, "")}/models`, {
+    const response = await fetch(`${provider.apiBaseUrl.replace(/\/+$/, "")}/models`, {
       headers: {
-        Authorization: `Bearer ${settings.apiKey}`
+        Authorization: `Bearer ${provider.apiKey}`
       },
       signal: controller.signal
     });

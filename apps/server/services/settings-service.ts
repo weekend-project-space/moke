@@ -1,54 +1,62 @@
 import {
   loadRuntimeSettings,
-  normalizeModelSettings,
+  normalizeProvider,
+  normalizeRuntimeSettings,
+  providerToModelSettings,
   saveRuntimeSettings,
-  type ModelSettingsInput,
+  type ModelProviderInput,
   type RuntimeSettings,
+  type RuntimeSettingsInput,
 } from '../storage/settings.js';
 
 export class SettingsService {
-  private readonly settings: RuntimeSettings;
+  private settings: RuntimeSettings;
 
   constructor(private readonly settingsPath: string) {
     this.settings = loadRuntimeSettings(settingsPath);
   }
 
   get() {
-    return this.settings;
+    return {
+      activeProviderId: this.settings.activeProviderId,
+      providers: this.settings.providers.map((provider) => ({ ...provider })),
+    };
   }
 
   getModelSettings() {
-    return this.settings.model;
+    const provider =
+      this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
+    return providerToModelSettings(provider);
   }
 
-  updateModel(input: ModelSettingsInput) {
-    this.settings.model = normalizeModelSettings(input, this.settings.model);
+  updateModelProviders(input: RuntimeSettingsInput) {
+    this.settings = normalizeRuntimeSettings(input);
     saveRuntimeSettings(this.settingsPath, this.settings);
-    return this.settings.model;
+    return this.get();
   }
 
-  async testModel(input: ModelSettingsInput) {
-    const settings = normalizeModelSettings(input, this.settings.model);
+  async testModel(input: ModelProviderInput) {
+    const provider = normalizeProvider(input);
     const startedAt = Date.now();
     const result = await this.listModels(input);
     if (!result.ok) return { ...result, duration_ms: Date.now() - startedAt };
 
-    const found = result.models.includes(settings.model);
+    const found = result.models.includes(provider.model);
 
     return {
       ok: found,
       stage: found ? 'done' : 'model',
-      model: settings.model,
+      model: provider.model,
       model_count: result.models.length,
-      message: found ? 'Model is available' : `Model "${settings.model}" was not found in /models`,
+      message: found ? 'Model is available' : `Model "${provider.model}" was not found in /models`,
       duration_ms: Date.now() - startedAt,
     };
   }
 
-  async listModels(input: ModelSettingsInput) {
-    const settings = normalizeModelSettings(input, this.settings.model);
+  async listModels(input: ModelProviderInput) {
+    const provider = normalizeProvider(input);
     const startedAt = Date.now();
-    const result = await listModelSettings(settings);
+    const result = await listProviderModels(provider);
     return {
       ...result,
       duration_ms: Date.now() - startedAt,
@@ -56,8 +64,8 @@ export class SettingsService {
   }
 }
 
-async function listModelSettings(settings: RuntimeSettings['model']) {
-  if (!settings.apiKey) {
+async function listProviderModels(provider: ReturnType<typeof normalizeProvider>) {
+  if (!provider.apiKey) {
     return {
       ok: false,
       stage: 'auth',
@@ -67,13 +75,13 @@ async function listModelSettings(settings: RuntimeSettings['model']) {
   }
 
   const controller = new AbortController();
-  const timeoutMs = Math.max(1000, Math.min(settings.timeoutMs || 15000, 30000));
+  const timeoutMs = Math.max(1000, Math.min(provider.timeoutMs || 15000, 30000));
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${settings.apiBaseUrl.replace(/\/+$/, '')}/models`, {
+    const response = await fetch(`${provider.apiBaseUrl.replace(/\/+$/, '')}/models`, {
       headers: {
-        Authorization: `Bearer ${settings.apiKey}`,
+        Authorization: `Bearer ${provider.apiKey}`,
       },
       signal: controller.signal,
     });

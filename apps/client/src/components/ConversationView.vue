@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
-import { Copy, RotateCcw } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessGroup from './ProcessGroup.vue'
 import type { DisplayItem, TaskTemplate } from '../types/conversation'
@@ -10,11 +9,10 @@ import type { DisplayItem, TaskTemplate } from '../types/conversation'
 const props = defineProps<{
   copiedKey: string
   displayItems: DisplayItem[]
-  lastAssistantContent: string
   scrollKey: string
   showEmptyState: boolean
   isRunning: boolean
-  showResultActions: boolean
+  showLastMessageContinue: boolean
   showThinking: boolean
   streamingText: string
   taskTemplates: TaskTemplate[]
@@ -33,6 +31,14 @@ const emit = defineEmits<{
 const conversationEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 const showJumpToBottom = ref(false)
+const lastAssistantDisplayItemId = computed(() => {
+  for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
+    const item = props.displayItems[index]
+    if (item.type === 'message' && item.message.role === 'assistant') return item.id
+  }
+
+  return ''
+})
 
 const markdown = new MarkdownIt({
   html: false,
@@ -195,8 +201,10 @@ defineExpose({
         :message="item.message"
         :copied-key="copiedKey"
         :render-markdown="renderMarkdown"
+        :show-continue="showLastMessageContinue && item.id === lastAssistantDisplayItemId"
         @copy="emit('copyMessage', $event)"
         @fork="emit('forkMessage', $event)"
+        @continue="emit('applySuggestion', '基于上面的结果，继续帮我整理成更清晰的下一步。')"
       />
       <div v-if="shouldShowProcessDivider(item, index)" class="process-result-divider" aria-hidden="true"></div>
     </template>
@@ -212,16 +220,6 @@ defineExpose({
         <span class="dot"></span>
         <span class="dot"></span>
       </article>
-    </div>
-    <div v-if="showResultActions" class="result-actions">
-      <button type="button" @click="emit('copyMessage', { key: 'latest-result', content: lastAssistantContent })">
-        <Copy :size="14" stroke-width="2.2" />
-        {{ copiedKey === 'latest-result' ? '已复制' : '复制结果' }}
-      </button>
-      <button type="button" @click="emit('applySuggestion', '基于上面的结果，继续帮我整理成更清晰的下一步。')">
-        <RotateCcw :size="14" stroke-width="2.2" />
-        继续整理
-      </button>
     </div>
   </div>
 </template>
