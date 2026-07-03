@@ -260,10 +260,6 @@ onMounted(() => {
 <template>
   <section class="settings-page">
     <header class="settings-header">
-      <div>
-        <h2>设置</h2>
-        <p>模型、权限和浏览器</p>
-      </div>
       <button type="button" class="settings-secondary" @click="emit('close')">返回对话</button>
     </header>
 

@@ -1,30 +1,24 @@
+﻿@use './mixins' as *;
+
 .composer {
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
   padding: 8px 0 14px;
-  background: linear-gradient(180deg, rgba(251, 251, 253, 0), rgba(251, 251, 253, 0.92) 48%);
+  background: linear-gradient(180deg, var(--surface-chat-fade), var(--surface-chat-panel) 48%);
 }
 
 .jump-inline {
-  display: inline-flex;
-  height: 28px;
-  width: 28px;
-  align-items: center;
-  justify-content: center;
+  @include icon-control(28px, var(--radius-pill), var(--panel-strong));
   align-self: center;
   margin: 0 auto 8px;
-  padding: 0;
-  border: 1px solid rgba(60, 60, 67, 0.1);
-  border-radius: 999px;
-  color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-control);
 }
 
 .jump-inline:hover {
   color: var(--ink);
-  background: #fff;
+  background: var(--surface-solid);
 }
 
 .composer-panel {
@@ -35,7 +29,7 @@
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-composer);
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
@@ -50,10 +44,10 @@
   min-height: 98px;
   flex-direction: column;
   padding: 0;
-  border: 1px solid rgba(60, 60, 67, 0.14);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-composer);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-input);
   overflow: hidden;
 }
 
@@ -88,10 +82,10 @@
 }
 
 .composer-input-row:focus-within {
-  border-color: rgba(60, 60, 67, 0.2);
+  border-color: var(--border-neutral-focus);
   box-shadow:
-    0 0 0 3px rgba(60, 60, 67, 0.055),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.88);
+    0 0 0 3px var(--focus-neutral-ring),
+    inset 0 0 0 0.5px var(--panel-raised);
 }
 
 .composer-footer {
@@ -109,9 +103,9 @@
   gap: 9px;
   margin: 0 auto 8px;
   padding: 9px 10px 10px 12px;
-  border: 1px solid rgba(60, 60, 67, 0.1);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
 }
 
 .ask-inline-question {
@@ -139,10 +133,10 @@
   align-items: center;
   justify-content: flex-start;
   padding: 8px 10px;
-  border: 1px solid rgba(60, 60, 67, 0.1);
-  border-radius: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--surface-control);
   font-size: 14px;
   font-weight: 430;
   line-height: 1.35;
@@ -152,22 +146,13 @@
 
 .ask-inline-options button:hover {
   color: var(--accent-strong);
-  border-color: rgba(0, 122, 255, 0.24);
-  background: rgba(0, 122, 255, 0.06);
+  border-color: var(--border-focus);
+  background: var(--accent-faint);
 }
 
 .composer button {
-  display: inline-flex;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  @include icon-control(30px, var(--radius-pill), var(--surface-panel-muted));
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 999px;
-  color: var(--ink-soft);
-  background: rgba(118, 118, 128, 0.11);
   transition:
     background 0.16s ease,
     opacity 0.16s ease,
@@ -180,13 +165,23 @@
 }
 
 .composer button.primary-action {
-  color: #fff;
-  background: #0a66d8;
+  color: var(--surface-solid);
+  background: var(--primary);
   box-shadow: none;
 }
 
 .composer button.primary-action.stop {
-  color: #fff;
-  background: #3a3a3c;
+  color: var(--surface-solid);
+  background: var(--primary);
   box-shadow: none;
 }
+
+@media (max-width: 980px) {
+  .composer {
+    padding: 10px 0 16px;
+  }
+}
+
+
+
+

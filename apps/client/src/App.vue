@@ -176,7 +176,6 @@ const {
   toolLabels,
   formatTimelineTime,
 })
-const showResultActions = computed(() => Boolean(lastAssistantMessage.value) && !isRunning.value && !pendingAsk.value && !pendingApproval.value)
 const conversationScrollKey = computed(() => `${messages.value.length}:${events.value.length}:${streamingText.value.length}`)
 const timelineNote = computed(() => {
   if (serverStatus.value === 'checking') return '正在连接 Moke'
@@ -476,11 +475,10 @@ onUnmounted(() => {
         ref="conversationView"
         :copied-key="copiedKey"
         :display-items="displayItems"
-        :last-assistant-content="lastAssistantMessage?.content || ''"
         :scroll-key="conversationScrollKey"
         :is-running="isRunning"
         :show-empty-state="showEmptyState"
-        :show-result-actions="showResultActions"
+        :show-last-message-continue="Boolean(lastAssistantMessage) && !isRunning && !pendingAsk && !pendingApproval"
         :show-thinking="showThinking"
         :streaming-text="streamingText"
         :task-templates="taskTemplates"
@@ -514,6 +512,7 @@ onUnmounted(() => {
     </section>
 
     <div
+      v-if="!traceCollapsed"
       class="workspace-resizer"
       role="separator"
       aria-label="调整工作区宽度"
@@ -523,7 +522,7 @@ onUnmounted(() => {
       @pointerdown="startWorkspaceResize"
     ></div>
 
-    <aside class="workspace">
+    <aside v-if="!traceCollapsed" class="workspace">
       <BrowserPanel ref="browserPanel" :active="!traceCollapsed" />
     </aside>
   </main>

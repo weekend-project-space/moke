@@ -1,0 +1,250 @@
+﻿@use './mixins' as *;
+
+.message-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: var(--content-width);
+  min-width: 0;
+  align-self: center;
+
+  &.user {
+    align-items: flex-end;
+  }
+
+  &.assistant {
+    align-items: flex-start;
+
+    + .message-row.assistant {
+      margin-top: 2px;
+    }
+  }
+
+  &:hover .message-action {
+    opacity: 1;
+  }
+}
+
+.bubble {
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line-medium);
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-shadow: var(--shadow-hairline);
+
+  &.user {
+    max-width: min(520px, 72%);
+    border: 0;
+    color: var(--text-user);
+    background: var(--accent-wash);
+    border-bottom-right-radius: 6px;
+    box-shadow: none;
+    white-space: pre-wrap;
+  }
+
+  &.assistant {
+    max-width: 100%;
+    padding: 0;
+    color: var(--ink);
+    border-color: transparent;
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  &.thinking {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 15px 16px;
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ink-muted);
+      animation: thinking-bounce 1.2s ease-in-out infinite;
+
+      &:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      &:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+    }
+  }
+}
+
+@keyframes thinking-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.markdown.streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  margin-left: 3px;
+  border-radius: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: cursor-blink 1s steps(2, start) infinite;
+}
+
+@keyframes cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.message-action {
+  @include icon-control(30px, 7px, transparent, var(--ink-muted));
+  flex: 0 0 auto;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    color 0.14s ease,
+    background 0.14s ease;
+
+  &:focus-visible {
+    opacity: 1;
+  }
+
+  &:hover {
+    color: var(--ink);
+    background: var(--surface-muted);
+  }
+}
+
+.message-actions {
+  display: inline-flex;
+  gap: 4px;
+  min-height: 30px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: auto 0 20px;
+  padding: 7vh 0 0;
+  text-align: center;
+
+  h3 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 560;
+    letter-spacing: 0;
+  }
+
+  > p {
+    display: none;
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+}
+
+.empty-kicker {
+  display: none;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: var(--accent-wash);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.suggestion-grid {
+  display: grid;
+  width: min(520px, var(--content-width));
+  gap: 0;
+  padding: 2px 6px;
+  border-top: 1px solid var(--line-subtle);
+  border-bottom: 1px solid var(--line-subtle);
+
+  button {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 9px 8px;
+    border: 0;
+    border-radius: 0;
+    color: var(--ink);
+    text-align: left;
+    background: transparent;
+    box-shadow: none;
+    transition:
+      color 0.14s ease,
+      background 0.14s ease;
+
+    + button {
+      border-top: 1px solid var(--line-faint);
+    }
+
+    &:hover {
+      color: var(--ink);
+      background: var(--surface-muted-soft);
+    }
+  }
+
+  span {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  small {
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 980px) {
+  .conversation {
+    padding: 16px 0;
+  }
+
+  .suggestion-grid {
+    button {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+
+    small {
+      white-space: normal;
+    }
+  }
+
+  .bubble.user {
+    max-width: 96%;
+  }
+}
+
+

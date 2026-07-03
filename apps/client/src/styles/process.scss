@@ -1,0 +1,215 @@
+﻿.process-group {
+  align-self: center;
+  width: var(--content-width);
+  max-width: min(var(--content-width), calc(100% - 24px));
+  padding: 3px 0 5px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  font-size: 12px;
+  line-height: 1.45;
+
+  &.error .process-toggle-label {
+    color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  }
+}
+
+.process-toggle {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 0;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+
+  &:hover {
+    color: var(--ink-soft);
+    background: transparent;
+  }
+}
+
+.process-toggle-label {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-result-divider {
+  align-self: center;
+  width: var(--content-width);
+  max-width: min(var(--content-width), calc(100% - 24px));
+  margin: 6px 0 10px;
+  border-top: 1px solid var(--line-divider);
+}
+
+.process-caret {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--ink-muted), transparent 18%);
+}
+
+.process-list {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 1px 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.process-item {
+  min-width: 0;
+  color: var(--ink-soft);
+
+  summary {
+    display: grid;
+    gap: 1px;
+    padding: 1px 0 2px;
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  &:not(.error):hover {
+    .process-tool-icon,
+    .process-tool-title,
+    .process-tool-separator,
+    .process-tool-detail {
+      color: var(--ink);
+    }
+  }
+
+  &.assistant {
+    margin: 6px 0 8px;
+    color: var(--ink);
+
+    .process-assistant-summary {
+      display: block;
+      padding: 5px 0 3px;
+      white-space: normal;
+    }
+
+    .markdown {
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.52;
+
+      p {
+        color: var(--ink);
+      }
+    }
+
+    + .process-item:not(.assistant) {
+      margin-top: 2px;
+    }
+  }
+
+  &.error {
+    .process-tool-title,
+    .process-tool-detail {
+      color: color-mix(in srgb, var(--danger), var(--ink-muted) 30%);
+    }
+
+    .process-tool-icon {
+      color: color-mix(in srgb, var(--danger), var(--ink-muted) 38%);
+    }
+  }
+}
+
+.process-tool-step-summary {
+  grid-template-columns: auto auto auto auto auto minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: center;
+
+  .process-tool-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .process-tool-detail {
+    text-align: left;
+  }
+}
+
+.process-step-caret,
+.tool-detail-raw-caret {
+  display: inline-flex;
+  width: 12px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--ink-muted), transparent 22%);
+}
+
+.process-item[open] > summary .process-step-caret .when-closed,
+.process-batch-step[open] > summary .process-step-caret .when-closed,
+.tool-detail-raw[open] > summary .tool-detail-raw-caret .when-closed {
+  display: none;
+}
+
+.process-item:not([open]) > summary .process-step-caret .when-open,
+.process-batch-step:not([open]) > summary .process-step-caret .when-open,
+.tool-detail-raw:not([open]) > summary .tool-detail-raw-caret .when-open {
+  display: none;
+}
+
+.process-tool-icon {
+  display: inline-flex;
+  width: 17px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
+}
+
+.process-tool-title {
+  min-width: 0;
+  color: color-mix(in srgb, var(--ink-muted), transparent 6%);
+  font-size: 14px;
+  font-weight: 430;
+  line-height: 1.5;
+}
+
+.process-tool-status {
+  padding: 0 4px;
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--danger), var(--ink-muted) 34%);
+  background: var(--surface-danger-faint);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.process-tool-separator {
+  color: color-mix(in srgb, var(--ink-muted), transparent 24%);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.process-tool-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
