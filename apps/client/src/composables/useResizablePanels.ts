@@ -14,6 +14,7 @@ const LAYOUT_GUTTER_WIDTH = 12
 
 export function useResizablePanels() {
   const traceCollapsed = ref(true)
+  const desktopLayout = ref(false)
   const sidebarOpen = ref(false)
   const sidebarCollapsed = ref(false)
   const sidebarWidth = ref(268)
@@ -28,6 +29,10 @@ export function useResizablePanels() {
 
   function isDesktopLayout() {
     return window.innerWidth > DESKTOP_BREAKPOINT
+  }
+
+  function refreshLayoutMode() {
+    desktopLayout.value = isDesktopLayout()
   }
 
   function isNarrowLayout() {
@@ -110,6 +115,23 @@ export function useResizablePanels() {
     }
 
     sidebarOpen.value = false
+  }
+
+  function toggleSidebar() {
+    if (isDesktopLayout()) {
+      if (sidebarCollapsed.value) {
+        openSidebar()
+      } else {
+        closeSidebar()
+      }
+      return
+    }
+
+    if (sidebarOpen.value) {
+      closeSidebar()
+    } else {
+      openSidebar()
+    }
   }
 
   function openWorkspace() {
@@ -226,10 +248,13 @@ export function useResizablePanels() {
   }
 
   function handleWindowResize() {
+    refreshLayoutMode()
     fitPanelWidths('window')
   }
 
   function initResizablePanels() {
+    refreshLayoutMode()
+
     const savedSidebarWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
     if (Number.isFinite(savedSidebarWidth)) setSidebarWidth(savedSidebarWidth, true)
 
@@ -252,6 +277,7 @@ export function useResizablePanels() {
   return {
     closeSidebar,
     closeTransientPanels,
+    desktopLayout,
     disposeResizablePanels,
     handleGlobalKeydown,
     handleSidebarResizeKeydown,
@@ -266,6 +292,7 @@ export function useResizablePanels() {
     sidebarResizing,
     startSidebarResize,
     startWorkspaceResize,
+    toggleSidebar,
     toggleWorkspace,
     traceCollapsed,
     workspaceResizing,

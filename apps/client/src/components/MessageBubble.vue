@@ -39,8 +39,8 @@ const emit = defineEmits<{
         v-if="message.id"
         class="message-action"
         type="button"
-        aria-label="Fork 会话"
-        title="Fork 会话"
+        aria-label="Fork 对话"
+        title="Fork 对话"
         @click="emit('fork', message.id)"
       >
         <GitBranchPlus :size="14" stroke-width="2.2" />

@@ -21,10 +21,6 @@
   grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
 }
 
-.sidebar-collapsed .topbar {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-}
-
 .sidebar,
 .workspace,
 .topbar {
@@ -104,17 +100,8 @@
   pointer-events: none;
 }
 
-.sidebar-toggle,
 .sidebar-scrim {
   display: none;
-}
-
-.sidebar-collapsed .sidebar-toggle {
-  @include icon-control(30px, 999px);
-}
-
-.sidebar-collapsed .sidebar-toggle:hover {
-  background: var(--surface-panel-muted);
 }
 
 @media (max-width: 980px) {
@@ -134,13 +121,6 @@
     display: none;
   }
 
-  .sidebar-toggle {
-    @include icon-control(30px, 999px);
-  }
-
-  .sidebar-toggle:hover {
-    background: var(--surface-panel-muted);
-  }
 }
 
 

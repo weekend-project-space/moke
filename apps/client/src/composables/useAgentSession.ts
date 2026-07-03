@@ -123,7 +123,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const response = await fetch(`${options.apiBase}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '新会话' }),
+      body: JSON.stringify({ title: '新对话' }),
     })
     const data = await response.json()
     sessionId.value = data.session.id

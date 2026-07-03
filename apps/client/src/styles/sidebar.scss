@@ -80,8 +80,7 @@
   }
 }
 
-.new-session,
-.close-sidebar {
+.new-session {
   @include inline-center;
   width: 30px;
   min-width: 30px;
@@ -427,10 +426,6 @@
     height: 30px;
     margin-top: 0;
     padding: 0;
-  }
-
-  .close-sidebar {
-    display: inline-flex;
   }
 
   .session-list {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, PanelLeftClose, Pencil, Pin, PinOff, Plus, Search, Settings } from 'lucide-vue-next'
+import { Archive, Pencil, Pin, PinOff, Plus, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
@@ -25,7 +25,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   archiveSession: [id: string]
-  close: []
   newSession: []
   openSettings: []
   pinSession: [id: string, pinned: boolean]
@@ -140,25 +139,22 @@ onUnmounted(() => {
   <aside class="sidebar" @click="closeContextMenu">
     <section class="brand">
       <div class="brand-header">
-        <span class="brand-title">会话</span>
+        <span class="brand-title">对话</span>
         <div class="brand-actions">
-          <button class="new-session" type="button" :disabled="disabled" aria-label="新建会话" title="新建会话" @click="$emit('newSession')">
+          <button class="new-session" type="button" :disabled="disabled" aria-label="新建对话" title="新建对话" @click="$emit('newSession')">
             <Plus :size="17" stroke-width="2.2" />
-          </button>
-          <button class="close-sidebar" type="button" aria-label="收起会话列表" title="收起会话列表" @click="$emit('close')">
-            <PanelLeftClose :size="17" stroke-width="2.1" />
           </button>
         </div>
       </div>
       <label class="session-search">
         <Search :size="14" stroke-width="2.2" />
-        <input v-model="searchQuery" type="search" placeholder="搜索会话" @keydown.esc.prevent="clearSearch" />
+        <input v-model="searchQuery" type="search" placeholder="搜索对话" @keydown.esc.prevent="clearSearch" />
       </label>
     </section>
 
     <section class="session-list">
       <div v-if="sessions.length === 0" class="sidebar-empty">
-        <strong>还没有会话</strong>
+        <strong>还没有对话</strong>
         <span>点右上角 + 开始一次新的对话。</span>
       </div>
       <div v-else-if="filteredSessions.length === 0" class="sidebar-empty">
@@ -199,7 +195,7 @@ onUnmounted(() => {
               ref="editingInput"
               v-model="editingTitle"
               type="text"
-              aria-label="会话名称"
+              aria-label="对话名称"
               @blur="submitRename()"
               @keydown.esc.prevent="cancelRename"
             />

@@ -28,13 +28,13 @@ let runtimeTimer: number | undefined
 const {
   closeSidebar,
   closeTransientPanels,
+  desktopLayout,
   disposeResizablePanels,
   handleGlobalKeydown,
   handleSidebarResizeKeydown,
   handleWindowResize,
   handleWorkspaceResizeKeydown,
   initResizablePanels,
-  openSidebar,
   openWorkspace,
   shellStyle,
   sidebarCollapsed,
@@ -42,6 +42,7 @@ const {
   sidebarResizing,
   startSidebarResize,
   startWorkspaceResize,
+  toggleSidebar,
   toggleWorkspace,
   traceCollapsed,
   workspaceResizing,
@@ -128,7 +129,7 @@ const taskTemplates: TaskTemplate[] = [
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => {
   if (showSettings.value) return '设置'
-  return currentSession.value ? sessionLabel(currentSession.value) : '新会话'
+  return currentSession.value ? sessionLabel(currentSession.value) : '新对话'
 })
 const sessionSubtitle = computed(() => {
   if (showSettings.value) return '模型、权限和浏览器'
@@ -203,7 +204,7 @@ function isFinalAssistantMessage(message: Message | undefined) {
 }
 
 function sessionLabel(session: SessionSummary) {
-  return session.title || session.preview || '新会话'
+  return session.title || session.preview || '新对话'
 }
 
 function sessionMeta(session: SessionSummary) {
@@ -436,17 +437,17 @@ onUnmounted(() => {
 
 <template>
   <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
-    <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭会话列表"
+    <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭对话列表"
       @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
-      :session-meta="sessionMeta" @close="closeSidebar" @new-session="startNewSession"
+      :session-meta="sessionMeta" @new-session="startNewSession"
       @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
       @pin-session="pinSession" @open-settings="openSettings" />
     <div
       class="sidebar-resizer"
       role="separator"
-      aria-label="调整会话列表宽度"
+      aria-label="调整对话列表宽度"
       aria-orientation="vertical"
       tabindex="0"
       @keydown="handleSidebarResizeKeydown"
@@ -457,10 +458,12 @@ onUnmounted(() => {
       <ChatHeader
         :title="currentTitle"
         :subtitle="sessionSubtitle"
+        :desktop-layout="desktopLayout"
+        :sidebar-collapsed="sidebarCollapsed"
         :trace-collapsed="traceCollapsed"
         :server-status="serverStatus"
         :server-status-label="serverStatusLabel"
-        @open-sidebar="openSidebar"
+        @toggle-sidebar="toggleSidebar"
         @toggle-workspace="toggleWorkspace"
       />
 
