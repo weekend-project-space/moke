@@ -1,4 +1,4 @@
-﻿@use './mixins' as *;
+@use './mixins' as *;
 
 .shell {
   display: grid;
@@ -26,7 +26,6 @@
 .topbar {
   background: var(--surface-glass);
   border-color: var(--line);
-  backdrop-filter: blur(28px) saturate(180%);
 }
 
 .sidebar {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, Pencil, Pin, PinOff, Plus, Search, Settings } from 'lucide-vue-next'
+import { Archive, Pencil, Pin, PinOff, Search, Settings, SquarePen } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
@@ -142,7 +142,7 @@ onUnmounted(() => {
         <span class="brand-title">对话</span>
         <div class="brand-actions">
           <button class="new-session" type="button" :disabled="disabled" aria-label="新建对话" title="新建对话" @click="$emit('newSession')">
-            <Plus :size="17" stroke-width="2.2" />
+            <SquarePen :size="16" stroke-width="2.1" />
           </button>
         </div>
       </div>
@@ -184,7 +184,6 @@ onUnmounted(() => {
             <small>
               <span class="session-title-text">{{ sessionLabel(session) }}</span>
               <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
-              <i v-if="isSessionRunning(session.id)" aria-hidden="true"></i>
             </small>
             <time>{{ sessionMeta(session) }}</time>
           </span>

@@ -1,4 +1,4 @@
-﻿@use './mixins' as *;
+@use './mixins' as *;
 
 .workspace {
   display: flex;
@@ -31,7 +31,7 @@
 
 .workspace-tabs button {
   @include button-control(30px, 8px, 0 8px);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 620;
 }
 
@@ -68,7 +68,7 @@
 
 .trace strong {
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 560;
   text-align: right;
 }
@@ -82,14 +82,14 @@
   display: block;
   margin-bottom: 7px;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 
 .progress-card strong {
   display: block;
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--font-size-emphasis);
   font-weight: 680;
   letter-spacing: -0.01em;
   text-align: left;
@@ -100,7 +100,7 @@
   overflow: hidden;
   margin: 6px 0 0;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   line-height: 1.42;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -124,14 +124,14 @@
 .inspector-group p {
   margin: 0 0 9px;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 
 .inspector-group strong {
   display: block;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 500;
 }
 
@@ -139,7 +139,7 @@
   display: block;
   margin-top: 5px;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -165,7 +165,7 @@
   border-radius: 7px;
   color: var(--ink-soft);
   background: var(--surface-panel-muted);
-  font-size: 11.5px;
+  font-size: var(--font-size-caption-plus);
   font-weight: 500;
 }
 

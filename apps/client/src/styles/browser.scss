@@ -1,4 +1,4 @@
-﻿@use './mixins' as *;
+@use './mixins' as *;
 
 .browser-panel {
   display: flex;
@@ -50,7 +50,7 @@
 
     > span {
       overflow: hidden;
-      font-size: 12px;
+      font-size: var(--font-size-meta);
       font-weight: 400;
       text-align: left;
       text-overflow: ellipsis;
@@ -68,11 +68,11 @@
 
   &-close,
   &-add {
-    @include icon-control(22px, 6px);
+    @include icon-control(22px);
   }
 
   &-add {
-    @include icon-control(30px, 8px, var(--surface-control));
+    @include icon-control(30px, $background: var(--surface-control));
   }
 
   &-close:hover,
@@ -90,7 +90,7 @@
   align-items: center;
 
   button {
-    @include icon-control(28px, 8px, var(--surface-control));
+    @include icon-control(28px, $background: var(--surface-control));
 
     &:hover {
       color: var(--ink);
@@ -117,7 +117,7 @@
     border: 0;
     outline: 0;
     background: transparent;
-    font-size: 12px;
+    font-size: var(--font-size-meta);
   }
 }
 
@@ -147,13 +147,13 @@
 
   strong {
     color: var(--ink-soft);
-    font-size: 13px;
+    font-size: var(--font-size-ui);
     font-weight: 680;
   }
 
   span {
     max-width: 220px;
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     line-height: 1.35;
   }
 
@@ -180,7 +180,7 @@
   gap: 7px;
   color: var(--ink-muted);
   background: var(--surface-panel);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 620;
   pointer-events: none;
 }

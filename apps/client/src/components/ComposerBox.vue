@@ -29,6 +29,15 @@ function focus() {
   textarea.value?.focus()
 }
 
+function focusFromPanelClick(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target instanceof HTMLTextAreaElement) return
+  const button = target.closest('button')
+  if (button instanceof HTMLButtonElement && !button.disabled) return
+  textarea.value?.focus()
+}
+
 function handleInput(event: Event) {
   emit('update:inputValue', (event.target as HTMLTextAreaElement).value)
   void nextTick(() => {
@@ -42,7 +51,7 @@ defineExpose({ focus, resize })
 
 <template>
   <form class="composer" @submit.prevent="$emit('submit')">
-    <div class="composer-panel input-mode">
+    <div class="composer-panel input-mode" @click="focusFromPanelClick">
       <div class="composer-input-row">
         <div class="composer-textarea-area">
           <textarea

@@ -1,4 +1,4 @@
-﻿.tool-detail {
+.tool-detail {
   display: grid;
   gap: 7px;
   min-width: 0;
@@ -8,7 +8,7 @@
 .tool-detail-note {
   margin: 0;
   color: color-mix(in srgb, var(--ink-muted), var(--ink) 10%);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.45;
 }
 
@@ -37,8 +37,8 @@
   border-bottom: 1px solid var(--border-panel-header);
   color: color-mix(in srgb, var(--ink-muted), var(--ink) 10%);
   background: var(--surface-tool-header);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-meta);
   line-height: 1.25;
 
   span {
@@ -51,7 +51,7 @@
   strong {
     flex: 0 0 auto;
     color: color-mix(in srgb, var(--success), var(--ink) 10%);
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     font-weight: 520;
   }
 }
@@ -72,7 +72,7 @@
   color: color-mix(in srgb, var(--ink-soft), transparent 3%);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   line-height: 1.5;
   white-space: pre;
 
@@ -103,7 +103,7 @@
   width: 100%;
   color: color-mix(in srgb, var(--ink-soft), transparent 2%);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   line-height: 1.55;
 
   &.error {
@@ -145,7 +145,7 @@
   padding: 5px 10px 7px;
   border-top: 1px solid var(--line-hairline);
   color: color-mix(in srgb, var(--ink-muted), transparent 8%);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.35;
 }
 
@@ -156,11 +156,11 @@
   width: 100%;
   color: color-mix(in srgb, var(--ink-soft), transparent 2%);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   line-height: 1.55;
 
   &.error {
-    background: color-mix(in srgb, var(--surface-danger-faint), var(--surface-cli) 82%);
+    background: color-mix(in srgb, var(--surface-danger-faint), var(--surface-tool-error-base) 70%);
 
     .tool-command-footer span:last-child {
       color: color-mix(in srgb, var(--danger), var(--ink-muted) 28%);
@@ -222,7 +222,7 @@
   padding: 4px 10px 7px;
   color: color-mix(in srgb, var(--ink-muted), transparent 18%);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.25;
 }
 
@@ -230,11 +230,13 @@
   min-width: 0;
   width: 100%;
   overflow: hidden;
+  border: 1px solid var(--line-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface-cli);
+  background: var(--surface-tool-output);
 
   &.error {
-    background: color-mix(in srgb, var(--surface-danger-faint), var(--surface-cli) 82%);
+    border-color: var(--border-danger);
+    background: var(--surface-tool-error-base);
 
     pre {
       color: color-mix(in srgb, var(--danger), var(--ink-muted) 18%);
@@ -248,10 +250,10 @@
     overflow: auto;
     border: 0;
     border-radius: 0;
-    color: color-mix(in srgb, var(--ink-soft), transparent 2%);
+    color: color-mix(in srgb, var(--ink-soft), transparent 4%);
     background: transparent;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--font-size-code);
     line-height: 1.55;
     white-space: pre;
   }
@@ -267,13 +269,13 @@
   color: color-mix(in srgb, var(--ink-soft), transparent 4%);
   background: var(--surface-tool-output);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   line-height: 1.5;
   white-space: pre-wrap;
 
   &.compact {
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: var(--font-size-body);
   }
 
   &.error {
@@ -288,7 +290,7 @@
   border-radius: var(--radius-sm);
   color: color-mix(in srgb, var(--ink-muted), transparent 4%);
   background: var(--surface-tool-oversize);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   line-height: 1.45;
 }
 
@@ -296,13 +298,14 @@
   min-width: 0;
 
   > summary {
-    display: inline-flex;
+    display: grid;
     width: fit-content;
+    grid-template-columns: minmax(0, auto) auto;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
     color: color-mix(in srgb, var(--ink-muted), transparent 5%);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     line-height: 1.4;
 
     &:hover {
@@ -327,8 +330,8 @@
   min-width: 0;
 
   summary {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    display: inline-flex;
+    max-width: 100%;
     gap: 5px;
     align-items: center;
     padding: 2px 0;
@@ -342,8 +345,9 @@
 .process-batch-title {
   min-width: 0;
   overflow: hidden;
+  flex: 1 1 auto;
   color: color-mix(in srgb, var(--ink-muted), var(--ink) 8%);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -355,7 +359,7 @@
   align-items: center;
   gap: 8px;
   color: color-mix(in srgb, var(--ink-muted), transparent 8%);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.3;
 
   code {
@@ -366,7 +370,7 @@
     color: color-mix(in srgb, var(--ink-soft), transparent 4%);
     background: var(--surface-muted);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -378,7 +382,7 @@
 
   > span {
     color: color-mix(in srgb, var(--ink-muted), transparent 8%);
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     font-weight: 430;
     line-height: 1.3;
   }
@@ -394,7 +398,7 @@
   color: color-mix(in srgb, var(--ink-soft), transparent 4%);
   background: var(--surface-tool-output);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-code);
   line-height: 1.45;
   white-space: pre-wrap;
 }

@@ -1,10 +1,10 @@
-﻿@mixin inline-center {
+@mixin inline-center {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-@mixin icon-control($size, $radius, $background: transparent, $color: var(--ink-soft)) {
+@mixin icon-control($size, $radius: var(--radius-icon-button), $background: transparent, $color: var(--ink-soft)) {
   @include inline-center;
   width: $size;
   min-width: $size;

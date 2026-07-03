@@ -181,11 +181,11 @@ function diffStats(lines: string[]) {
 
     <details v-if="hasRawData" class="tool-detail-raw">
       <summary>
-        <span class="tool-detail-raw-caret" aria-hidden="true">
-          <ChevronRight class="when-closed" :size="12" stroke-width="2" />
-          <ChevronDown class="when-open" :size="12" stroke-width="2" />
-        </span>
         <span>JSON</span>
+        <span class="tool-detail-raw-caret" aria-hidden="true">
+          <ChevronRight class="when-closed" :size="15" stroke-width="2" />
+          <ChevronDown class="when-open" :size="15" stroke-width="2" />
+        </span>
       </summary>
       <div class="tool-detail-raw-grid">
         <div v-if="step.inputRaw" class="process-json-block">

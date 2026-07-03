@@ -38,8 +38,7 @@ const sidebarToggleLabel = computed(() =>
       :title="traceCollapsed ? '显示浏览器' : '隐藏浏览器'"
       @click="emit('toggleWorkspace')"
     >
-      {{ traceCollapsed ? '显示浏览器' : '隐藏浏览器' }}
-      <PanelRight :size="14" stroke-width="2.2" />
+      <PanelRight :size="17" stroke-width="2.1" />
     </button>
     <span v-if="serverStatus !== 'online'" class="server-pill" :class="serverStatus">
       <i aria-hidden="true"></i>

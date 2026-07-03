@@ -24,11 +24,11 @@ function iconKind(step: { toolCategory: ToolCategory }) {
 <template>
   <div class="process-group" :class="{ error: hasError }">
     <button class="process-toggle" type="button" :aria-expanded="!collapsed" @click="emit('toggle')">
-      <span class="process-caret" aria-hidden="true">
-        <ChevronRight v-if="collapsed" :size="13" stroke-width="2" />
-        <ChevronDown v-else :size="13" stroke-width="2" />
-      </span>
       <span class="process-toggle-label">{{ label }}</span>
+      <span class="process-caret" aria-hidden="true">
+        <ChevronRight v-if="collapsed" :size="15" stroke-width="2" />
+        <ChevronDown v-else :size="15" stroke-width="2" />
+      </span>
     </button>
     <div v-if="!collapsed" class="process-list">
       <details
@@ -45,10 +45,6 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
         </summary>
         <summary v-else-if="processItem.kind === 'tool-step' || processItem.kind === 'tool-batch'" class="process-tool-step-summary">
-          <span class="process-step-caret" aria-hidden="true">
-            <ChevronRight class="when-closed" :size="12" stroke-width="2" />
-            <ChevronDown class="when-open" :size="12" stroke-width="2" />
-          </span>
           <span class="process-tool-icon" aria-hidden="true">
             <FilePenLine v-if="iconKind(processItem) === 'change'" :size="14" stroke-width="1.9" />
             <FolderSearch v-else-if="iconKind(processItem) === 'view'" :size="14" stroke-width="1.9" />
@@ -61,6 +57,10 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <span v-if="processItem.tone === 'error'" class="process-tool-status">失败</span>
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
+          <span class="process-step-caret" aria-hidden="true">
+            <ChevronRight class="when-closed" :size="15" stroke-width="2" />
+            <ChevronDown class="when-open" :size="15" stroke-width="2" />
+          </span>
         </summary>
         <summary v-else>
           <span class="process-tool-title">{{ processItem.actionLabel || processItem.title }}</span>
@@ -75,11 +75,11 @@ function iconKind(step: { toolCategory: ToolCategory }) {
             :class="step.tone"
           >
             <summary>
-              <span class="process-step-caret" aria-hidden="true">
-                <ChevronRight class="when-closed" :size="12" stroke-width="2" />
-                <ChevronDown class="when-open" :size="12" stroke-width="2" />
-              </span>
               <span class="process-batch-title">{{ step.objectLabel }}</span>
+              <span class="process-step-caret" aria-hidden="true">
+                <ChevronRight class="when-closed" :size="15" stroke-width="2" />
+                <ChevronDown class="when-open" :size="15" stroke-width="2" />
+              </span>
             </summary>
             <ToolStepDetails :step="step" />
           </details>

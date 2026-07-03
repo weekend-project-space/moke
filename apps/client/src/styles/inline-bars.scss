@@ -1,4 +1,4 @@
-﻿@use './mixins' as *;
+@use './mixins' as *;
 
 .approval-inline {
   display: grid;
@@ -23,7 +23,7 @@
 .approval-inline-title {
   overflow: hidden;
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 540;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -36,7 +36,7 @@
   align-items: center;
   gap: 4px;
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.35;
 }
 
@@ -49,7 +49,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--ink), transparent 8%);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -59,7 +59,7 @@
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--ink-muted), transparent 8%);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -75,7 +75,7 @@
 
 .approval-inline button {
   @include button-control(30px, 7px, 0 11px);
-  font-size: 12.5px;
+  font-size: var(--font-size-code);
   font-weight: 520;
   white-space: nowrap;
   transition:
