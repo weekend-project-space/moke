@@ -35,8 +35,12 @@ function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits
   return {
     max_steps: Math.max(1, Math.min(Math.trunc(limits.max_steps || 1), 1000)),
     max_tool_calls: Math.max(0, Math.min(Math.trunc(limits.max_tool_calls ?? 0), 200)),
-    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 300000)),
+    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 3600000)),
   };
+}
+
+function normalizeTimeoutMs(timeoutMs: number) {
+  return Math.max(1000, Math.min(Math.trunc(timeoutMs || 15000), 3600000));
 }
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -134,7 +138,7 @@ export class ReActAgent {
 
     const limits = normalizeLimits(rawLimits);
     const model = createChatModel(modelSettings);
-    const timeoutMs = limits.timeout_ms;
+    const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
     const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
     const tools = runtimeTools.map(createModelTool);

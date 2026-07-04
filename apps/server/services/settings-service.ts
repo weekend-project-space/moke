@@ -1,6 +1,7 @@
 import {
   loadRuntimeSettings,
   normalizeProvider,
+  normalizeProviderTimeoutMs,
   normalizeRuntimeSettings,
   providerToModelSettings,
   saveRuntimeSettings,
@@ -75,7 +76,7 @@ async function listProviderModels(provider: ReturnType<typeof normalizeProvider>
   }
 
   const controller = new AbortController();
-  const timeoutMs = Math.max(1000, Math.min(provider.timeoutMs || 15000, 30000));
+  const timeoutMs = normalizeProviderTimeoutMs(provider.timeoutMs);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {

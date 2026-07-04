@@ -32,6 +32,7 @@ const emit = defineEmits<{
 }>()
 
 const BROWSER_SETTINGS_KEY = 'moke.browser-settings.v1'
+const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
 const activeProviderId = ref('')
 const selectedProviderId = ref('')
 const providers = ref<ModelProviderProfile[]>([])
@@ -321,7 +322,7 @@ onMounted(() => {
           </label>
           <label class="settings-row">
             <span>Timeout</span>
-            <input v-model.number="editingProvider.timeoutMs" type="number" min="1000" step="1000" />
+            <input v-model.number="editingProvider.timeoutMs" type="number" min="1000" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS" step="1000" />
           </label>
 
           <div class="settings-actions">

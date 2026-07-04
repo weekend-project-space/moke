@@ -36,8 +36,18 @@ export type RuntimeSettingsInput = {
   providers?: unknown;
 };
 
+export const MODEL_PROVIDER_TIMEOUT_MIN_MS = 1000;
+export const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000;
+export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 15000;
+
 export function createProviderId() {
   return `provider_${randomUUID().slice(0, 8)}`;
+}
+
+export function normalizeProviderTimeoutMs(input: unknown, fallback = MODEL_PROVIDER_TIMEOUT_DEFAULT_MS) {
+  const timeoutMs = Number(input);
+  const normalized = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback;
+  return Math.max(MODEL_PROVIDER_TIMEOUT_MIN_MS, Math.min(normalized, MODEL_PROVIDER_TIMEOUT_MAX_MS));
 }
 
 function defaultProvider(): ModelProviderProfile {
@@ -48,7 +58,7 @@ function defaultProvider(): ModelProviderProfile {
     apiKey: process.env.OPENAI_API_KEY || '',
     apiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-    timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 15000),
+    timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS),
   };
 }
 
@@ -62,7 +72,6 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
 }
 
 export function normalizeProvider(input: ModelProviderInput = {}, fallback = defaultProvider()): ModelProviderProfile {
-  const timeoutMs = Number(input.timeoutMs);
   const type = input.type === 'openai-compatible' ? input.type : fallback.type;
 
   return {
@@ -72,7 +81,7 @@ export function normalizeProvider(input: ModelProviderInput = {}, fallback = def
     apiKey: typeof input.apiKey === 'string' ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === 'string' && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     model: typeof input.model === 'string' && input.model.trim() ? input.model.trim() : fallback.model,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback.timeoutMs,
+    timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs),
   };
 }
 
