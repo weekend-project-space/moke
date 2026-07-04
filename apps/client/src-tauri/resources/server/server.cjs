@@ -100086,8 +100086,11 @@ function normalizeLimits(limits) {
   return {
     max_steps: Math.max(1, Math.min(Math.trunc(limits.max_steps || 1), 1e3)),
     max_tool_calls: Math.max(0, Math.min(Math.trunc(limits.max_tool_calls ?? 0), 200)),
-    timeout_ms: Math.max(1e3, Math.min(Math.trunc(limits.timeout_ms || 15e3), 3e5))
+    timeout_ms: Math.max(1e3, Math.min(Math.trunc(limits.timeout_ms || 15e3), 36e5))
   };
+}
+function normalizeTimeoutMs(timeoutMs) {
+  return Math.max(1e3, Math.min(Math.trunc(timeoutMs || 15e3), 36e5));
 }
 function throwIfAborted(signal) {
   if (signal?.aborted) throw new Error("Run cancelled");
@@ -100155,7 +100158,7 @@ var ReActAgent = class {
     }
     const limits = normalizeLimits(rawLimits);
     const model = createChatModel(modelSettings);
-    const timeoutMs = limits.timeout_ms;
+    const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
     const runtimeTools = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
     const tools2 = runtimeTools.map(createModelTool);
@@ -109881,8 +109884,16 @@ var PermissionsService = class {
 var import_node_crypto6 = require("node:crypto");
 var import_node_fs5 = require("node:fs");
 var import_node_path9 = require("node:path");
+var MODEL_PROVIDER_TIMEOUT_MIN_MS = 1e3;
+var MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1e3;
+var MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 15e3;
 function createProviderId() {
   return `provider_${(0, import_node_crypto6.randomUUID)().slice(0, 8)}`;
+}
+function normalizeProviderTimeoutMs(input, fallback = MODEL_PROVIDER_TIMEOUT_DEFAULT_MS) {
+  const timeoutMs = Number(input);
+  const normalized = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback;
+  return Math.max(MODEL_PROVIDER_TIMEOUT_MIN_MS, Math.min(normalized, MODEL_PROVIDER_TIMEOUT_MAX_MS));
 }
 function defaultProvider() {
   return {
@@ -109892,7 +109903,7 @@ function defaultProvider() {
     apiKey: process.env.OPENAI_API_KEY || "",
     apiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-    timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 15e3)
+    timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS)
   };
 }
 function providerToModelSettings(provider) {
@@ -109904,7 +109915,6 @@ function providerToModelSettings(provider) {
   };
 }
 function normalizeProvider(input = {}, fallback = defaultProvider()) {
-  const timeoutMs = Number(input.timeoutMs);
   const type = input.type === "openai-compatible" ? input.type : fallback.type;
   return {
     id: typeof input.id === "string" && input.id.trim() ? input.id.trim() : fallback.id || createProviderId(),
@@ -109913,7 +109923,7 @@ function normalizeProvider(input = {}, fallback = defaultProvider()) {
     apiKey: typeof input.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === "string" && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     model: typeof input.model === "string" && input.model.trim() ? input.model.trim() : fallback.model,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback.timeoutMs
+    timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs)
   };
 }
 function createDefaultRuntimeSettings() {
@@ -110011,7 +110021,7 @@ async function listProviderModels(provider) {
     };
   }
   const controller = new AbortController();
-  const timeoutMs = Math.max(1e3, Math.min(provider.timeoutMs || 15e3, 3e4));
+  const timeoutMs = normalizeProviderTimeoutMs(provider.timeoutMs);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${provider.apiBaseUrl.replace(/\/+$/, "")}/models`, {
