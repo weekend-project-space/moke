@@ -76,6 +76,10 @@ type McpConnection = {
 
 export async function loadMcpConfig(path: string): Promise<McpConfig> {
   const raw = await readFile(path, 'utf8');
+  return parseMcpConfigText(raw);
+}
+
+export function parseMcpConfigText(raw: string): McpConfig {
   const parsed = JSON.parse(raw) as unknown;
   return normalizeMcpConfig(mcpConfigInputSchema.parse(parsed));
 }

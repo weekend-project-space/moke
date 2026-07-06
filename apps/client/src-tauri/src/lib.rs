@@ -265,7 +265,7 @@ fn ensure_user_env_file(app: &tauri::App, env_path: &Path) {
     } else {
         let _ = fs::write(
             env_path,
-            "PORT=4010\nOPENAI_API_KEY=\nOPENAI_MODEL=gpt-4.1-mini\nOPENAI_BASE_URL=https://api.openai.com/v1\nOPENAI_TIMEOUT_MS=15000\nMOKE_MCP_CONFIG=.moke/mcp.json\n",
+            "PORT=4010\nOPENAI_API_KEY=test\nOPENAI_MODEL=qwen3.6-35BA3B\nOPENAI_BASE_URL=http://localhost:8080/v1\nOPENAI_TIMEOUT_MS=1800000\nMOKE_MCP_CONFIG=.moke/mcp.json\n",
         );
     }
 }

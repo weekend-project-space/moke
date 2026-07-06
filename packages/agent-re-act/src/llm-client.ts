@@ -9,10 +9,10 @@ export type ChatModelSettings = {
 
 export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {}): ChatModelSettings {
   return {
-    apiKey: input.apiKey || process.env.OPENAI_API_KEY || '',
-    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    model: input.model || process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 15000),
+    apiKey: input.apiKey || process.env.OPENAI_API_KEY || 'test',
+    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'http://localhost:8080/v1',
+    model: input.model || process.env.OPENAI_MODEL || 'qwen3.6-35BA3B',
+    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1000),
   };
 }
 

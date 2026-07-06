@@ -38,7 +38,11 @@ export type RuntimeSettingsInput = {
 
 export const MODEL_PROVIDER_TIMEOUT_MIN_MS = 1000;
 export const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000;
-export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 15000;
+export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1000;
+export const MODEL_PROVIDER_DEFAULT_NAME = 'Local Qwen';
+export const MODEL_PROVIDER_DEFAULT_API_KEY = 'test';
+export const MODEL_PROVIDER_DEFAULT_BASE_URL = 'http://localhost:8080/v1';
+export const MODEL_PROVIDER_DEFAULT_MODEL = 'qwen3.6-35BA3B';
 
 export function createProviderId() {
   return `provider_${randomUUID().slice(0, 8)}`;
@@ -53,11 +57,11 @@ export function normalizeProviderTimeoutMs(input: unknown, fallback = MODEL_PROV
 function defaultProvider(): ModelProviderProfile {
   return {
     id: createProviderId(),
-    name: process.env.OPENAI_PROVIDER_NAME || 'OpenAI',
+    name: process.env.OPENAI_PROVIDER_NAME || MODEL_PROVIDER_DEFAULT_NAME,
     type: 'openai-compatible',
-    apiKey: process.env.OPENAI_API_KEY || '',
-    apiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    apiKey: process.env.OPENAI_API_KEY || MODEL_PROVIDER_DEFAULT_API_KEY,
+    apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
+    model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS),
   };
 }

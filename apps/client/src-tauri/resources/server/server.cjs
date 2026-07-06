@@ -100041,10 +100041,10 @@ init_singletons();
 // packages/agent-re-act/src/llm-client.ts
 function resolveChatModelSettings(input = {}) {
   return {
-    apiKey: input.apiKey || process.env.OPENAI_API_KEY || "",
-    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    model: input.model || process.env.OPENAI_MODEL || "gpt-4.1-mini",
-    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 15e3)
+    apiKey: input.apiKey || process.env.OPENAI_API_KEY || "test",
+    apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "http://localhost:8080/v1",
+    model: input.model || process.env.OPENAI_MODEL || "qwen3.6-35BA3B",
+    timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1e3)
   };
 }
 function createChatModel(input = {}) {
@@ -105816,6 +105816,18 @@ function registerSettingRoutes(router) {
     async ({ body, context: context2, json: json3 }) => json3(200, await context2.settingsService.listModels(await body()))
   );
   router.get(
+    "/api/settings/mcp",
+    ({ context: context2, json: json3 }) => json3(200, context2.mcpSettingsService.get())
+  );
+  router.post(
+    "/api/settings/mcp/validate",
+    async ({ body, context: context2, json: json3 }) => json3(200, context2.mcpSettingsService.validate(await body()))
+  );
+  router.patch(
+    "/api/settings/mcp",
+    async ({ body, context: context2, json: json3 }) => json3(200, context2.mcpSettingsService.save(await body()))
+  );
+  router.get(
     "/api/settings/permissions",
     ({ context: context2, json: json3 }) => json3(200, {
       workspace_roots: context2.permissionsService.listWorkspaceRoots()
@@ -105939,8 +105951,9 @@ function createRoutes(context2) {
   return router.handler(context2);
 }
 
-// apps/server/services/mcp-tools.ts
+// apps/server/services/mcp-settings-service.ts
 var import_node_fs3 = require("node:fs");
+var import_node_path7 = require("node:path");
 
 // packages/mcp-client/src/index.ts
 var import_node_path6 = require("node:path");
@@ -109529,6 +109542,9 @@ var mcpConfigInputSchema = external_exports2.union([
 ]);
 async function loadMcpConfig(path7) {
   const raw = await (0, import_promises6.readFile)(path7, "utf8");
+  return parseMcpConfigText(raw);
+}
+function parseMcpConfigText(raw) {
   const parsed = JSON.parse(raw);
   return normalizeMcpConfig(mcpConfigInputSchema.parse(parsed));
 }
@@ -109678,7 +109694,89 @@ async function withTimeout3(promise2, timeoutMs, message) {
   }
 }
 
+// apps/server/services/mcp-settings-service.ts
+var DEFAULT_MCP_CONFIG = `{
+  "mcpServers": {}
+}
+`;
+function summarizeConfig(config2) {
+  return config2.servers.map((server) => ({
+    id: server.id,
+    enabled: server.enabled,
+    command: server.command,
+    args: server.args,
+    timeout_ms: server.timeout_ms
+  }));
+}
+function validateRaw(raw) {
+  try {
+    const config2 = parseMcpConfigText(raw);
+    return {
+      valid: true,
+      servers: summarizeConfig(config2)
+    };
+  } catch (error51) {
+    return {
+      valid: false,
+      servers: [],
+      error: error51 instanceof Error ? error51.message : String(error51)
+    };
+  }
+}
+var McpSettingsService = class {
+  constructor(mcpConfigPath) {
+    this.mcpConfigPath = mcpConfigPath;
+  }
+  mcpConfigPath;
+  get() {
+    const exists = (0, import_node_fs3.existsSync)(this.mcpConfigPath);
+    const raw = exists ? (0, import_node_fs3.readFileSync)(this.mcpConfigPath, "utf8") : DEFAULT_MCP_CONFIG;
+    const validation = validateRaw(raw);
+    return {
+      path: this.mcpConfigPath,
+      exists,
+      raw,
+      restart_required: false,
+      ...validation
+    };
+  }
+  validate(input) {
+    const raw = typeof input === "object" && input !== null && typeof input.raw === "string" ? input.raw : "";
+    return {
+      path: this.mcpConfigPath,
+      raw,
+      restart_required: false,
+      ...validateRaw(raw)
+    };
+  }
+  save(input) {
+    const raw = typeof input === "object" && input !== null && typeof input.raw === "string" ? input.raw : "";
+    const validation = validateRaw(raw);
+    if (!validation.valid) {
+      return {
+        path: this.mcpConfigPath,
+        exists: (0, import_node_fs3.existsSync)(this.mcpConfigPath),
+        raw,
+        restart_required: false,
+        ...validation
+      };
+    }
+    (0, import_node_fs3.mkdirSync)((0, import_node_path7.dirname)(this.mcpConfigPath), { recursive: true });
+    (0, import_node_fs3.writeFileSync)(this.mcpConfigPath, raw.endsWith("\n") ? raw : `${raw}
+`);
+    return {
+      path: this.mcpConfigPath,
+      exists: true,
+      raw: raw.endsWith("\n") ? raw : `${raw}
+`,
+      restart_required: true,
+      ...validation
+    };
+  }
+};
+
 // apps/server/services/mcp-tools.ts
+var import_node_fs4 = require("node:fs");
 function describeMcpTool(tool2) {
   const schema = JSON.stringify(tool2.inputSchema);
   const schemaHint = schema && schema !== "{}" ? ` Input schema: ${schema.slice(0, 1200)}` : "";
@@ -109744,7 +109842,7 @@ function truncateMcpOutput(output, maxChars) {
   };
 }
 async function registerMcpTools(toolRegistry, mcpConfigPath, workspace) {
-  if (!(0, import_node_fs3.existsSync)(mcpConfigPath)) return void 0;
+  if (!(0, import_node_fs4.existsSync)(mcpConfigPath)) return void 0;
   try {
     const config2 = await loadMcpConfig(mcpConfigPath);
     const mcpManager = new McpManager(config2, { workspace });
@@ -109798,18 +109896,18 @@ async function registerMcpTools(toolRegistry, mcpConfigPath, workspace) {
 }
 
 // apps/server/services/permissions-service.ts
-var import_node_path8 = require("node:path");
+var import_node_path9 = require("node:path");
 
 // apps/server/storage/permissions.ts
-var import_node_fs4 = require("node:fs");
-var import_node_path7 = require("node:path");
+var import_node_fs5 = require("node:fs");
+var import_node_path8 = require("node:path");
 function loadWorkspaceRootPermissions(permissionsPath) {
-  if (!(0, import_node_fs4.existsSync)(permissionsPath)) return [];
+  if (!(0, import_node_fs5.existsSync)(permissionsPath)) return [];
   try {
-    const parsed = JSON.parse((0, import_node_fs4.readFileSync)(permissionsPath, "utf8"));
+    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(permissionsPath, "utf8"));
     return dedupeRoots(
       (parsed.workspace_roots || []).map((permission) => ({
-        path: (0, import_node_path7.resolve)(permission.path),
+        path: (0, import_node_path8.resolve)(permission.path),
         added_at: typeof permission.added_at === "string" ? permission.added_at : (/* @__PURE__ */ new Date()).toISOString()
       })).filter((permission) => permission.path)
     );
@@ -109823,15 +109921,15 @@ function saveWorkspaceRootPermissions(permissionsPath, permissions) {
     workspace_roots: dedupeRoots(permissions).sort((left, right) => left.path.localeCompare(right.path))
   };
   try {
-    (0, import_node_fs4.mkdirSync)((0, import_node_path7.dirname)(permissionsPath), { recursive: true });
-    (0, import_node_fs4.writeFileSync)(permissionsPath, `${JSON.stringify(payload, null, 2)}
+    (0, import_node_fs5.mkdirSync)((0, import_node_path8.dirname)(permissionsPath), { recursive: true });
+    (0, import_node_fs5.writeFileSync)(permissionsPath, `${JSON.stringify(payload, null, 2)}
 `);
   } catch (error51) {
     console.warn(`Failed to save permissions to ${permissionsPath}:`, error51);
   }
 }
 function upsertWorkspaceRootPermission(permissions, root, now4 = (/* @__PURE__ */ new Date()).toISOString()) {
-  const normalizedRoot = (0, import_node_path7.resolve)(root);
+  const normalizedRoot = (0, import_node_path8.resolve)(root);
   const existing = permissions.find((permission) => samePath(permission.path, normalizedRoot));
   if (existing) return permissions;
   permissions.push({
@@ -109848,7 +109946,7 @@ function dedupeRoots(permissions) {
   return result;
 }
 function samePath(left, right) {
-  return (0, import_node_path7.resolve)(left).toLowerCase() === (0, import_node_path7.resolve)(right).toLowerCase();
+  return (0, import_node_path8.resolve)(left).toLowerCase() === (0, import_node_path8.resolve)(right).toLowerCase();
 }
 
 // apps/server/services/permissions-service.ts
@@ -109870,8 +109968,8 @@ var PermissionsService = class {
     return this.listWorkspaceRoots();
   }
   revokeWorkspaceRoot(root) {
-    const normalizedRoot = (0, import_node_path8.resolve)(root).toLowerCase();
-    const index2 = this.workspaceRoots.findIndex((permission) => (0, import_node_path8.resolve)(permission.path).toLowerCase() === normalizedRoot);
+    const normalizedRoot = (0, import_node_path9.resolve)(root).toLowerCase();
+    const index2 = this.workspaceRoots.findIndex((permission) => (0, import_node_path9.resolve)(permission.path).toLowerCase() === normalizedRoot);
     if (index2 < 0) return false;
     this.workspaceRoots.splice(index2, 1);
     this.options.revokeWorkspaceRoot(root);
@@ -109882,11 +109980,15 @@ var PermissionsService = class {
 
 // apps/server/storage/settings.ts
 var import_node_crypto6 = require("node:crypto");
-var import_node_fs5 = require("node:fs");
-var import_node_path9 = require("node:path");
+var import_node_fs6 = require("node:fs");
+var import_node_path10 = require("node:path");
 var MODEL_PROVIDER_TIMEOUT_MIN_MS = 1e3;
 var MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1e3;
-var MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 15e3;
+var MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1e3;
+var MODEL_PROVIDER_DEFAULT_NAME = "Local Qwen";
+var MODEL_PROVIDER_DEFAULT_API_KEY = "test";
+var MODEL_PROVIDER_DEFAULT_BASE_URL = "http://localhost:8080/v1";
+var MODEL_PROVIDER_DEFAULT_MODEL = "qwen3.6-35BA3B";
 function createProviderId() {
   return `provider_${(0, import_node_crypto6.randomUUID)().slice(0, 8)}`;
 }
@@ -109898,11 +110000,11 @@ function normalizeProviderTimeoutMs(input, fallback = MODEL_PROVIDER_TIMEOUT_DEF
 function defaultProvider() {
   return {
     id: createProviderId(),
-    name: process.env.OPENAI_PROVIDER_NAME || "OpenAI",
+    name: process.env.OPENAI_PROVIDER_NAME || MODEL_PROVIDER_DEFAULT_NAME,
     type: "openai-compatible",
-    apiKey: process.env.OPENAI_API_KEY || "",
-    apiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    apiKey: process.env.OPENAI_API_KEY || MODEL_PROVIDER_DEFAULT_API_KEY,
+    apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
+    model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS)
   };
 }
@@ -109945,9 +110047,9 @@ function normalizeRuntimeSettings(input = {}) {
   };
 }
 function loadRuntimeSettings(settingsPath) {
-  if (!(0, import_node_fs5.existsSync)(settingsPath)) return createDefaultRuntimeSettings();
+  if (!(0, import_node_fs6.existsSync)(settingsPath)) return createDefaultRuntimeSettings();
   try {
-    return normalizeRuntimeSettings(JSON.parse((0, import_node_fs5.readFileSync)(settingsPath, "utf8")));
+    return normalizeRuntimeSettings(JSON.parse((0, import_node_fs6.readFileSync)(settingsPath, "utf8")));
   } catch (error51) {
     console.warn(`Failed to load settings from ${settingsPath}:`, error51);
     return createDefaultRuntimeSettings();
@@ -109955,8 +110057,8 @@ function loadRuntimeSettings(settingsPath) {
 }
 function saveRuntimeSettings(settingsPath, settings) {
   try {
-    (0, import_node_fs5.mkdirSync)((0, import_node_path9.dirname)(settingsPath), { recursive: true });
-    (0, import_node_fs5.writeFileSync)(settingsPath, `${JSON.stringify(settings, null, 2)}
+    (0, import_node_fs6.mkdirSync)((0, import_node_path10.dirname)(settingsPath), { recursive: true });
+    (0, import_node_fs6.writeFileSync)(settingsPath, `${JSON.stringify(settings, null, 2)}
 `);
   } catch (error51) {
     console.warn(`Failed to save settings to ${settingsPath}:`, error51);
@@ -110070,12 +110172,12 @@ async function readErrorMessage(response) {
 }
 
 // apps/server/storage/state.ts
-var import_node_fs6 = require("node:fs");
-var import_node_path10 = require("node:path");
+var import_node_fs7 = require("node:fs");
+var import_node_path11 = require("node:path");
 function loadState({ statePath, sessions, runs }) {
-  if (!(0, import_node_fs6.existsSync)(statePath)) return;
+  if (!(0, import_node_fs7.existsSync)(statePath)) return;
   try {
-    const parsed = JSON.parse((0, import_node_fs6.readFileSync)(statePath, "utf8"));
+    const parsed = JSON.parse((0, import_node_fs7.readFileSync)(statePath, "utf8"));
     for (const session of parsed.sessions || []) {
       if (!session.id) continue;
       sessions.set(session.id, session);
@@ -110108,8 +110210,8 @@ function createStateSaver({ statePath, sessions, runs }) {
       runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run)
     };
     try {
-      (0, import_node_fs6.mkdirSync)((0, import_node_path10.dirname)(statePath), { recursive: true });
-      (0, import_node_fs6.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
+      (0, import_node_fs7.mkdirSync)((0, import_node_path11.dirname)(statePath), { recursive: true });
+      (0, import_node_fs7.writeFileSync)(statePath, `${JSON.stringify(state, null, 2)}
 `);
     } catch (error51) {
       console.warn(`Failed to save state to ${statePath}:`, error51);
@@ -110145,6 +110247,7 @@ async function createApp() {
   const sessions = /* @__PURE__ */ new Map();
   const runs = /* @__PURE__ */ new Map();
   const browserBridge = new BrowserBridge();
+  const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
@@ -110180,6 +110283,7 @@ async function createApp() {
       runManager,
       toolRegistry,
       browserBridge,
+      mcpSettingsService,
       permissionsService,
       settingsService,
       onChange: stateSaver.saveStateSoon

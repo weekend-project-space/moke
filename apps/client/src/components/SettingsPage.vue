@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FolderX, Plus, RotateCw, Save, SendHorizontal, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
+import McpSettingsPanel from './McpSettingsPanel.vue'
 
 type WorkspaceRootPermission = {
   path: string
@@ -56,12 +57,12 @@ const selectedProvider = computed(() => providers.value.find((provider) => provi
 function createProvider(): ModelProviderProfile {
   return {
     id: `provider_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
-    name: 'OpenAI',
+    name: 'Local Qwen',
     type: 'openai-compatible',
-    apiKey: '',
-    apiBaseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4.1-mini',
-    timeoutMs: 15000,
+    apiKey: 'test',
+    apiBaseUrl: 'http://localhost:8080/v1',
+    model: 'qwen3.6-35BA3B',
+    timeoutMs: 30 * 60 * 1000,
   }
 }
 
@@ -345,6 +346,8 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <McpSettingsPanel :api-base="apiBase" />
 
     <div class="settings-section">
       <div class="settings-section-heading">

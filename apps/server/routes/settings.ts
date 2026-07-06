@@ -18,6 +18,18 @@ export function registerSettingRoutes(router: Router<RoutesContext>) {
     json(200, await context.settingsService.listModels(await body())),
   );
 
+  router.get('/api/settings/mcp', ({ context, json }) =>
+    json(200, context.mcpSettingsService.get()),
+  );
+
+  router.post('/api/settings/mcp/validate', async ({ body, context, json }) =>
+    json(200, context.mcpSettingsService.validate(await body())),
+  );
+
+  router.patch('/api/settings/mcp', async ({ body, context, json }) =>
+    json(200, context.mcpSettingsService.save(await body())),
+  );
+
   router.get('/api/settings/permissions', ({ context, json }) =>
     json(200, {
       workspace_roots: context.permissionsService.listWorkspaceRoots(),

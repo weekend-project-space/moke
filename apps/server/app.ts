@@ -11,6 +11,7 @@ import {
 import { createToolRegistry, createRunManager } from './runtime/factory.js';
 import { createRoutes } from './routes/index.js';
 import { BrowserBridge } from './services/browser-bridge.js';
+import { McpSettingsService } from './services/mcp-settings-service.js';
 import { registerMcpTools } from './services/mcp-tools.js';
 import { PermissionsService } from './services/permissions-service.js';
 import { SettingsService } from './services/settings-service.js';
@@ -53,6 +54,7 @@ export async function createApp(): Promise<ServerApp> {
   const sessions = new Map<string, Session>();
   const runs = new Map<string, Run>();
   const browserBridge = new BrowserBridge();
+  const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const stateSaver = createStateSaver({ statePath, sessions, runs });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
@@ -91,6 +93,7 @@ export async function createApp(): Promise<ServerApp> {
       runManager,
       toolRegistry,
       browserBridge,
+      mcpSettingsService,
       permissionsService,
       settingsService,
       onChange: stateSaver.saveStateSoon,
