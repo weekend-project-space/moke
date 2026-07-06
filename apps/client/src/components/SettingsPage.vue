@@ -23,6 +23,8 @@ type BrowserSettings = {
   linkOpenMode: 'current' | 'new-tab'
 }
 
+type SettingsTab = 'model' | 'mcp' | 'permissions' | 'browser'
+
 const props = defineProps<{
   apiBase: string
 }>()
@@ -34,6 +36,13 @@ const emit = defineEmits<{
 
 const BROWSER_SETTINGS_KEY = 'moke.browser-settings.v1'
 const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
+const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
+  { id: 'model', label: 'Model' },
+  { id: 'mcp', label: 'MCP' },
+  { id: 'permissions', label: 'Permissions' },
+  { id: 'browser', label: 'Browser' },
+]
+const activeSettingsTab = ref<SettingsTab>('model')
 const activeProviderId = ref('')
 const selectedProviderId = ref('')
 const providers = ref<ModelProviderProfile[]>([])
@@ -265,7 +274,19 @@ onMounted(() => {
       <button type="button" class="settings-secondary" @click="emit('close')">返回对话</button>
     </header>
 
-    <div class="settings-section">
+    <nav class="settings-tabs" aria-label="Settings sections">
+      <button
+        v-for="tab in settingsTabs"
+        :key="tab.id"
+        type="button"
+        :class="{ active: activeSettingsTab === tab.id }"
+        @click="activeSettingsTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+
+    <div v-if="activeSettingsTab === 'model'" class="settings-section">
       <div class="settings-section-heading">
         <h3>模型</h3>
         <span>{{ modelTestMessage || modelListMessage }}</span>
@@ -347,9 +368,9 @@ onMounted(() => {
       </div>
     </div>
 
-    <McpSettingsPanel :api-base="apiBase" />
+    <McpSettingsPanel v-else-if="activeSettingsTab === 'mcp'" :api-base="apiBase" />
 
-    <div class="settings-section">
+    <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section">
       <div class="settings-section-heading">
         <h3>权限</h3>
         <button type="button" class="settings-icon-button" title="刷新" aria-label="刷新" @click="loadPermissions">
@@ -369,7 +390,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="settings-section">
+    <div v-else-if="activeSettingsTab === 'browser'" class="settings-section">
       <div class="settings-section-heading">
         <h3>浏览器</h3>
       </div>

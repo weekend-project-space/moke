@@ -133,6 +133,18 @@ onMounted(() => {
       <div v-else-if="restartRequired" class="settings-note">Saved config will take effect after server restart.</div>
       <div v-else-if="servers.length === 0" class="settings-note">No MCP servers configured.</div>
 
+      <details class="mcp-config-tip">
+        <summary>Simple example</summary>
+        <pre>{
+  "mcpServers": {
+    "moke_local": {
+      "command": "node",
+      "args": ["packages/mcp-client/examples/local-mcp-server.mjs"]
+    }
+  }
+}</pre>
+      </details>
+
       <div v-if="servers.length > 0" class="mcp-server-list">
         <div v-for="server in servers" :key="server.id" class="mcp-server-row">
           <strong>{{ server.id }}</strong>
