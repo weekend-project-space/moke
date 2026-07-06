@@ -97,6 +97,121 @@
   padding: 0 8px 8px 12px;
 }
 
+.queued-message-panel {
+  display: grid;
+  width: min(var(--content-width), 380px);
+  align-self: center;
+  gap: 6px;
+  margin: 0 auto 8px;
+}
+
+.queued-message-bar {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 5px 6px 5px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-pill);
+  color: var(--ink-muted);
+  background: var(--surface-panel);
+  font-size: var(--font-size-body);
+}
+
+.queued-message-bar span {
+  color: var(--ink-soft);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.queued-message-bar button {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+.queued-message-bar button:hover {
+  color: var(--ink);
+  background: var(--surface-control-hover);
+}
+
+.queued-message-bar button.primary {
+  color: var(--ink-soft);
+  background: var(--surface-control);
+}
+
+.queued-message-bar button.primary:hover {
+  color: var(--ink);
+  background: var(--surface-control-hover);
+}
+
+.queued-message-list {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.queued-message-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+  font-size: var(--font-size-body);
+}
+
+.queued-message-item:last-child {
+  border-bottom: 0;
+}
+
+.queued-message-item:hover {
+  background: var(--surface-control-hover);
+}
+
+.queued-message-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queued-message-item button {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--ink-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.queued-message-item button:hover {
+  color: var(--ink);
+  background: var(--surface-control-hover);
+}
+
 .ask-inline {
   width: var(--content-width);
   align-self: center;

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ArrowDown } from 'lucide-vue-next'
+import { ArrowDown, Clock3, SkipForward, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ApprovalInlineBar from './components/ApprovalInlineBar.vue'
 import AskInlineBar from './components/AskInlineBar.vue'
@@ -16,6 +16,10 @@ import { useResizablePanels } from './composables/useResizablePanels'
 import type { Message, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
+const MAX_QUEUED_MESSAGES = 3
+const queuedMessages = ref<string[]>([])
+const queuedSessionId = ref('')
+const queuedStopRequested = ref(false)
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
@@ -89,6 +93,9 @@ const {
   onMessagesLoaded: async () => {
     resizeComposer()
     conversationView.value?.scrollToBottom(true)
+  },
+  onRunFinished: async () => {
+    await sendQueuedMessageIfReady()
   },
 })
 const {
@@ -194,10 +201,21 @@ const showEmptyState = computed(
   () => serverStatus.value === 'online' && visibleMessages.value.length === 0 && !isRunning.value,
 )
 const primaryDisabled = computed(() => {
-  if (isRunning.value) return !runId.value
+  if (isRunning.value) {
+    if (pendingAsk.value) return true
+    if (input.value.trim()) return queuedMessages.value.length >= MAX_QUEUED_MESSAGES
+    return !runId.value
+  }
   return serverStatus.value !== 'online' || !input.value.trim()
 })
-const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value)
+const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !input.value.trim())
+const queuedMessageCount = computed(() => queuedMessages.value.length)
+const queuedMessageLabel = computed(() => queuedStopRequested.value ? '停止后发送' : `${queuedMessageCount.value} 条待发送`)
+const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${message}`).join('\n'))
+const queuedMessageItems = computed(() => queuedMessages.value.map((message) => ({
+  content: message,
+  preview: message.length > 48 ? `${message.slice(0, 48)}...` : message,
+})))
 
 function isFinalAssistantMessage(message: Message | undefined) {
   return message?.role === 'assistant' && isVisibleMessage(message)
@@ -292,6 +310,7 @@ function resizeComposer() {
 async function selectSession(id: string) {
   conversationView.value?.resetAutoScroll()
   if (await selectAgentSession(id)) {
+    clearQueuedMessage()
     showSettings.value = false
     writeSessionIdToHash(id)
     closeTransientPanels()
@@ -300,6 +319,7 @@ async function selectSession(id: string) {
 
 async function startNewSession() {
   if (await createSession()) {
+    clearQueuedMessage()
     showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
@@ -309,6 +329,7 @@ async function startNewSession() {
 async function forkMessage(messageId: string) {
   conversationView.value?.resetAutoScroll()
   if (await forkSession(messageId)) {
+    clearQueuedMessage()
     showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
@@ -331,7 +352,8 @@ function closeSettings() {
 }
 
 function sendOnEnter(event: KeyboardEvent) {
-  if (event.shiftKey || isRunning.value) return
+  if (event.shiftKey) return
+  if (isRunning.value && !input.value.trim()) return
   event.preventDefault()
   void handlePrimaryAction()
 }
@@ -373,7 +395,12 @@ async function copyMessage(key: string, content: string) {
 
 function handlePrimaryAction() {
   if (isRunning.value) {
-    void cancelRun()
+    if (input.value.trim()) {
+      queueCurrentInput()
+      return
+    }
+
+    if (!pendingAsk.value) void cancelRun()
     return
   }
 
@@ -384,15 +411,68 @@ async function submitMessage() {
   const content = input.value.trim()
   if (!content || isRunning.value) return
 
+  await sendContent(content, true)
+}
+
+async function sendContent(content: string, restoreOnFail: boolean) {
   input.value = ''
   await nextTick()
   resizeComposer()
 
   if (await sendMessage(content)) return
 
-  input.value = content
+  if (restoreOnFail) input.value = content
   await nextTick()
   resizeComposer()
+}
+
+function queueCurrentInput() {
+  const content = input.value.trim()
+  if (!content || !sessionId.value) return
+  if (queuedMessages.value.length >= MAX_QUEUED_MESSAGES) return
+
+  queuedMessages.value = [...queuedMessages.value, content]
+  queuedSessionId.value = sessionId.value
+  queuedStopRequested.value = false
+  input.value = ''
+  void nextTick(() => {
+    resizeComposer()
+    composerBox.value?.focus()
+  })
+}
+
+function clearQueuedMessage() {
+  queuedMessages.value = []
+  queuedSessionId.value = ''
+  queuedStopRequested.value = false
+}
+
+function cancelQueuedMessage() {
+  clearQueuedMessage()
+}
+
+function cancelQueuedMessageAt(index: number) {
+  queuedMessages.value = queuedMessages.value.filter((_, itemIndex) => itemIndex !== index)
+  if (!queuedMessages.value.length) clearQueuedMessage()
+}
+
+function stopAndSendQueuedMessage() {
+  if (!queuedMessages.value.length || !isRunning.value || pendingAsk.value) return
+  queuedStopRequested.value = true
+  void cancelRun()
+}
+
+async function sendQueuedMessageIfReady() {
+  if (!queuedMessages.value.length || isRunning.value) return
+  if (queuedSessionId.value && queuedSessionId.value !== sessionId.value) return
+
+  const [content, ...rest] = queuedMessages.value
+  queuedMessages.value = rest
+  if (!rest.length) {
+    queuedSessionId.value = ''
+    queuedStopRequested.value = false
+  }
+  await sendContent(content, true)
 }
 
 watch(isRunning, (running) => {
@@ -510,6 +590,42 @@ onUnmounted(() => {
         @approve="decideApproval($event.decision, $event.scope)"
       />
       <AskInlineBar v-if="pendingAsk && !showSettings" :ask="pendingAsk" @select="selectAskOption" />
+      <div
+        v-if="queuedMessageCount && !showSettings"
+        class="queued-message-panel"
+        :title="queuedMessagePreview"
+      >
+        <div class="queued-message-bar">
+          <Clock3 :size="14" stroke-width="2.2" />
+          <span>{{ queuedMessageLabel }}</span>
+          <button type="button" aria-label="清空待发送消息" title="清空待发送消息" @click="cancelQueuedMessage">
+            <X :size="14" stroke-width="2.2" />
+          </button>
+          <button
+            v-if="isRunning && !pendingAsk && !queuedStopRequested"
+            type="button"
+            class="primary"
+            aria-label="停止当前并发送"
+            title="停止当前并发送"
+            @click="stopAndSendQueuedMessage"
+          >
+            <SkipForward :size="14" stroke-width="2.2" />
+          </button>
+        </div>
+        <div class="queued-message-list" aria-label="待发送队列">
+          <div v-for="(item, index) in queuedMessageItems" :key="`${index}-${item.content}`" class="queued-message-item">
+            <span class="queued-message-text">{{ item.preview }}</span>
+            <button
+              type="button"
+              :aria-label="`取消第 ${index + 1} 条待发送消息`"
+              :title="`取消第 ${index + 1} 条`"
+              @click="cancelQueuedMessageAt(index)"
+            >
+              <X :size="13" stroke-width="2.2" />
+            </button>
+          </div>
+        </div>
+      </div>
       <ComposerBox v-if="!showSettings" ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
         :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
         @enter="sendOnEnter" @submit="handlePrimaryAction" />

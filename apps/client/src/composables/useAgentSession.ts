@@ -6,6 +6,7 @@ type UseAgentSessionOptions = {
   isFinalAssistantMessage: (message: Message | undefined) => boolean
   onAskUserRequired?: () => void
   onMessagesLoaded?: () => void | Promise<void>
+  onRunFinished?: (sessionId: string) => void | Promise<void>
 }
 
 type SessionRunState = {
@@ -343,8 +344,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     state.pendingApproval = null
     state.eventSource?.close()
     state.eventSource = null
-    void loadSessions()
-    void refreshSessionMessagesIfActive(targetSessionId)
+    void (async () => {
+      await loadSessions()
+      await refreshSessionMessagesIfActive(targetSessionId)
+      await options.onRunFinished?.(targetSessionId)
+    })()
   }
 
   function subscribe(eventsUrl: string, targetSessionId: string) {
