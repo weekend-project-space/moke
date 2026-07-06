@@ -467,6 +467,22 @@ const BROWSER_STATE_QUERY_SCRIPT: &str = r#"
 }))()
 "#;
 
+const BROWSER_HISTORY_NAVIGATION_SCRIPT: &str = r#"
+(() => {
+  const direction = __MOKE_HISTORY_DIRECTION__;
+  const before = String(window.location.href || "");
+  if (direction === "back") {
+    window.history.back();
+    return { ok: true, direction, before };
+  }
+  if (direction === "forward") {
+    window.history.forward();
+    return { ok: true, direction, before };
+  }
+  return { ok: false, direction, before };
+})()
+"#;
+
 const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
 (() => {
   const verbose = Boolean(__MOKE_VERBOSE__);
@@ -997,6 +1013,13 @@ fn snapshot_script(verbose: bool) -> String {
     BROWSER_SNAPSHOT_SCRIPT.replace("__MOKE_VERBOSE__", if verbose { "true" } else { "false" })
 }
 
+fn history_navigation_script(direction: &str) -> Result<String, String> {
+    Ok(BROWSER_HISTORY_NAVIGATION_SCRIPT.replace(
+        "__MOKE_HISTORY_DIRECTION__",
+        &js_literal(&serde_json::Value::String(direction.to_string()))?,
+    ))
+}
+
 fn element_script(
     action: &str,
     uid: Option<&str>,
@@ -1501,13 +1524,34 @@ async fn browser_navigate(
                 history_target(page, &options.nav_type)
                     .ok_or_else(|| format!("Cannot navigate {} from this page", options.nav_type))?
             };
-            let url = normalize_url(Some(&target_url))?;
-            webview.navigate(url.clone()).map_err(|error| error.to_string())?;
-            update_browser_page(&state, page_id, |page| {
-                page.url = url.to_string();
-                let _ = set_history_index_for_url(page, url.as_str());
-                page.is_loading = true;
-            })?;
+            let native_result = eval_browser_json(
+                &app,
+                &state,
+                Some(page_id),
+                history_navigation_script(&options.nav_type)?,
+                1000,
+            );
+
+            if native_result
+                .as_ref()
+                .ok()
+                .and_then(|value| value.get("ok"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                update_browser_page(&state, page_id, |page| {
+                    let _ = set_history_index_for_url(page, target_url.as_str());
+                    page.is_loading = true;
+                })?;
+            } else {
+                let url = normalize_url(Some(&target_url))?;
+                webview.navigate(url.clone()).map_err(|error| error.to_string())?;
+                update_browser_page(&state, page_id, |page| {
+                    page.url = url.to_string();
+                    let _ = set_history_index_for_url(page, url.as_str());
+                    page.is_loading = true;
+                })?;
+            }
         }
         _ => return Err("type must be url, back, forward, or reload".to_string()),
     }
