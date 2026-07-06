@@ -441,7 +441,7 @@ onUnmounted(() => {
       @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
-      :session-meta="sessionMeta" @new-session="startNewSession"
+      :session-meta="sessionMeta"
       @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
       @pin-session="pinSession" @open-settings="openSettings" />
     <div
@@ -463,6 +463,7 @@ onUnmounted(() => {
         :trace-collapsed="traceCollapsed"
         :server-status="serverStatus"
         :server-status-label="serverStatusLabel"
+        @new-session="startNewSession"
         @toggle-sidebar="toggleSidebar"
         @toggle-workspace="toggleWorkspace"
       />

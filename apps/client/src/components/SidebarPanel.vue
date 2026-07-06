@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, Pencil, Pin, PinOff, Search, Settings, SquarePen } from 'lucide-vue-next'
+import { Archive, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type SessionSummary = {
@@ -25,7 +25,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   archiveSession: [id: string]
-  newSession: []
   openSettings: []
   pinSession: [id: string, pinned: boolean]
   renameSession: [id: string, title: string]
@@ -140,11 +139,6 @@ onUnmounted(() => {
     <section class="brand">
       <div class="brand-header">
         <span class="brand-title">对话</span>
-        <div class="brand-actions">
-          <button class="new-session" type="button" :disabled="disabled" aria-label="新建对话" title="新建对话" @click="$emit('newSession')">
-            <SquarePen :size="16" stroke-width="2.1" />
-          </button>
-        </div>
       </div>
       <label class="session-search">
         <Search :size="14" stroke-width="2.2" />
@@ -155,7 +149,7 @@ onUnmounted(() => {
     <section class="session-list">
       <div v-if="sessions.length === 0" class="sidebar-empty">
         <strong>还没有对话</strong>
-        <span>点右上角 + 开始一次新的对话。</span>
+        <span>点击顶部的新建按钮开始对话。</span>
       </div>
       <div v-else-if="filteredSessions.length === 0" class="sidebar-empty">
         <strong>没有找到</strong>
