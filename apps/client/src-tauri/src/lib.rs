@@ -486,11 +486,73 @@ const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
     const style = window.getComputedStyle(el);
     return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
   };
+  const compactText = (value, limit = 80) => String(value || "").trim().replace(/\s+/g, " ").slice(0, limit);
+  const directTextFor = (el) => Array.from(el.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent || "")
+    .join(" ");
+  const headingTextFor = (el) => {
+    const heading = el.querySelector?.("h1,h2,h3,h4,h5,h6,[role=heading]");
+    return heading ? heading.textContent || "" : "";
+  };
+  const textForMarkdown = (value) => String(value || "").trim().replace(/\s+/g, " ");
+  const escapeMarkdown = (value) => textForMarkdown(value).replace(/([\\`*_{}\[\]()#+\-.!|>])/g, "\\$1");
+  const tableToMarkdown = (table) => {
+    const rows = Array.from(table.querySelectorAll("tr")).slice(0, 12).map((row) =>
+      Array.from(row.querySelectorAll("th,td")).slice(0, 6).map((cell) => textForMarkdown(cell.innerText || cell.textContent))
+    ).filter((cells) => cells.length);
+    if (!rows.length) return "";
+    const width = Math.max(...rows.map((row) => row.length));
+    const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => escapeMarkdown(row[index] || "")));
+    const header = normalized[0];
+    const separator = Array.from({ length: width }, () => "---");
+    return [header, separator, ...normalized.slice(1)].map((row) => `| ${row.join(" | ")} |`).join("\n");
+  };
+  const contentForSnapshot = () => {
+    const root = document.querySelector("main,article,[role=main],[role=article]") || document.body;
+    const selector = "h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,table";
+    const parts = [];
+    for (const el of Array.from(root.querySelectorAll(selector))) {
+      if (!visible(el)) continue;
+      const tag = el.tagName.toLowerCase();
+      const text = textForMarkdown(el.innerText || el.textContent);
+      if (!text && tag !== "table") continue;
+      if (/^h[1-6]$/.test(tag)) {
+        const level = Number(tag.slice(1));
+        parts.push(`${Array(level + 1).join('#')} ${text}`);
+      } else if (tag === "li") {
+        parts.push(`- ${text}`);
+      } else if (tag === "blockquote") {
+        parts.push(`> ${text}`);
+      } else if (tag === "pre") {
+        parts.push("```\n" + String(el.innerText || el.textContent || "").trim() + "\n```");
+      } else if (tag === "table") {
+        const tableMarkdown = tableToMarkdown(el);
+        if (tableMarkdown) parts.push(tableMarkdown);
+      } else {
+        parts.push(text);
+      }
+    }
+    const maxLength = verbose ? 20000 : 8000;
+    const markdown = parts.join("\n\n").trim();
+    return {
+      markdown: markdown.slice(0, maxLength),
+      truncated: markdown.length > maxLength
+    };
+  };
   const nameFor = (el) => {
     const direct = el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("placeholder") || el.getAttribute("alt");
-    if (direct) return direct.trim();
-    if (el.labels && el.labels.length) return Array.from(el.labels).map((label) => label.innerText.trim()).filter(Boolean).join(" ");
-    return (el.innerText || el.value || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160);
+    if (direct) return compactText(direct);
+    if (el.labels && el.labels.length) return compactText(Array.from(el.labels).map((label) => label.innerText.trim()).filter(Boolean).join(" "));
+    const directText = compactText(directTextFor(el));
+    if (directText) return directText;
+    const headingText = compactText(headingTextFor(el));
+    if (headingText) return headingText;
+    if ("value" in el && typeof el.value === "string") {
+      const valueText = compactText(el.value);
+      if (valueText) return valueText;
+    }
+    return compactText(el.innerText || el.textContent);
   };
   const roleFor = (el) => {
     if (el.getAttribute("role")) return el.getAttribute("role");
@@ -503,10 +565,10 @@ const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
     if (el.isContentEditable) return "textbox";
     return tag;
   };
-  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+  const interactiveElements = Array.from(document.querySelectorAll(interactiveSelector))
     .filter((el) => verbose || visible(el))
     .slice(0, verbose ? 300 : 120);
-  const nodes = elements.map((el, index) => {
+  const elements = interactiveElements.map((el, index) => {
     const uid = `e${index + 1}`;
     el.setAttribute("data-moke-uid", uid);
     const node = {
@@ -523,10 +585,12 @@ const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
     if (text && text !== node.name) node.text = text.slice(0, verbose ? 500 : 180);
     return node;
   });
+  const content = contentForSnapshot();
   return {
     url: String(window.location.href || ""),
     title: String(document.title || ""),
-    nodes
+    content,
+    elements
   };
 })()
 "#;

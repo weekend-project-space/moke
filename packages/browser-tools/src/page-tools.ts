@@ -181,7 +181,8 @@ export function createEvaluateScriptTool(browser: BrowserBackend): RuntimeTool<t
 export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typeof takeSnapshotSchema> {
   return {
     name: 'take_snapshot',
-    description: 'Return a lightweight DOM/accessibility snapshot of the active in-app browser page.',
+    description:
+      'Return a lightweight snapshot of the active in-app browser page, including actionable elements and page content as Markdown.',
     risk: 'safe',
     schema: takeSnapshotSchema,
     async handler(input) {

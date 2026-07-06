@@ -105108,7 +105108,7 @@ function createEvaluateScriptTool(browser) {
 function createTakeSnapshotTool(browser) {
   return {
     name: "take_snapshot",
-    description: "Return a lightweight DOM/accessibility snapshot of the active in-app browser page.",
+    description: "Return a lightweight snapshot of the active in-app browser page, including actionable elements and page content as Markdown.",
     risk: "safe",
     schema: takeSnapshotSchema,
     async handler(input) {

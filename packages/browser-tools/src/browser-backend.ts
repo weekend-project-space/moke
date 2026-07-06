@@ -34,10 +34,16 @@ export type BrowserSnapshotNode = {
   children?: BrowserSnapshotNode[];
 };
 
+export type BrowserSnapshotContent = {
+  markdown: string;
+  truncated: boolean;
+};
+
 export type BrowserSnapshot = {
   url: string;
   title: string;
-  nodes: BrowserSnapshotNode[];
+  content: BrowserSnapshotContent;
+  elements: BrowserSnapshotNode[];
 };
 
 export type CreatePageInput = {

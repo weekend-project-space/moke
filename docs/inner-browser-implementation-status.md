@@ -20,7 +20,7 @@ This is not a Playwright/CDP automation stack. Tools that can be implemented wit
 | `show_browser` | Implemented | Shows the right browser panel. |
 | `hide_browser` | Implemented | Hides the right browser panel. |
 | `evaluate_script` | Implemented | Executes a JavaScript function in the active webview. |
-| `take_snapshot` | Implemented | Traverses interactive DOM elements and assigns `data-moke-uid` IDs. Supports JSON file output through `filePath`. |
+| `take_snapshot` | Implemented | Traverses interactive DOM elements and assigns `data-moke-uid` IDs. Returns visible page content through `content.markdown` and actionable elements through `elements`. Supports JSON file output through `filePath`. |
 | `take_screenshot` | Implemented | Captures viewport screenshots, element screenshots by snapshot `uid`, and vertical full-page screenshots to PNG files. |
 | `click` | Implemented | Clicks or double-clicks a snapshot UID using synthetic events and `element.click()`. |
 | `hover` | Implemented | Dispatches synthetic pointer and mouse hover events for a snapshot UID. |
