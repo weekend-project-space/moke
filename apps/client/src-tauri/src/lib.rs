@@ -596,7 +596,7 @@ const BROWSER_SNAPSHOT_SCRIPT: &str = r#"
 "#;
 
 const BROWSER_ELEMENT_SCRIPT: &str = r#"
-(() => {
+(async () => {
   const action = __MOKE_ACTION__;
   const uid = __MOKE_UID__;
   const value = __MOKE_VALUE__;
@@ -606,6 +606,47 @@ const BROWSER_ELEMENT_SCRIPT: &str = r#"
   const submitKey = __MOKE_SUBMIT_KEY__;
   const el = uid ? document.querySelector(`[data-moke-uid="${String(uid).replace(/"/g, '\\"')}"]`) : document.activeElement;
   if (!el) throw new Error(uid ? `Element not found: ${uid}` : "No active element");
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const showAiPointer = async (target) => {
+    if (!uid || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    target.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+    const rect = target.getBoundingClientRect();
+    const x = Math.max(8, rect.left + rect.width / 2 - 3);
+    const y = Math.max(8, rect.top + rect.height / 2 - 1);
+
+    let style = document.getElementById("moke-ai-pointer-style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "moke-ai-pointer-style";
+      style.textContent = `
+        .moke-ai-pointer {
+          position: fixed;
+          left: 0;
+          top: 0;
+          width: 18px;
+          height: 22px;
+          z-index: 2147483647;
+          color: rgb(37 99 235);
+          filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.22));
+          pointer-events: none;
+          transform: translate3d(var(--moke-x), var(--moke-y), 0);
+        }
+      `;
+      document.documentElement.appendChild(style);
+    }
+
+    document.getElementById("moke-ai-pointer")?.remove();
+    const pointer = document.createElement("div");
+    pointer.id = "moke-ai-pointer";
+    pointer.className = "moke-ai-pointer";
+    pointer.style.setProperty("--moke-x", `${x}px`);
+    pointer.style.setProperty("--moke-y", `${y}px`);
+    pointer.innerHTML = '<svg viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2L16 12L9.7 13.1L6.7 20L2 2Z" fill="currentColor" stroke="white" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    document.documentElement.appendChild(pointer);
+    await sleep(3000);
+    pointer.remove();
+  };
 
   const eventInit = { bubbles: true, cancelable: true, view: window };
   const dispatchMouse = (type) => el.dispatchEvent(new MouseEvent(type, eventInit));
@@ -655,6 +696,7 @@ const BROWSER_ELEMENT_SCRIPT: &str = r#"
   };
 
   if (action === "click") {
+    await showAiPointer(el);
     el.focus();
     dispatchPointer("pointerdown");
     dispatchMouse("mousedown");
@@ -663,7 +705,7 @@ const BROWSER_ELEMENT_SCRIPT: &str = r#"
     el.click();
     if (dblClick) dispatchMouse("dblclick");
   } else if (action === "hover") {
-    el.scrollIntoView({ block: "center", inline: "center" });
+    await showAiPointer(el);
     dispatchPointer("pointerover");
     dispatchMouse("mouseover");
     dispatchPointer("pointerenter");
@@ -671,6 +713,7 @@ const BROWSER_ELEMENT_SCRIPT: &str = r#"
     dispatchPointer("pointermove");
     dispatchMouse("mousemove");
   } else if (action === "fill") {
+    await showAiPointer(el);
     setValue(el, value);
   } else if (action === "press_key") {
     el.focus();
@@ -743,7 +786,7 @@ const BROWSER_ELEMENT_RECT_SCRIPT: &str = r#"
 "#;
 
 const BROWSER_UPLOAD_FILE_SCRIPT: &str = r#"
-(() => {
+(async () => {
   const uid = __MOKE_UID__;
   const fileName = __MOKE_FILE_NAME__;
   const mimeType = __MOKE_MIME_TYPE__;
@@ -754,6 +797,49 @@ const BROWSER_UPLOAD_FILE_SCRIPT: &str = r#"
     ? root
     : root.querySelector && root.querySelector('input[type="file"]');
   if (!input) throw new Error(`Element is not a file input: ${uid}`);
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const showAiPointer = async (target) => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    target.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+    const rect = target.getBoundingClientRect();
+    const x = Math.max(8, rect.left + rect.width / 2 - 3);
+    const y = Math.max(8, rect.top + rect.height / 2 - 1);
+
+    let style = document.getElementById("moke-ai-pointer-style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "moke-ai-pointer-style";
+      style.textContent = `
+        .moke-ai-pointer {
+          position: fixed;
+          left: 0;
+          top: 0;
+          width: 18px;
+          height: 22px;
+          z-index: 2147483647;
+          color: rgb(37 99 235);
+          filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.22));
+          pointer-events: none;
+          transform: translate3d(var(--moke-x), var(--moke-y), 0);
+        }
+      `;
+      document.documentElement.appendChild(style);
+    }
+
+    document.getElementById("moke-ai-pointer")?.remove();
+    const pointer = document.createElement("div");
+    pointer.id = "moke-ai-pointer";
+    pointer.className = "moke-ai-pointer";
+    pointer.style.setProperty("--moke-x", `${x}px`);
+    pointer.style.setProperty("--moke-y", `${y}px`);
+    pointer.innerHTML = '<svg viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2L16 12L9.7 13.1L6.7 20L2 2Z" fill="currentColor" stroke="white" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    document.documentElement.appendChild(pointer);
+    await sleep(3000);
+    pointer.remove();
+  };
+
+  await showAiPointer(root);
 
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
