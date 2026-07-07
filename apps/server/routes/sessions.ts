@@ -15,7 +15,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const requestBody = await body();
     const session: Session = {
       id: id('sess'),
-      title: typeof requestBody.title === 'string' ? requestBody.title : 'New Session',
+      title: typeof requestBody.title === 'string' ? requestBody.title : 'New chat',
       created_at: now(),
       updated_at: now(),
       messages: [],

@@ -112,28 +112,11 @@ const {
   },
   openWorkspace,
 })
-const taskTemplates: TaskTemplate[] = [
-  {
-    title: uiText.chat.exploreTitle,
-    description: uiText.chat.exploreDescription,
-    prompt: uiText.chat.explorePrompt,
-  },
-  {
-    title: uiText.chat.summarizePageTitle,
-    description: uiText.chat.summarizePageDescription,
-    prompt: uiText.chat.summarizePagePrompt,
-  },
-  {
-    title: uiText.chat.findChangesTitle,
-    description: uiText.chat.findChangesDescription,
-    prompt: uiText.chat.findChangesPrompt,
-  },
-  {
-    title: uiText.chat.checkErrorTitle,
-    description: uiText.chat.checkErrorDescription,
-    prompt: uiText.chat.checkErrorPrompt,
-  },
-]
+const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
+  title: prompt,
+  description: '',
+  prompt,
+}))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => {
   if (showSettings.value) return uiText.app.settings

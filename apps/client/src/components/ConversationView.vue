@@ -177,10 +177,10 @@ defineExpose({
 
     <div v-if="showEmptyState" class="empty-state">
       <h3>{{ uiText.chat.emptyTitle }}</h3>
+      <p>{{ uiText.chat.emptyDescription }}</p>
       <div class="suggestion-grid">
         <button v-for="template in taskTemplates" :key="template.title" type="button" @click="emit('applySuggestion', template.prompt)">
           <span>{{ template.title }}</span>
-          <small>{{ template.description }}</small>
         </button>
       </div>
     </div>

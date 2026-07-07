@@ -69,7 +69,7 @@ test('titleFromFirstUserMessage compacts and truncates the first message', () =>
 
 test('maybeSetTitleFromFirstUserMessage names a default empty session', () => {
   const session = createSession();
-  session.title = '新会话';
+  session.title = 'New chat';
 
   assert.equal(maybeSetTitleFromFirstUserMessage(session, '帮我看看左侧面板'), true);
   assert.equal(session.title, '帮我看看左侧面板');
@@ -77,10 +77,10 @@ test('maybeSetTitleFromFirstUserMessage names a default empty session', () => {
 
 test('maybeSetTitleFromFirstUserMessage keeps edited or non-empty session titles', () => {
   const edited = createSession();
-  edited.title = '新会话';
+  edited.title = 'New chat';
   edited.metadata = { title_edited: true };
   assert.equal(maybeSetTitleFromFirstUserMessage(edited, '不会覆盖'), false);
-  assert.equal(edited.title, '新会话');
+  assert.equal(edited.title, 'New chat');
 
   const custom = createSession();
   custom.title = '手动标题';
@@ -90,7 +90,7 @@ test('maybeSetTitleFromFirstUserMessage keeps edited or non-empty session titles
 
 test('maybeSetTitleFromFirstUserMessage only uses the first user message', () => {
   const session = createSession();
-  session.title = '新会话';
+  session.title = 'New chat';
   session.messages.push({
     id: 'msg_1',
     role: 'user',
@@ -99,7 +99,17 @@ test('maybeSetTitleFromFirstUserMessage only uses the first user message', () =>
   });
 
   assert.equal(maybeSetTitleFromFirstUserMessage(session, 'second'), false);
-  assert.equal(session.title, '新会话');
+  assert.equal(session.title, 'New chat');
+});
+
+test('maybeSetTitleFromFirstUserMessage does not treat removed legacy titles as defaults', () => {
+  for (const title of ['New Session', '新会话', 'Moke 对话']) {
+    const session = createSession();
+    session.title = title;
+
+    assert.equal(maybeSetTitleFromFirstUserMessage(session, 'first message'), false);
+    assert.equal(session.title, title);
+  }
 });
 
 test('forkSession copies messages through the selected message', () => {

@@ -105563,7 +105563,7 @@ function registerBrowserRoutes(router) {
 
 // apps/server/domain/sessions.ts
 var import_node_crypto5 = require("node:crypto");
-var DEFAULT_SESSION_TITLES = /* @__PURE__ */ new Set(["New Session", "\u65B0\u4F1A\u8BDD", "\u65B0\u5BF9\u8BDD", "Moke \u5BF9\u8BDD"]);
+var DEFAULT_SESSION_TITLES = /* @__PURE__ */ new Set(["New chat", "\u65B0\u5BF9\u8BDD"]);
 var SESSION_TITLE_LIMIT = 24;
 function id3(prefix) {
   return `${prefix}_${(0, import_node_crypto5.randomUUID)().slice(0, 8)}`;
@@ -105857,7 +105857,7 @@ function registerSessionRoutes(router) {
     const requestBody = await body();
     const session = {
       id: id3("sess"),
-      title: typeof requestBody.title === "string" ? requestBody.title : "New Session",
+      title: typeof requestBody.title === "string" ? requestBody.title : "New chat",
       created_at: now3(),
       updated_at: now3(),
       messages: [],

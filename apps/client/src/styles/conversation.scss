@@ -143,25 +143,28 @@
 .empty-state {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
+  width: min(520px, var(--content-width));
+  align-items: stretch;
+  gap: 10px;
   margin: auto 0 20px;
   padding: 7vh 0 0;
-  text-align: center;
+  align-self: center;
+  text-align: left;
 
   h3 {
     margin: 0;
     color: var(--ink);
     font-size: var(--font-size-title);
-    font-weight: 560;
+    font-weight: 520;
     letter-spacing: 0;
   }
 
   > p {
-    display: none;
+    display: block;
     margin: 0;
     color: var(--ink-soft);
-    font-size: var(--font-size-ui);
+    font-size: var(--font-size-body);
+    line-height: 1.45;
   }
 }
 
@@ -179,18 +182,18 @@
 
 .suggestion-grid {
   display: grid;
-  width: min(520px, var(--content-width));
+  width: 100%;
   gap: 0;
-  padding: 2px 6px;
+  margin-top: 8px;
+  padding: 2px 0;
   border-top: 1px solid var(--line-subtle);
   border-bottom: 1px solid var(--line-subtle);
 
   button {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 16px;
+    display: flex;
+    min-width: 0;
     align-items: center;
-    padding: 9px 8px;
+    padding: 10px 8px;
     border: 0;
     border-radius: 0;
     color: var(--ink);
@@ -212,16 +215,12 @@
   }
 
   span {
+    min-width: 0;
+    overflow: hidden;
     font-size: var(--font-size-ui);
-    font-weight: 500;
+    font-weight: 520;
     line-height: 1.35;
-  }
-
-  small {
-    color: var(--ink-muted);
-    font-size: var(--font-size-meta);
-    font-weight: 400;
-    line-height: 1.35;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 }
@@ -233,11 +232,10 @@
 
   .suggestion-grid {
     button {
-      grid-template-columns: 1fr;
-      gap: 2px;
+      align-items: flex-start;
     }
 
-    small {
+    span {
       white-space: normal;
     }
   }

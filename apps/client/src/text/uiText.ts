@@ -33,20 +33,14 @@ const browser = {
 } as const
 
 const chat = {
-  checkErrorDescription: 'Find the cause and smallest fix',
-  checkErrorPrompt: 'Help me inspect this error. First explain the cause, then suggest the smallest fix.',
-  checkErrorTitle: 'Check an error',
   continuePrompt: 'Based on the result above, continue and turn it into a clearer next step.',
-  emptyTitle: 'What should Moke help you do?',
-  exploreDescription: 'Understand the structure and key files',
-  explorePrompt: 'Help me review this project structure. First summarize what it does, then list the files I should read next.',
-  exploreTitle: 'Explore this project',
-  findChangesDescription: 'Trace what may have changed',
-  findChangesPrompt: 'Find the recently changed files in this project and briefly explain what features may be affected.',
-  findChangesTitle: 'Find recent changes',
-  summarizePageDescription: 'Read the current browser page',
-  summarizePagePrompt: 'Open the current browser page and summarize the key points.',
-  summarizePageTitle: 'Summarize the page',
+  emptyDescription: 'Give me a page, a question, or a direction.',
+  emptyTitle: 'Where should we go first?',
+  starters: [
+    'Open ruanyifeng.com and summarize the latest post',
+    'Read the current browser page and extract useful links',
+    'Search the web for recent news about local LLM browsers',
+  ],
   thinking: 'Moke is thinking',
 } as const
 

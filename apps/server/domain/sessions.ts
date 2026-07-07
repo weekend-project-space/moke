@@ -21,7 +21,7 @@ export type SessionUpdateResult =
   | { ok: true; changed: true }
   | { ok: false; status: 400; code: string; message: string };
 
-const DEFAULT_SESSION_TITLES = new Set(['New Session', '新会话', '新对话', 'Moke 对话']);
+const DEFAULT_SESSION_TITLES = new Set(['New chat', '新对话']);
 const SESSION_TITLE_LIMIT = 24;
 
 export function id(prefix: string) {
