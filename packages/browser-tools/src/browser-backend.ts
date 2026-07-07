@@ -10,7 +10,6 @@ export type BrowserPage = {
 };
 
 export type BrowserResult = {
-  page: BrowserPage | null;
   pages: BrowserPage[];
   activePageId: number | null;
 };

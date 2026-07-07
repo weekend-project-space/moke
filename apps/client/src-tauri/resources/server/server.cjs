@@ -105267,6 +105267,10 @@ function registerBrowserTools(toolRegistry, browser) {
 
 // apps/server/services/browser-bridge.ts
 var DEFAULT_TIMEOUT_MS = 3e4;
+function normalizeBrowserResult(result) {
+  const { page: _page, ...rest } = result;
+  return rest;
+}
 var BrowserBridge = class {
   client = null;
   requestSeq = 0;
@@ -105397,7 +105401,8 @@ var BrowserBridgeBackend = class {
     return this.callBrowser("hide_browser");
   }
   async callBrowser(method, params = {}, timeoutMs) {
-    return this.bridge.request(method, params, timeoutMs);
+    const result = await this.bridge.request(method, params, timeoutMs);
+    return normalizeBrowserResult(result);
   }
 };
 

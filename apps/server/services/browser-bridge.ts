@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 
 import type {
+  BrowserActionResult,
   BrowserBackend,
   BrowserResult,
   ClickInput,
@@ -35,6 +36,11 @@ type PendingRequest = {
 };
 
 const DEFAULT_TIMEOUT_MS = 30000;
+
+function normalizeBrowserResult(result: Record<string, unknown>): BrowserActionResult {
+  const { page: _page, ...rest } = result;
+  return rest as BrowserActionResult;
+}
 
 export class BrowserBridge {
   private client: ServerResponse | null = null;
@@ -132,52 +138,52 @@ export class BrowserBridgeBackend implements BrowserBackend {
     return this.callBrowser('navigate_page', input, input.timeout);
   }
 
-  async evaluateScript(input: EvaluateScriptInput): Promise<BrowserResult> {
-    return this.callBrowser('evaluate_script', input);
+  async evaluateScript(input: EvaluateScriptInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('evaluate_script', input);
   }
 
-  async takeSnapshot(input: TakeSnapshotInput): Promise<BrowserResult> {
-    return this.callBrowser('take_snapshot', input);
+  async takeSnapshot(input: TakeSnapshotInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('take_snapshot', input);
   }
 
-  async takeScreenshot(input: TakeScreenshotInput): Promise<BrowserResult> {
-    return this.callBrowser('take_screenshot', input);
+  async takeScreenshot(input: TakeScreenshotInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('take_screenshot', input);
   }
 
-  async click(input: ClickInput): Promise<BrowserResult> {
-    return this.callBrowser('click', input);
+  async click(input: ClickInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('click', input);
   }
 
-  async hover(input: ElementActionInput): Promise<BrowserResult> {
-    return this.callBrowser('hover', input);
+  async hover(input: ElementActionInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('hover', input);
   }
 
-  async fill(input: FillInput): Promise<BrowserResult> {
-    return this.callBrowser('fill', input);
+  async fill(input: FillInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('fill', input);
   }
 
-  async fillForm(input: FillFormInput): Promise<BrowserResult> {
-    return this.callBrowser('fill_form', input);
+  async fillForm(input: FillFormInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('fill_form', input);
   }
 
-  async uploadFile(input: UploadFileInput): Promise<BrowserResult> {
-    return this.callBrowser('upload_file', input);
+  async uploadFile(input: UploadFileInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('upload_file', input);
   }
 
-  async waitFor(input: WaitForInput): Promise<BrowserResult> {
-    return this.callBrowser('wait_for', input, input.timeout);
+  async waitFor(input: WaitForInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('wait_for', input, input.timeout);
   }
 
-  async pressKey(input: PressKeyInput): Promise<BrowserResult> {
-    return this.callBrowser('press_key', input);
+  async pressKey(input: PressKeyInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('press_key', input);
   }
 
-  async typeText(input: TypeTextInput): Promise<BrowserResult> {
-    return this.callBrowser('type_text', input);
+  async typeText(input: TypeTextInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('type_text', input);
   }
 
-  async handleDialog(input: HandleDialogInput): Promise<BrowserResult> {
-    return this.callBrowser('handle_dialog', input);
+  async handleDialog(input: HandleDialogInput): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('handle_dialog', input);
   }
 
   async resizePage(input: ResizePageInput): Promise<BrowserResult> {
@@ -192,7 +198,12 @@ export class BrowserBridgeBackend implements BrowserBackend {
     return this.callBrowser('hide_browser');
   }
 
-  private async callBrowser(method: string, params: Record<string, unknown> = {}, timeoutMs?: number) {
-    return this.bridge.request(method, params, timeoutMs) as Promise<BrowserResult>;
+  private async callBrowser<T extends BrowserResult = BrowserResult>(
+    method: string,
+    params: Record<string, unknown> = {},
+    timeoutMs?: number,
+  ): Promise<T> {
+    const result = await this.bridge.request(method, params, timeoutMs);
+    return normalizeBrowserResult(result) as T;
   }
 }
