@@ -8,11 +8,17 @@ export type ChatModelSettings = {
   timeoutMs: number;
 };
 
+function normalizeMaxRetries(input: unknown) {
+  const maxRetries = Number(input);
+  const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : 3;
+  return Math.max(0, Math.min(normalized, 6));
+}
+
 export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {}): ChatModelSettings {
   return {
     apiKey: input.apiKey || process.env.OPENAI_API_KEY || 'test',
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'http://localhost:8080/v1',
-    maxRetries: input.maxRetries ?? Number(process.env.OPENAI_MAX_RETRIES || 3),
+    maxRetries: normalizeMaxRetries(input.maxRetries ?? process.env.OPENAI_MAX_RETRIES),
     model: input.model || process.env.OPENAI_MODEL || 'qwen3.6-35BA3B',
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1000),
   };

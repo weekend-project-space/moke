@@ -587,62 +587,69 @@ onUnmounted(() => {
         @open-link="openLinkInBrowser"
         @toggle-process-group="toggleProcessGroup"
       />
-      <button
-        v-if="showJumpToBottom && !showSettings"
-        class="jump-inline"
-        type="button"
-        :aria-label="uiText.app.jumpToBottom"
-        :title="uiText.app.jumpToBottom"
-        @click="jumpToConversationBottom"
-      >
-        <ArrowDown :size="15" stroke-width="2.2" />
-      </button>
-      <ApprovalInlineBar
-        v-if="pendingApproval && !showSettings"
-        :approval="pendingApproval"
-        @approve="decideApproval($event.decision, $event.scope)"
-      />
-      <AskInlineBar v-if="pendingAsk && !showSettings" :ask="pendingAsk" @select="selectAskOption" />
-      <div
-        v-if="queuedMessageCount && !showSettings"
-        class="queued-message-panel"
-        :title="queuedMessagePreview"
-      >
-        <div class="queued-message-bar">
-          <Clock3 :size="14" stroke-width="2.2" />
-          <span>{{ queuedMessageLabel }}</span>
-          <button type="button" :aria-label="uiText.composer.clearQueued" :title="uiText.composer.clearQueued" @click="cancelQueuedMessage">
-            <X :size="14" stroke-width="2.2" />
-          </button>
+      <div v-if="!showSettings" class="composer-zone">
+        <div
+          v-if="showJumpToBottom || pendingApproval || pendingAsk || queuedMessageCount"
+          class="composer-overlay-stack"
+        >
           <button
-            v-if="isRunning && !pendingAsk && !queuedStopRequested"
+            v-if="showJumpToBottom"
+            class="jump-inline"
             type="button"
-            class="primary"
-            :aria-label="uiText.composer.stopAndSendNext"
-            :title="uiText.composer.stopAndSendNext"
-            @click="stopAndSendQueuedMessage"
+            :aria-label="uiText.app.jumpToBottom"
+            :title="uiText.app.jumpToBottom"
+            @click="jumpToConversationBottom"
           >
-            <SkipForward :size="14" stroke-width="2.2" />
+            <ArrowDown :size="15" stroke-width="2.2" />
           </button>
-        </div>
-        <div class="queued-message-list" :aria-label="uiText.composer.queuedMessages">
-          <div v-for="(item, index) in queuedMessageItems" :key="`${index}-${item.content}`" class="queued-message-item">
-            <span class="queued-message-text">{{ item.preview }}</span>
-            <button
-              type="button"
-              :aria-label="uiText.composer.removeQueued(index + 1)"
-              :title="uiText.composer.removeQueuedTitle(index + 1)"
-              @click="cancelQueuedMessageAt(index)"
-            >
-              <X :size="13" stroke-width="2.2" />
-            </button>
+          <ApprovalInlineBar
+            v-if="pendingApproval"
+            :approval="pendingApproval"
+            @approve="decideApproval($event.decision, $event.scope)"
+          />
+          <AskInlineBar v-if="pendingAsk" :ask="pendingAsk" @select="selectAskOption" />
+          <div
+            v-if="queuedMessageCount"
+            class="queued-message-panel"
+            :title="queuedMessagePreview"
+          >
+            <div class="queued-message-bar">
+              <Clock3 :size="14" stroke-width="2.2" />
+              <span>{{ queuedMessageLabel }}</span>
+              <button type="button" :aria-label="uiText.composer.clearQueued" :title="uiText.composer.clearQueued" @click="cancelQueuedMessage">
+                <X :size="14" stroke-width="2.2" />
+              </button>
+              <button
+                v-if="isRunning && !pendingAsk && !queuedStopRequested"
+                type="button"
+                class="primary"
+                :aria-label="uiText.composer.stopAndSendNext"
+                :title="uiText.composer.stopAndSendNext"
+                @click="stopAndSendQueuedMessage"
+              >
+                <SkipForward :size="14" stroke-width="2.2" />
+              </button>
+            </div>
+            <div class="queued-message-list" :aria-label="uiText.composer.queuedMessages">
+              <div v-for="(item, index) in queuedMessageItems" :key="`${index}-${item.content}`" class="queued-message-item">
+                <span class="queued-message-text">{{ item.preview }}</span>
+                <button
+                  type="button"
+                  :aria-label="uiText.composer.removeQueued(index + 1)"
+                  :title="uiText.composer.removeQueuedTitle(index + 1)"
+                  @click="cancelQueuedMessageAt(index)"
+                >
+                  <X :size="13" stroke-width="2.2" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
+        <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
+          :primary-is-stop="primaryIsStop" :attachments="attachments" @update:input-value="input = $event" @input="handleInput"
+          @add-attachments="addAttachments" @remove-attachment="removeAttachment"
+          @enter="sendOnEnter" @submit="handlePrimaryAction" />
       </div>
-      <ComposerBox v-if="!showSettings" ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
-        :primary-is-stop="primaryIsStop" :attachments="attachments" @update:input-value="input = $event" @input="handleInput"
-        @add-attachments="addAttachments" @remove-attachment="removeAttachment"
-        @enter="sendOnEnter" @submit="handlePrimaryAction" />
     </section>
 
     <div

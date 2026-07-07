@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowUp, ImagePlus, Square, X } from 'lucide-vue-next'
-import { nextTick, ref } from 'vue'
+import { ArrowUp, Image, Plus, Square, X } from 'lucide-vue-next'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../text/uiText'
 import type { ImageAttachment } from '../types/conversation'
 
@@ -20,6 +20,8 @@ const emit = defineEmits<{
   'update:inputValue': [value: string]
 }>()
 
+const addMenuOpen = ref(false)
+const composerEl = ref<HTMLFormElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 
@@ -87,8 +89,28 @@ async function addImageFiles(files: File[]) {
 }
 
 function chooseImages() {
+  addMenuOpen.value = false
   fileInput.value?.click()
 }
+
+function toggleAddMenu() {
+  addMenuOpen.value = !addMenuOpen.value
+}
+
+function closeAddMenuOnOutsideClick(event: PointerEvent) {
+  if (!addMenuOpen.value) return
+  const target = event.target
+  if (target instanceof Node && composerEl.value?.contains(target)) return
+  addMenuOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', closeAddMenuOnOutsideClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', closeAddMenuOnOutsideClick)
+})
 
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
@@ -108,7 +130,13 @@ defineExpose({ focus, resize })
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="$emit('submit')">
+  <form ref="composerEl" class="composer" @submit.prevent="$emit('submit')">
+    <div v-if="addMenuOpen" class="composer-option-list">
+      <button type="button" @click="chooseImages">
+        <Image :size="15" stroke-width="2.1" />
+        <span>{{ uiText.composer.chooseImage }}</span>
+      </button>
+    </div>
     <div class="composer-panel input-mode" @click="focusFromPanelClick">
       <div class="composer-input-row">
         <div v-if="props.attachments.length" class="composer-attachments">
@@ -139,11 +167,12 @@ defineExpose({ focus, resize })
           <button
             class="composer-secondary-action"
             type="button"
-            :aria-label="uiText.composer.addImage"
-            :title="uiText.composer.addImage"
-            @click="chooseImages"
+            :aria-label="uiText.composer.add"
+            :title="uiText.composer.add"
+            :class="{ active: addMenuOpen }"
+            @click="toggleAddMenu"
           >
-            <ImagePlus :size="16" stroke-width="2.1" />
+            <Plus :size="17" stroke-width="2.2" />
           </button>
           <input
             ref="fileInput"

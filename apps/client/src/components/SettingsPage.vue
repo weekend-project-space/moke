@@ -16,6 +16,7 @@ type ModelProviderProfile = {
   model: string
   apiBaseUrl: string
   apiKey: string
+  maxRetries: number
   timeoutMs: number
 }
 
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const BROWSER_SETTINGS_KEY = 'moke.browser-settings.v1'
+const MODEL_PROVIDER_MAX_RETRIES_MAX = 6
 const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
 const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
   { id: 'model', label: 'Model' },
@@ -63,6 +65,12 @@ const modelTest = ref<'idle' | 'checking' | 'ok' | 'error'>('idle')
 const modelTestMessage = ref('')
 const modelListMessage = ref('')
 const selectedProvider = computed(() => providers.value.find((provider) => provider.id === selectedProviderId.value) || null)
+const editingTimeoutSeconds = computed({
+  get: () => Math.round(editingProvider.timeoutMs / 1000),
+  set: (value: number) => {
+    editingProvider.timeoutMs = Math.max(1, Math.min(Math.trunc(Number(value) || 1), 3600)) * 1000
+  },
+})
 
 function createProvider(): ModelProviderProfile {
   return {
@@ -71,13 +79,17 @@ function createProvider(): ModelProviderProfile {
     type: 'openai-compatible',
     apiKey: 'test',
     apiBaseUrl: 'http://localhost:8080/v1',
+    maxRetries: 3,
     model: 'qwen3.6-35BA3B',
     timeoutMs: 30 * 60 * 1000,
   }
 }
 
 function copyProvider(provider: ModelProviderProfile) {
-  Object.assign(editingProvider, { ...provider })
+  Object.assign(editingProvider, {
+    ...provider,
+    maxRetries: Number.isFinite(Number(provider.maxRetries)) ? provider.maxRetries : 3,
+  })
 }
 
 function syncEditingProvider() {
@@ -343,10 +355,26 @@ onMounted(() => {
               </datalist>
             </div>
           </label>
-          <label class="settings-row">
-            <span>{{ uiText.settings.timeout }}</span>
-            <input v-model.number="editingProvider.timeoutMs" type="number" min="1000" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS" step="1000" />
-          </label>
+          <details class="settings-advanced">
+            <summary>
+              <span>{{ uiText.settings.advanced }}</span>
+              <small>{{ uiText.settings.retriesPreview(editingTimeoutSeconds, editingProvider.maxRetries) }}</small>
+            </summary>
+            <label class="settings-row">
+              <span>{{ uiText.settings.timeout }}</span>
+              <div class="settings-stacked-control">
+                <input v-model.number="editingTimeoutSeconds" type="number" min="1" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS / 1000" step="1" />
+                <small>{{ uiText.settings.timeoutHint }}</small>
+              </div>
+            </label>
+            <label class="settings-row">
+              <span>{{ uiText.settings.retries }}</span>
+              <div class="settings-stacked-control">
+                <input v-model.number="editingProvider.maxRetries" type="number" min="0" :max="MODEL_PROVIDER_MAX_RETRIES_MAX" step="1" />
+                <small>{{ uiText.settings.retriesHint }}</small>
+              </div>
+            </label>
+          </details>
 
           <div class="settings-actions">
             <button type="button" class="settings-secondary" @click="testModel">

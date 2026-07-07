@@ -12,6 +12,7 @@ export type ModelProviderProfile = {
   type: ModelProviderType;
   apiKey: string;
   apiBaseUrl: string;
+  maxRetries: number;
   model: string;
   timeoutMs: number;
 };
@@ -27,6 +28,7 @@ export type ModelProviderInput = {
   type?: unknown;
   apiKey?: unknown;
   apiBaseUrl?: unknown;
+  maxRetries?: unknown;
   model?: unknown;
   timeoutMs?: unknown;
 };
@@ -39,6 +41,9 @@ export type RuntimeSettingsInput = {
 export const MODEL_PROVIDER_TIMEOUT_MIN_MS = 1000;
 export const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000;
 export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1000;
+export const MODEL_PROVIDER_MAX_RETRIES_MIN = 0;
+export const MODEL_PROVIDER_MAX_RETRIES_MAX = 6;
+export const MODEL_PROVIDER_MAX_RETRIES_DEFAULT = 3;
 export const MODEL_PROVIDER_DEFAULT_NAME = 'Local Qwen';
 export const MODEL_PROVIDER_DEFAULT_API_KEY = 'test';
 export const MODEL_PROVIDER_DEFAULT_BASE_URL = 'http://localhost:8080/v1';
@@ -54,6 +59,12 @@ export function normalizeProviderTimeoutMs(input: unknown, fallback = MODEL_PROV
   return Math.max(MODEL_PROVIDER_TIMEOUT_MIN_MS, Math.min(normalized, MODEL_PROVIDER_TIMEOUT_MAX_MS));
 }
 
+export function normalizeProviderMaxRetries(input: unknown, fallback = MODEL_PROVIDER_MAX_RETRIES_DEFAULT) {
+  const maxRetries = Number(input);
+  const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : fallback;
+  return Math.max(MODEL_PROVIDER_MAX_RETRIES_MIN, Math.min(normalized, MODEL_PROVIDER_MAX_RETRIES_MAX));
+}
+
 function defaultProvider(): ModelProviderProfile {
   return {
     id: createProviderId(),
@@ -61,6 +72,7 @@ function defaultProvider(): ModelProviderProfile {
     type: 'openai-compatible',
     apiKey: process.env.OPENAI_API_KEY || MODEL_PROVIDER_DEFAULT_API_KEY,
     apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
+    maxRetries: normalizeProviderMaxRetries(process.env.OPENAI_MAX_RETRIES),
     model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS),
   };
@@ -70,6 +82,7 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
   return {
     apiKey: provider.apiKey,
     apiBaseUrl: provider.apiBaseUrl,
+    maxRetries: provider.maxRetries,
     model: provider.model,
     timeoutMs: provider.timeoutMs,
   };
@@ -84,6 +97,7 @@ export function normalizeProvider(input: ModelProviderInput = {}, fallback = def
     type,
     apiKey: typeof input.apiKey === 'string' ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === 'string' && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
+    maxRetries: normalizeProviderMaxRetries(input.maxRetries, fallback.maxRetries),
     model: typeof input.model === 'string' && input.model.trim() ? input.model.trim() : fallback.model,
     timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs),
   };

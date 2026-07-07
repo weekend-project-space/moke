@@ -45,7 +45,9 @@ const chat = {
 } as const
 
 const composer = {
+  add: 'Add',
   addImage: 'Add image',
+  chooseImage: 'Choose image',
   clearQueued: 'Clear queued messages',
   imageAttachment: 'Image attachment',
   placeholder: 'Message Moke',
@@ -106,6 +108,7 @@ const process = {
 const settings = {
   active: 'Active',
   addProvider: 'Add provider',
+  advanced: 'Advanced',
   apiBaseUrl: 'API Base URL',
   apiKey: 'API Key',
   browser: 'Browser',
@@ -133,6 +136,9 @@ const settings = {
   refresh: 'Refresh',
   remove: 'Remove',
   removePermissionFailed: 'Failed to remove authorization',
+  retries: 'Retries',
+  retriesHint: 'Retry failed model requests. Use 0 for fast local failures.',
+  retriesPreview: (seconds: number, retries: number) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'}`,
   returnToChat: 'Back to chat',
   save: 'Save',
   saved: 'Saved',
@@ -140,6 +146,7 @@ const settings = {
   testModel: 'Test model',
   testing: 'Testing',
   timeout: 'Timeout',
+  timeoutHint: 'Seconds before a model request is stopped. Max 3600.',
 } as const
 
 const mcp = {

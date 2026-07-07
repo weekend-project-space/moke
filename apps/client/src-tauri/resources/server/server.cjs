@@ -100056,11 +100056,16 @@ init_tools2();
 init_singletons();
 
 // packages/agent-re-act/src/llm-client.ts
+function normalizeMaxRetries(input) {
+  const maxRetries = Number(input);
+  const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : 3;
+  return Math.max(0, Math.min(normalized, 6));
+}
 function resolveChatModelSettings(input = {}) {
   return {
     apiKey: input.apiKey || process.env.OPENAI_API_KEY || "test",
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "http://localhost:8080/v1",
-    maxRetries: input.maxRetries ?? Number(process.env.OPENAI_MAX_RETRIES || 3),
+    maxRetries: normalizeMaxRetries(input.maxRetries ?? process.env.OPENAI_MAX_RETRIES),
     model: input.model || process.env.OPENAI_MODEL || "qwen3.6-35BA3B",
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1e3)
   };
@@ -110059,6 +110064,9 @@ var import_node_path10 = require("node:path");
 var MODEL_PROVIDER_TIMEOUT_MIN_MS = 1e3;
 var MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1e3;
 var MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1e3;
+var MODEL_PROVIDER_MAX_RETRIES_MIN = 0;
+var MODEL_PROVIDER_MAX_RETRIES_MAX = 6;
+var MODEL_PROVIDER_MAX_RETRIES_DEFAULT = 3;
 var MODEL_PROVIDER_DEFAULT_NAME = "Local Qwen";
 var MODEL_PROVIDER_DEFAULT_API_KEY = "test";
 var MODEL_PROVIDER_DEFAULT_BASE_URL = "http://localhost:8080/v1";
@@ -110071,6 +110079,11 @@ function normalizeProviderTimeoutMs(input, fallback = MODEL_PROVIDER_TIMEOUT_DEF
   const normalized = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : fallback;
   return Math.max(MODEL_PROVIDER_TIMEOUT_MIN_MS, Math.min(normalized, MODEL_PROVIDER_TIMEOUT_MAX_MS));
 }
+function normalizeProviderMaxRetries(input, fallback = MODEL_PROVIDER_MAX_RETRIES_DEFAULT) {
+  const maxRetries = Number(input);
+  const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : fallback;
+  return Math.max(MODEL_PROVIDER_MAX_RETRIES_MIN, Math.min(normalized, MODEL_PROVIDER_MAX_RETRIES_MAX));
+}
 function defaultProvider() {
   return {
     id: createProviderId(),
@@ -110078,6 +110091,7 @@ function defaultProvider() {
     type: "openai-compatible",
     apiKey: process.env.OPENAI_API_KEY || MODEL_PROVIDER_DEFAULT_API_KEY,
     apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
+    maxRetries: normalizeProviderMaxRetries(process.env.OPENAI_MAX_RETRIES),
     model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS)
   };
@@ -110086,6 +110100,7 @@ function providerToModelSettings(provider) {
   return {
     apiKey: provider.apiKey,
     apiBaseUrl: provider.apiBaseUrl,
+    maxRetries: provider.maxRetries,
     model: provider.model,
     timeoutMs: provider.timeoutMs
   };
@@ -110098,6 +110113,7 @@ function normalizeProvider(input = {}, fallback = defaultProvider()) {
     type,
     apiKey: typeof input.apiKey === "string" ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === "string" && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
+    maxRetries: normalizeProviderMaxRetries(input.maxRetries, fallback.maxRetries),
     model: typeof input.model === "string" && input.model.trim() ? input.model.trim() : fallback.model,
     timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs)
   };
