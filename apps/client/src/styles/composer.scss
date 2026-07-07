@@ -99,29 +99,47 @@
 
 .queued-message-panel {
   display: grid;
-  width: min(var(--content-width), 380px);
+  width: var(--content-width);
   align-self: center;
-  gap: 6px;
-  margin: 0 auto 8px;
+  gap: 0;
+  margin: 0 auto 2px;
+  overflow: hidden;
+  border: 1px solid var(--border-control);
+  border-bottom: 0;
+  border-radius: var(--radius-composer) var(--radius-composer) var(--radius-sm) var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-chat-panel));
+  box-shadow: 0 -4px 16px rgb(15 23 42 / 4%);
+  position: relative;
+  z-index: 1;
+}
+
+.queued-message-panel + .composer {
+  padding-top: 0;
+}
+
+.queued-message-panel + .composer .composer-input-row {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
 }
 
 .queued-message-bar {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  justify-self: center;
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   margin: 0;
-  padding: 5px 6px 5px 9px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-pill);
+  padding: 7px 8px 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
   color: var(--ink-muted);
-  background: var(--surface-panel);
+  background: transparent;
   font-size: var(--font-size-body);
 }
 
 .queued-message-bar span {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--ink-soft);
   font-weight: 500;
   white-space: nowrap;
@@ -160,9 +178,9 @@
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .queued-message-item {
@@ -170,10 +188,11 @@
   min-width: 0;
   align-items: center;
   gap: 8px;
-  padding: 5px 5px 5px 10px;
+  padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--line-soft);
   color: var(--ink-muted);
   font-size: var(--font-size-body);
+  transition: background 0.14s ease;
 }
 
 .queued-message-item:last-child {
@@ -181,7 +200,7 @@
 }
 
 .queued-message-item:hover {
-  background: var(--surface-control-hover);
+  background: color-mix(in srgb, var(--surface-control-hover) 72%, transparent);
 }
 
 .queued-message-text {
@@ -205,11 +224,17 @@
   color: var(--ink-muted);
   background: transparent;
   cursor: pointer;
+  opacity: 0.72;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease;
 }
 
 .queued-message-item button:hover {
   color: var(--ink);
   background: var(--surface-control-hover);
+  opacity: 1;
 }
 
 .ask-inline {
