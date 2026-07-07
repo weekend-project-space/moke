@@ -14,11 +14,16 @@ import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
 import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
 import { useResizablePanels } from './composables/useResizablePanels'
 import { uiText } from './text/uiText'
-import type { Message, SessionSummary, TaskTemplate } from './types/conversation'
+import type { ImageAttachment, Message, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
+const attachments = ref<ImageAttachment[]>([])
 const MAX_QUEUED_MESSAGES = 3
-const queuedMessages = ref<string[]>([])
+type DraftMessage = {
+  content: string
+  attachments: ImageAttachment[]
+}
+const queuedMessages = ref<DraftMessage[]>([])
 const queuedSessionId = ref('')
 const queuedStopRequested = ref(false)
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
@@ -187,18 +192,19 @@ const showEmptyState = computed(
 const primaryDisabled = computed(() => {
   if (isRunning.value) {
     if (pendingAsk.value) return true
-    if (input.value.trim()) return queuedMessages.value.length >= MAX_QUEUED_MESSAGES
+    if (hasDraftContent.value) return queuedMessages.value.length >= MAX_QUEUED_MESSAGES
     return !runId.value
   }
-  return serverStatus.value !== 'online' || !input.value.trim()
+  return serverStatus.value !== 'online' || !hasDraftContent.value
 })
-const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !input.value.trim())
+const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !hasDraftContent.value)
+const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0)
 const queuedMessageCount = computed(() => queuedMessages.value.length)
 const queuedMessageLabel = computed(() => queuedStopRequested.value ? uiText.composer.sendAfterStopping : uiText.composer.queued(queuedMessageCount.value))
-const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${message}`).join('\n'))
+const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${draftPreview(message)}`).join('\n'))
 const queuedMessageItems = computed(() => queuedMessages.value.map((message) => ({
-  content: message,
-  preview: message.length > 48 ? `${message.slice(0, 48)}...` : message,
+  content: draftPreview(message),
+  preview: draftPreview(message),
 })))
 
 function isFinalAssistantMessage(message: Message | undefined) {
@@ -379,7 +385,7 @@ async function copyMessage(key: string, content: string) {
 
 function handlePrimaryAction() {
   if (isRunning.value) {
-    if (input.value.trim()) {
+    if (hasDraftContent.value) {
       queueCurrentInput()
       return
     }
@@ -393,32 +399,39 @@ function handlePrimaryAction() {
 
 async function submitMessage() {
   const content = input.value.trim()
-  if (!content || isRunning.value) return
+  if ((!content && !attachments.value.length) || isRunning.value) return
 
-  await sendContent(content, true)
+  await sendContent({ content, attachments: [...attachments.value] }, true)
 }
 
-async function sendContent(content: string, restoreOnFail: boolean) {
+async function sendContent(draft: DraftMessage, restoreOnFail: boolean) {
+  const previousInput = input.value
+  const previousAttachments = [...attachments.value]
   input.value = ''
+  attachments.value = []
   await nextTick()
   resizeComposer()
 
-  if (await sendMessage(content)) return
+  if (await sendMessage(draft)) return
 
-  if (restoreOnFail) input.value = content
+  if (restoreOnFail) {
+    input.value = previousInput || draft.content
+    attachments.value = previousAttachments.length ? previousAttachments : draft.attachments
+  }
   await nextTick()
   resizeComposer()
 }
 
 function queueCurrentInput() {
   const content = input.value.trim()
-  if (!content || !sessionId.value) return
+  if ((!content && !attachments.value.length) || !sessionId.value) return
   if (queuedMessages.value.length >= MAX_QUEUED_MESSAGES) return
 
-  queuedMessages.value = [...queuedMessages.value, content]
+  queuedMessages.value = [...queuedMessages.value, { content, attachments: [...attachments.value] }]
   queuedSessionId.value = sessionId.value
   queuedStopRequested.value = false
   input.value = ''
+  attachments.value = []
   void nextTick(() => {
     resizeComposer()
     composerBox.value?.focus()
@@ -457,6 +470,22 @@ async function sendQueuedMessageIfReady() {
     queuedStopRequested.value = false
   }
   await sendContent(content, true)
+}
+
+function draftPreview(message: DraftMessage) {
+  const imageLabel = message.attachments.length ? ` - ${message.attachments.length} image${message.attachments.length > 1 ? 's' : ''}` : ''
+  const text = message.content || 'Image'
+  const preview = text.length > 48 ? `${text.slice(0, 48)}...` : text
+  return `${preview}${imageLabel}`
+}
+
+function addAttachments(nextAttachments: ImageAttachment[]) {
+  const merged = [...attachments.value, ...nextAttachments]
+  attachments.value = merged.slice(0, 4)
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter((attachment) => attachment.id !== id)
 }
 
 watch(isRunning, (running) => {
@@ -611,7 +640,8 @@ onUnmounted(() => {
         </div>
       </div>
       <ComposerBox v-if="!showSettings" ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
-        :primary-is-stop="primaryIsStop" @update:input-value="input = $event" @input="handleInput"
+        :primary-is-stop="primaryIsStop" :attachments="attachments" @update:input-value="input = $event" @input="handleInput"
+        @add-attachments="addAttachments" @remove-attachment="removeAttachment"
         @enter="sendOnEnter" @submit="handlePrimaryAction" />
     </section>
 

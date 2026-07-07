@@ -81,6 +81,27 @@
   }
 }
 
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 7px;
+
+  img {
+    display: block;
+    max-width: min(260px, 100%);
+    max-height: 220px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    object-fit: contain;
+    background: var(--surface-muted);
+  }
+}
+
+.bubble.user .message-attachments {
+  justify-content: flex-end;
+}
+
 @keyframes thinking-bounce {
   0%,
   60%,

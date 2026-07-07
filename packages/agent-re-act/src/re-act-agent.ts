@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { AIMessageChunk, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
 import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
@@ -21,6 +21,7 @@ import {
   createFinalMessage,
   createHistoryMessages,
   createSystemMessage,
+  createUserMessage,
   getMessageText,
   isAI,
 } from './messages.js';
@@ -130,7 +131,15 @@ export class ReActAgent {
     } = {},
   ) {}
 
-  async run({ input, history = [], eventBus, toolRegistry, context, limits: rawLimits }: AgentRunInput): Promise<AgentRunResult> {
+  async run({
+    input,
+    attachments = [],
+    history = [],
+    eventBus,
+    toolRegistry,
+    context,
+    limits: rawLimits,
+  }: AgentRunInput): Promise<AgentRunResult> {
     const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
     if (!modelSettings.apiKey) {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
@@ -146,7 +155,7 @@ export class ReActAgent {
     const messages: BaseMessage[] = [
       createSystemMessage(runtimeTools, context),
       ...createHistoryMessages(history),
-      new HumanMessage(input),
+      createUserMessage(input, attachments),
     ];
     let toolCalls = 0;
     let finalContent = '';

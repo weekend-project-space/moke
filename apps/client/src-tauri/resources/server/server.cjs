@@ -84838,7 +84838,7 @@ var RunManager = class {
   abortControllers = /* @__PURE__ */ new Map();
   pendingAsks = /* @__PURE__ */ new Map();
   pendingApprovals = /* @__PURE__ */ new Map();
-  createRun(session, content, options = {}) {
+  createRun(session, input, options = {}) {
     const run = {
       id: id2("run"),
       session_id: session.id,
@@ -84851,10 +84851,10 @@ var RunManager = class {
     };
     this.config.runs.set(run.id, run);
     this.config.onChange?.();
-    void this.execute(run, session, content, options);
+    void this.execute(run, session, input, options);
     return run;
   }
-  async execute(run, session, content, options) {
+  async execute(run, session, input, options) {
     let assistantMessageSaved = false;
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
@@ -84882,7 +84882,8 @@ var RunManager = class {
     const contentManager = this.config.createSkillContentManager?.();
     try {
       const result = await this.config.agent.run({
-        input: content,
+        input: input.content,
+        attachments: input.attachments,
         history,
         eventBus,
         toolRegistry: this.config.toolRegistry,
@@ -84890,9 +84891,9 @@ var RunManager = class {
           workspace: this.config.workspace,
           abortSignal: abortController.signal,
           contentManager,
-          askUser: (input) => this.askUser(run, eventBus, input),
-          approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
-          approveTool: (input) => this.approveTool(run, eventBus, input)
+          askUser: (input2) => this.askUser(run, eventBus, input2),
+          approveWorkspacePath: (input2) => this.approveWorkspacePath(run, eventBus, input2),
+          approveTool: (input2) => this.approveTool(run, eventBus, input2)
         },
         limits
       });
@@ -84913,10 +84914,11 @@ var RunManager = class {
     } catch (error51) {
       if (run.abort) return;
       const message = error51 instanceof Error ? error51.message : "Unknown runtime error";
+      console.error(`Run ${run.id} failed`, error51);
       const assistantMessage = {
         id: id2("msg"),
         role: "assistant",
-        content: `\u8FD0\u884C\u5931\u8D25\uFF1A${message}`,
+        content: `Run failed: ${message}`,
         created_at: (/* @__PURE__ */ new Date()).toISOString()
       };
       run.status = "failed";
@@ -85319,6 +85321,21 @@ function createFinalMessage(content) {
     created_at: (/* @__PURE__ */ new Date()).toISOString()
   };
 }
+function createUserContent(content, attachments = []) {
+  if (attachments.length === 0) return content;
+  return [
+    ...content ? [{ type: "text", text: content }] : [],
+    ...attachments.map((attachment) => ({
+      type: "image_url",
+      image_url: {
+        url: attachment.data_url
+      }
+    }))
+  ];
+}
+function createUserMessage(content, attachments = []) {
+  return new HumanMessage(createUserContent(content, attachments));
+}
 function createHistoryMessages(history) {
   const messages = [];
   for (let index2 = 0; index2 < history.length; index2++) {
@@ -85326,7 +85343,7 @@ function createHistoryMessages(history) {
     const content = message.content.trim();
     if (!content && message.role !== "assistant") continue;
     if (message.role === "user") {
-      messages.push(new HumanMessage(content));
+      messages.push(createUserMessage(content, message.attachments || []));
       continue;
     }
     if (message.role === "assistant") {
@@ -100043,6 +100060,7 @@ function resolveChatModelSettings(input = {}) {
   return {
     apiKey: input.apiKey || process.env.OPENAI_API_KEY || "test",
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "http://localhost:8080/v1",
+    maxRetries: input.maxRetries ?? Number(process.env.OPENAI_MAX_RETRIES || 3),
     model: input.model || process.env.OPENAI_MODEL || "qwen3.6-35BA3B",
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1e3)
   };
@@ -100054,11 +100072,13 @@ function createChatModel(input = {}) {
   }
   return new ChatOpenAI({
     apiKey: settings.apiKey,
+    maxRetries: settings.maxRetries,
     model: settings.model,
     temperature: 0,
     timeout: settings.timeoutMs,
     configuration: {
-      baseURL: settings.apiBaseUrl
+      baseURL: settings.apiBaseUrl,
+      maxRetries: 0
     }
   });
 }
@@ -100151,7 +100171,15 @@ var ReActAgent = class {
     this.config = config2;
   }
   config;
-  async run({ input, history = [], eventBus, toolRegistry, context: context2, limits: rawLimits }) {
+  async run({
+    input,
+    attachments = [],
+    history = [],
+    eventBus,
+    toolRegistry,
+    context: context2,
+    limits: rawLimits
+  }) {
     const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
     if (!modelSettings.apiKey) {
       throw new Error("OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.");
@@ -100166,7 +100194,7 @@ var ReActAgent = class {
     const messages = [
       createSystemMessage(runtimeTools, context2),
       ...createHistoryMessages(history),
-      new HumanMessage(input)
+      createUserMessage(input, attachments)
     ];
     let toolCalls = 0;
     let finalContent = "";
@@ -105576,11 +105604,12 @@ function isTerminalRun(run) {
 }
 function summarizeSession(session) {
   const { messages, metadata, ...summary } = session;
+  const firstUserMessage = messages.find((message) => message.role === "user");
   return {
     ...summary,
     archived: metadata?.archived === true,
     pinned: metadata?.pinned === true,
-    preview: messages.find((message) => message.role === "user")?.content.slice(0, 42) || "",
+    preview: firstUserMessage?.content.slice(0, 42) || (firstUserMessage?.attachments?.length ? "Image" : ""),
     message_count: messages.length
   };
 }
@@ -105911,22 +105940,62 @@ function registerSessionRoutes(router) {
     const requestBody = await body();
     const message = requestBody.message && typeof requestBody.message === "object" ? requestBody.message : {};
     const content = typeof message.content === "string" ? message.content.trim() : "";
-    if (!content) throw new HttpError(400, "BAD_REQUEST", "message.content is required");
-    maybeSetTitleFromFirstUserMessage(session, content);
+    const attachments = normalizeImageAttachments(message.attachments);
+    if (!content && attachments.length === 0) {
+      throw new HttpError(400, "BAD_REQUEST", "message.content or message.attachments is required");
+    }
+    maybeSetTitleFromFirstUserMessage(session, content || "Image");
+    const createdAt = now3();
     session.messages.push({
       id: id3("msg"),
       role: "user",
       content,
-      created_at: now3()
+      created_at: createdAt,
+      ...attachments.length ? { attachments } : {}
     });
-    session.updated_at = now3();
+    session.updated_at = createdAt;
     const options = requestBody.options && typeof requestBody.options === "object" ? requestBody.options : {};
-    const run = context2.runManager.createRun(session, content, options);
+    const run = context2.runManager.createRun(session, { content, attachments }, options);
     return json3(200, {
       run_id: run.id,
       session_id: session.id,
       events_url: `/api/runs/${run.id}/events`
     });
+  });
+}
+var MAX_IMAGE_ATTACHMENTS = 4;
+var MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
+function normalizeImageAttachments(input) {
+  if (input === void 0) return [];
+  if (!Array.isArray(input)) throw new HttpError(400, "BAD_REQUEST", "message.attachments must be an array");
+  if (input.length > MAX_IMAGE_ATTACHMENTS) {
+    throw new HttpError(400, "BAD_REQUEST", `message.attachments supports at most ${MAX_IMAGE_ATTACHMENTS} images`);
+  }
+  let totalLength = 0;
+  return input.map((item, index2) => {
+    if (!item || typeof item !== "object") {
+      throw new HttpError(400, "BAD_REQUEST", `message.attachments[${index2}] must be an object`);
+    }
+    const candidate = item;
+    const mimeType = typeof candidate.mime_type === "string" ? candidate.mime_type.trim().toLowerCase() : "";
+    const dataUrl = typeof candidate.data_url === "string" ? candidate.data_url.trim() : "";
+    if (!mimeType.startsWith("image/")) {
+      throw new HttpError(400, "BAD_REQUEST", `message.attachments[${index2}].mime_type must be an image type`);
+    }
+    if (!dataUrl.startsWith(`data:${mimeType};base64,`)) {
+      throw new HttpError(400, "BAD_REQUEST", `message.attachments[${index2}].data_url must match its image mime_type`);
+    }
+    totalLength += dataUrl.length;
+    if (totalLength > MAX_IMAGE_DATA_URL_LENGTH) {
+      throw new HttpError(413, "PAYLOAD_TOO_LARGE", "Image attachments are too large");
+    }
+    return {
+      id: typeof candidate.id === "string" && candidate.id ? candidate.id : id3("img"),
+      kind: "image",
+      name: typeof candidate.name === "string" ? candidate.name.slice(0, 120) : void 0,
+      mime_type: mimeType,
+      data_url: dataUrl
+    };
   });
 }
 function getSession(context2, id4) {

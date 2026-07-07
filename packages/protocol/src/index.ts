@@ -28,11 +28,20 @@ export type ToolCall = {
   args: Record<string, unknown>;
 };
 
+export type ImageAttachment = {
+  id: string;
+  kind: 'image';
+  name?: string;
+  mime_type: string;
+  data_url: string;
+};
+
 export type UserMessage = {
   id: string;
   role: 'user';
   content: string;
   created_at: string;
+  attachments?: ImageAttachment[];
 };
 
 export type AssistantMessage = {

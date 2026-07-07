@@ -58,6 +58,55 @@
   padding: 12px 12px 4px;
 }
 
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.composer-attachment {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  button {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 20px;
+    height: 20px;
+    color: var(--surface-solid);
+    background: rgb(15 23 42 / 68%);
+    opacity: 0;
+
+    &:hover {
+      color: var(--surface-solid);
+      background: rgb(15 23 42 / 82%);
+    }
+  }
+
+  &:hover button,
+  button:focus-visible {
+    opacity: 1;
+  }
+}
+
+.composer-file-input {
+  display: none;
+}
+
 .composer textarea {
   width: 100%;
   min-width: 0;
@@ -95,6 +144,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 8px 8px 12px;
+}
+
+.composer-secondary-action {
+  color: var(--ink-soft);
+  background: transparent;
 }
 
 .queued-message-panel {
@@ -320,6 +374,20 @@
   color: var(--surface-solid);
   background: var(--primary);
   box-shadow: none;
+}
+
+.composer .composer-attachment button {
+  width: 20px;
+  height: 20px;
+  color: var(--surface-solid);
+  background: rgb(15 23 42 / 68%);
+  opacity: 0;
+  box-shadow: none;
+
+  &:hover {
+    color: var(--surface-solid);
+    background: rgb(15 23 42 / 82%);
+  }
 }
 
 @media (max-width: 980px) {

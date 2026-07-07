@@ -3,6 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 export type ChatModelSettings = {
   apiKey: string;
   apiBaseUrl: string;
+  maxRetries: number;
   model: string;
   timeoutMs: number;
 };
@@ -11,6 +12,7 @@ export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {})
   return {
     apiKey: input.apiKey || process.env.OPENAI_API_KEY || 'test',
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'http://localhost:8080/v1',
+    maxRetries: input.maxRetries ?? Number(process.env.OPENAI_MAX_RETRIES || 3),
     model: input.model || process.env.OPENAI_MODEL || 'qwen3.6-35BA3B',
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1000),
   };
@@ -24,11 +26,13 @@ export function createChatModel(input: Partial<ChatModelSettings> = {}) {
 
   return new ChatOpenAI({
     apiKey: settings.apiKey,
+    maxRetries: settings.maxRetries,
     model: settings.model,
     temperature: 0,
     timeout: settings.timeoutMs,
     configuration: {
       baseURL: settings.apiBaseUrl,
+      maxRetries: 0,
     },
   });
 }

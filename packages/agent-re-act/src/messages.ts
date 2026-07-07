@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
-import type { Message } from '../../protocol/src/index.js';
+import type { ImageAttachment, Message } from '../../protocol/src/index.js';
 import type { ToolContext } from '../../agent-runtime/src/index.js';
 import type { AgentToolSpec } from './control-tools.js';
 import { FINISH_TOOL_NAME } from './control-tools.js';
@@ -52,6 +52,24 @@ export function createFinalMessage(content: string): Message {
   };
 }
 
+function createUserContent(content: string, attachments: ImageAttachment[] = []) {
+  if (attachments.length === 0) return content;
+
+  return [
+    ...(content ? [{ type: 'text' as const, text: content }] : []),
+    ...attachments.map((attachment) => ({
+      type: 'image_url' as const,
+      image_url: {
+        url: attachment.data_url,
+      },
+    })),
+  ];
+}
+
+export function createUserMessage(content: string, attachments: ImageAttachment[] = []) {
+  return new HumanMessage(createUserContent(content, attachments));
+}
+
 export function createHistoryMessages(history: Message[]) {
   const messages: BaseMessage[] = [];
 
@@ -61,7 +79,7 @@ export function createHistoryMessages(history: Message[]) {
     if (!content && message.role !== 'assistant') continue;
 
     if (message.role === 'user') {
-      messages.push(new HumanMessage(content));
+      messages.push(createUserMessage(content, message.attachments || []));
       continue;
     }
 

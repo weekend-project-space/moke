@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, Message, Run, Session } from '../../protocol/src/index.js';
+import type { AgentEvent, ImageAttachment, Message, Run, Session } from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
 import type {
@@ -31,6 +31,11 @@ type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
   timeout_ms?: number;
+};
+
+type RunMessageInput = {
+  content: string;
+  attachments?: ImageAttachment[];
 };
 
 function readSessionMessage(event: AgentEvent) {
@@ -70,7 +75,7 @@ export class RunManager {
 
   constructor(private readonly config: RunManagerConfig) { }
 
-  createRun(session: Session, content: string, options: RunOptions = {}) {
+  createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
     const run: Run = {
       id: id('run'),
       session_id: session.id,
@@ -84,11 +89,11 @@ export class RunManager {
 
     this.config.runs.set(run.id, run);
     this.config.onChange?.();
-    void this.execute(run, session, content, options);
+    void this.execute(run, session, input, options);
     return run;
   }
 
-  private async execute(run: Run, session: Session, content: string, options: RunOptions) {
+  private async execute(run: Run, session: Session, input: RunMessageInput, options: RunOptions) {
     let assistantMessageSaved = false;
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
@@ -119,7 +124,8 @@ export class RunManager {
 
     try {
       const result = await this.config.agent.run({
-        input: content,
+        input: input.content,
+        attachments: input.attachments,
         history,
         eventBus,
         toolRegistry: this.config.toolRegistry,
@@ -153,10 +159,11 @@ export class RunManager {
       if (run.abort) return;
 
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
+      console.error(`Run ${run.id} failed`, error);
       const assistantMessage: Message = {
         id: id('msg'),
         role: 'assistant',
-        content: `运行失败：${message}`,
+        content: `Run failed: ${message}`,
         created_at: new Date().toISOString(),
       };
       run.status = 'failed';

@@ -45,10 +45,13 @@ const chat = {
 } as const
 
 const composer = {
+  addImage: 'Add image',
   clearQueued: 'Clear queued messages',
+  imageAttachment: 'Image attachment',
   placeholder: 'Message Moke',
   queued: (count: number) => `${count} queued`,
   queuedMessages: 'Queued messages',
+  removeImage: 'Remove image',
   removeQueued: (index: number) => `Remove queued message ${index}`,
   removeQueuedTitle: (index: number) => `Remove message ${index}`,
   send: 'Send message',

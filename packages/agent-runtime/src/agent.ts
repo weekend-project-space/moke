@@ -1,10 +1,11 @@
-import type { Message, RuntimeLimits } from '../../protocol/src/index.js';
+import type { ImageAttachment, Message, RuntimeLimits } from '../../protocol/src/index.js';
 import type { EventBus } from './event-bus.js';
 import type { ToolContext } from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 export type AgentRunInput = {
   input: string;
+  attachments?: ImageAttachment[];
   history?: Message[];
   eventBus: EventBus;
   toolRegistry: ToolRegistry;

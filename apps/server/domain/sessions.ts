@@ -38,11 +38,12 @@ export function isTerminalRun(run: Run) {
 
 export function summarizeSession(session: Session) {
   const { messages, metadata, ...summary } = session;
+  const firstUserMessage = messages.find((message) => message.role === 'user');
   return {
     ...summary,
     archived: metadata?.archived === true,
     pinned: metadata?.pinned === true,
-    preview: messages.find((message) => message.role === 'user')?.content.slice(0, 42) || '',
+    preview: firstUserMessage?.content.slice(0, 42) || (firstUserMessage?.attachments?.length ? 'Image' : ''),
     message_count: messages.length,
   };
 }

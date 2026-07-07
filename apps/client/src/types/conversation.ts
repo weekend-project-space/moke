@@ -11,6 +11,7 @@ export type Message = {
   role: 'user' | 'assistant' | 'tool'
   content: string
   created_at?: string
+  attachments?: ImageAttachment[]
   tool_calls?: Array<{
     id: string
     name: string
@@ -19,6 +20,14 @@ export type Message = {
   tool_call_id?: string
   name?: string
   status?: 'success' | 'error'
+}
+
+export type ImageAttachment = {
+  id: string
+  kind: 'image'
+  name?: string
+  mime_type: string
+  data_url: string
 }
 
 export type SessionSummary = {

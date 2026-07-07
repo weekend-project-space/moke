@@ -1,5 +1,5 @@
 import { computed, nextTick, reactive, ref } from 'vue'
-import type { AgentEvent, AskOption, Message, PendingApproval, PendingAsk, SessionSummary } from '../types/conversation'
+import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, SessionSummary } from '../types/conversation'
 import { uiText } from '../text/uiText'
 
 type UseAgentSessionOptions = {
@@ -29,6 +29,11 @@ type ActiveRunSummary = {
   events_url: string
   pending_ask?: PendingAsk
   pending_approval?: PendingApproval
+}
+
+export type SendMessageInput = {
+  content: string
+  attachments?: ImageAttachment[]
 }
 
 function createRunState(runId = ''): SessionRunState {
@@ -278,9 +283,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return true
   }
 
-  async function sendMessage(content: string) {
-    const trimmedContent = content.trim()
-    if (!trimmedContent || isRunning.value) return false
+  async function sendMessage(input: string | SendMessageInput) {
+    const draft = typeof input === 'string' ? { content: input } : input
+    const trimmedContent = draft.content.trim()
+    const attachments = draft.attachments || []
+    if ((!trimmedContent && !attachments.length) || isRunning.value) return false
 
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
     if (!sessionId.value) await createSession()
@@ -295,14 +302,23 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     state.pendingAsk = null
     state.runError = ''
     state.isRunning = true
-    messages.value.push({ role: 'user', content: trimmedContent, created_at: new Date().toISOString() })
+    messages.value.push({
+      role: 'user',
+      content: trimmedContent,
+      created_at: new Date().toISOString(),
+      ...(attachments.length ? { attachments } : {}),
+    })
 
     try {
       const response = await fetch(`${options.apiBase}/api/sessions/${targetSessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: { role: 'user', content: trimmedContent },
+          message: {
+            role: 'user',
+            content: trimmedContent,
+            ...(attachments.length ? { attachments } : {}),
+          },
           options: { stream: true },
         }),
       })
