@@ -1,6 +1,8 @@
 # Moke
 
-Moke is a lightweight agent for browsing the web.
+Moke is a lightweight agent for browsing the web pc app.
+
+![moke-ask-rss](./docs/img/agent-ask_rss.png)
 
 It is built around a simple idea:
 
