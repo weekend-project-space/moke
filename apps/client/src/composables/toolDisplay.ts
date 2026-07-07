@@ -1,4 +1,5 @@
 import type { ToolCategory, ToolRendererKind, ToolStepSummary } from '../types/conversation'
+import { uiText } from '../text/uiText'
 
 export type ToolDescription = {
   actionLabel: string
@@ -8,8 +9,8 @@ export type ToolDescription = {
   toolCategory: ToolCategory
 }
 
-const DONE = '\u5df2\u5b8c\u6210'
-const NOT_FOUND = '\u6ca1\u6709\u627e\u5230\u76f8\u5173\u5185\u5bb9'
+const DONE = uiText.process.done
+const NOT_FOUND = uiText.process.notFound
 
 const CHANGE_TOOLS = new Set([
   'apply_patch',
@@ -37,7 +38,7 @@ export function summarizeOutput(output: Record<string, any> | undefined) {
 
   if (Array.isArray(output.matches)) {
     const count = output.count ?? output.matches.length
-    return count > 0 ? `\u627e\u5230 ${count} \u6761\u76f8\u5173\u5185\u5bb9` : NOT_FOUND
+    return count > 0 ? `Found ${count} matching item${count === 1 ? '' : 's'}` : NOT_FOUND
   }
 
   return DONE
@@ -45,7 +46,7 @@ export function summarizeOutput(output: Record<string, any> | undefined) {
 
 export function formatToolName(rawName: unknown, toolLabels: Record<string, string>) {
   const name = String(rawName || '').trim()
-  return toolLabels[name] || name || '\u5de5\u5177'
+  return toolLabels[name] || name || uiText.tool.unknownTool
 }
 
 export function formatJson(value: unknown) {
@@ -95,14 +96,14 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
 
   switch (name) {
     case 'apply_patch':
-      objectLabel = path ? shortText(path, 88) : '\u5e94\u7528\u4ee3\u7801\u8865\u4e01'
+      objectLabel = path ? shortText(path, 88) : uiText.tool.applyPatchFallback
       break
     case 'write_file':
     case 'edit_file':
     case 'read_file':
     case 'cat':
     case 'sed':
-      objectLabel = path ? shortText(path, 88) : '\u6587\u4ef6\u5185\u5bb9'
+      objectLabel = path ? shortText(path, 88) : uiText.tool.fileContent
       break
     case 'execute':
     case 'shell_command':
@@ -116,13 +117,13 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
     case 'search':
     case 'rg':
     case 'find':
-      objectLabel = shortText(query || path || '\u5728\u9879\u76ee\u4e2d\u67e5\u627e', 88)
+      objectLabel = shortText(query || path || uiText.tool.searchInProject, 88)
       break
     case 'ls':
-      objectLabel = path ? shortText(path, 88) : '\u67e5\u770b\u6587\u4ef6\u5217\u8868'
+      objectLabel = path ? shortText(path, 88) : uiText.tool.listFiles
       break
     case 'view_image':
-      objectLabel = path ? shortText(path, 88) : '\u6253\u5f00\u672c\u5730\u56fe\u7247'
+      objectLabel = path ? shortText(path, 88) : uiText.tool.localImage
       break
     case 'navigate_page': {
       const type = firstString(args, ['type'])
@@ -131,73 +132,73 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
         break
       }
       if (type === 'back') {
-        objectLabel = '\u4e0a\u4e00\u9875'
+        objectLabel = uiText.tool.previousPage
         break
       }
       if (type === 'forward') {
-        objectLabel = '\u4e0b\u4e00\u9875'
+        objectLabel = uiText.tool.nextPage
         break
       }
       if (type === 'reload') {
-        objectLabel = '\u5f53\u524d\u9875\u9762'
+        objectLabel = uiText.tool.currentPage
         break
       }
-      objectLabel = url ? shortText(url, 96) : '\u6d4f\u89c8\u5668\u9875\u9762'
+      objectLabel = url ? shortText(url, 96) : uiText.tool.browserPage
       break
     }
     case 'create_page':
-      objectLabel = url ? shortText(url, 96) : '\u65b0\u6807\u7b7e\u9875'
+      objectLabel = url ? shortText(url, 96) : uiText.tool.newTab
       break
     case 'select_page':
     case 'close_page':
     case 'resize_page':
-      objectLabel = pageId ? `\u9875\u9762 ${pageId}` : '\u6d4f\u89c8\u5668\u6807\u7b7e\u9875'
+      objectLabel = pageId ? uiText.tool.page(pageId) : uiText.tool.browserPage
       break
     case 'take_snapshot':
-      objectLabel = pageId ? `\u9875\u9762 ${pageId}` : '\u5f53\u524d\u7f51\u9875'
+      objectLabel = pageId ? uiText.tool.page(pageId) : uiText.tool.currentWebPage
       break
     case 'take_screenshot':
-      objectLabel = args.fullPage ? '\u5b8c\u6574\u9875\u9762' : '\u5f53\u524d\u89c6\u53e3'
+      objectLabel = args.fullPage ? uiText.tool.fullPage : uiText.tool.currentViewport
       break
     case 'click':
     case 'hover':
-      objectLabel = uid ? `\u5143\u7d20 ${uid}` : selector || '\u76ee\u6807\u5143\u7d20'
+      objectLabel = uid ? `Element ${uid}` : selector || uiText.tool.targetElement
       break
     case 'fill':
       objectLabel = uid
-        ? `\u5143\u7d20 ${uid}${value ? `: ${shortText(value, 48)}` : ''}`
-        : shortText(value || '\u8f93\u5165\u5185\u5bb9', 72)
+        ? `Element ${uid}${value ? `: ${shortText(value, 48)}` : ''}`
+        : shortText(value || uiText.tool.typeContent, 72)
       break
     case 'fill_form':
-      objectLabel = '\u9875\u9762\u8868\u5355'
+      objectLabel = uiText.tool.pageForm
       break
     case 'upload_file':
-      objectLabel = path || (uid ? `\u5143\u7d20 ${uid}` : '\u9009\u62e9\u6587\u4ef6')
+      objectLabel = path || (uid ? `Element ${uid}` : uiText.tool.selectFile)
       break
     case 'wait_for':
-      objectLabel = text ? shortText(text, 72) : '\u76ee\u6807\u72b6\u6001\u51fa\u73b0'
+      objectLabel = text ? shortText(text, 72) : uiText.tool.targetState
       break
     case 'press_key':
-      objectLabel = key || '\u952e\u76d8\u64cd\u4f5c'
+      objectLabel = key || uiText.tool.keyboardAction
       break
     case 'type_text':
-      objectLabel = text ? shortText(text, 72) : '\u6587\u672c\u5185\u5bb9'
+      objectLabel = text ? shortText(text, 72) : uiText.tool.textContent
       break
     case 'evaluate_script':
-      objectLabel = selector ? shortText(selector, 72) : '\u5f53\u524d\u9875\u9762'
+      objectLabel = selector ? shortText(selector, 72) : uiText.tool.currentPage
       break
     case 'handle_dialog':
-      objectLabel = firstString(args, ['action', 'type']) || '\u5f53\u524d\u5f39\u7a97'
+      objectLabel = firstString(args, ['action', 'type']) || uiText.tool.currentDialog
       break
     case 'show_browser':
     case 'hide_browser':
-      objectLabel = '\u53f3\u4fa7\u9762\u677f'
+      objectLabel = uiText.tool.browserPanel
       break
     case 'active_skill':
-      objectLabel = firstString(args, ['name', 'skill']) || '\u80fd\u529b\u914d\u7f6e'
+      objectLabel = firstString(args, ['name', 'skill']) || uiText.tool.skillConfig
       break
     case 'list_skills':
-      objectLabel = '\u53ef\u7528\u80fd\u529b\u5217\u8868'
+      objectLabel = uiText.tool.availableSkills
       break
     default:
       objectLabel = name
@@ -249,27 +250,27 @@ function isChangeTool(name: string) {
 }
 
 function viewActionLabel(name: string) {
-  if (name === 'ls') return '\u67e5\u770b\u76ee\u5f55'
-  if (name === 'view_image') return '\u67e5\u770b\u56fe\u7247'
+  if (name === 'ls') return uiText.tool.viewDirectory
+  if (name === 'view_image') return uiText.tool.viewImage
   if (name === 'list_pages' || name === 'take_snapshot' || name === 'take_screenshot' || name === 'hover') {
-    return '\u67e5\u770b\u9875\u9762'
+    return uiText.tool.viewPage
   }
-  if (name === 'list_skills') return '\u67e5\u770b\u5de5\u5177'
-  return '\u67e5\u770b\u6587\u4ef6'
+  if (name === 'list_skills') return uiText.tool.viewTools
+  return uiText.tool.viewFile
 }
 
 function changeActionLabel(name: string) {
   if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return name
-  if (['show_browser', 'hide_browser'].includes(name)) return '\u53d8\u66f4\u754c\u9762'
-  return '\u53d8\u66f4\u9875\u9762'
+  if (['show_browser', 'hide_browser'].includes(name)) return uiText.tool.changeLayout
+  return uiText.tool.changePage
 }
 
 function runActionLabel(name: string) {
-  if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return '\u8fd0\u884c\u547d\u4ee4'
-  if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return '\u8fd0\u884c\u641c\u7d22'
-  if (name === 'evaluate_script') return '\u8fd0\u884c\u811a\u672c'
-  if (name === 'wait_for') return '\u8fd0\u884c\u7b49\u5f85'
-  return '\u8fd0\u884c\u5de5\u5177'
+  if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return uiText.tool.runCommand
+  if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return uiText.tool.runSearch
+  if (name === 'evaluate_script') return uiText.tool.runScript
+  if (name === 'wait_for') return uiText.tool.wait
+  return uiText.tool.runTool
 }
 
 function toolRendererKind(name: string): ToolRendererKind {

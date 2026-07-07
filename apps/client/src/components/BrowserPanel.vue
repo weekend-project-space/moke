@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
+import { uiText } from '../text/uiText'
 
 const props = defineProps<{
   active: boolean
@@ -351,7 +352,7 @@ defineExpose({
 
 <template>
   <section class="browser-panel">
-    <nav class="browser-tabs" aria-label="浏览器页面">
+    <nav class="browser-tabs" :aria-label="uiText.browser.pages">
       <div
         v-for="tab in tabs"
         :key="tabKey(tab)"
@@ -360,26 +361,26 @@ defineExpose({
       >
         <button type="button" class="browser-tab-select" @click="selectTab(tab)">
           <Globe2 :size="13" stroke-width="2.2" />
-          <span>{{ tab.title || (tab.url === 'about:blank' ? '新页面' : tab.url) || '新页面' }}</span>
+          <span>{{ tab.title || (tab.url === 'about:blank' ? uiText.browser.newPage : tab.url) || uiText.browser.newPage }}</span>
         </button>
         <i v-if="tab.isLoading" aria-hidden="true"></i>
-        <button type="button" class="browser-tab-close" aria-label="关闭页面" title="关闭页面" @click="closeTab(tab)">
+        <button type="button" class="browser-tab-close" :aria-label="uiText.browser.closePage" :title="uiText.browser.closePage" @click="closeTab(tab)">
           <X :size="12" stroke-width="2.3" />
         </button>
       </div>
-      <button type="button" class="browser-tab-add" :disabled="!canCreateTab" aria-label="新建页面" title="新建页面" @click="createTab">
+      <button type="button" class="browser-tab-add" :disabled="!canCreateTab" :aria-label="uiText.browser.newPage" :title="uiText.browser.newPage" @click="createTab">
         <Plus :size="14" stroke-width="2.2" />
       </button>
     </nav>
 
     <form class="browser-toolbar" @submit.prevent="submitAddress">
-      <button type="button" :disabled="!canGoBack" aria-label="后退" title="后退" @click="navigateHistory('back')">
+      <button type="button" :disabled="!canGoBack" :aria-label="uiText.browser.back" :title="uiText.browser.back" @click="navigateHistory('back')">
         <ArrowLeft :size="15" stroke-width="2.2" />
       </button>
-      <button type="button" :disabled="!canGoForward" aria-label="前进" title="前进" @click="navigateHistory('forward')">
+      <button type="button" :disabled="!canGoForward" :aria-label="uiText.browser.forward" :title="uiText.browser.forward" @click="navigateHistory('forward')">
         <ArrowRight :size="15" stroke-width="2.2" />
       </button>
-      <button type="button" :disabled="!canReload" aria-label="刷新" title="刷新" @click="reloadPage(false)">
+      <button type="button" :disabled="!canReload" :aria-label="uiText.browser.reload" :title="uiText.browser.reload" @click="reloadPage(false)">
         <RefreshCw :size="15" stroke-width="2.2" />
       </button>
       <label>
@@ -388,7 +389,7 @@ defineExpose({
           v-model="address"
           type="text"
           spellcheck="false"
-          placeholder="输入网址"
+          :placeholder="uiText.browser.addressPlaceholder"
           @focus="beginAddressEdit"
           @blur="endAddressEdit"
         />
@@ -398,21 +399,21 @@ defineExpose({
     <div ref="windowElement" class="browser-window-state">
       <div v-if="!nativeAvailable" class="browser-placeholder">
         <Globe2 :size="24" stroke-width="2" />
-        <strong>需要在 Tauri 桌面壳中使用</strong>
-        <span>网页会嵌入到右侧浏览区域中。</span>
+        <strong>{{ uiText.browser.requiresDesktopTitle }}</strong>
+        <span>{{ uiText.browser.requiresDesktopDescription }}</span>
       </div>
       <div v-else-if="errorMessage" class="browser-placeholder error">
         <strong>{{ errorMessage }}</strong>
       </div>
       <div v-else-if="!activePage" class="browser-placeholder">
         <Globe2 :size="24" stroke-width="2" />
-        <strong>输入网址后访问</strong>
-        <span>页面会嵌入到下方区域，工具栏保留控制和状态。</span>
+        <strong>{{ uiText.browser.openPromptTitle }}</strong>
+        <span>{{ uiText.browser.openPromptDescription }}</span>
       </div>
       <div v-else ref="viewportElement" class="browser-viewport">
         <div v-if="activePage.isLoading" class="browser-loading">
           <Globe2 :size="18" stroke-width="2" />
-          <span>加载中</span>
+          <span>{{ uiText.browser.loading }}</span>
         </div>
       </div>
     </div>

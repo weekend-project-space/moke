@@ -1,5 +1,6 @@
 import { computed, nextTick, reactive, ref } from 'vue'
 import type { AgentEvent, AskOption, Message, PendingApproval, PendingAsk, SessionSummary } from '../types/conversation'
+import { uiText } from '../text/uiText'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -124,7 +125,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const response = await fetch(`${options.apiBase}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '新对话' }),
+      body: JSON.stringify({ title: uiText.app.newChat }),
     })
     const data = await response.json()
     sessionId.value = data.session.id
@@ -316,7 +317,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       return true
     } catch {
       state.isRunning = false
-      state.runError = '发送失败，请确认 Moke 已连接后重试'
+      state.runError = uiText.app.sendFailed
       if (sessionId.value === targetSessionId) messages.value.pop()
       void checkServer()
       return false
@@ -418,7 +419,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         return
       }
 
-      nextState.runError = '与 Moke 的连接中断，本次运行已停止'
+      nextState.runError = uiText.app.connectionInterrupted
       finishRun(targetSessionId)
       void checkServer()
     }

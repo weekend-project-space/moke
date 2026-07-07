@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { PanelLeft, PanelRight, SquarePen } from 'lucide-vue-next'
 import { computed } from 'vue'
+import { uiText } from '../text/uiText'
 
 const props = defineProps<{
   title: string
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 }>()
 
 const sidebarToggleLabel = computed(() =>
-  props.desktopLayout && !props.sidebarCollapsed ? '收起对话列表' : '展开对话列表',
+  props.desktopLayout && !props.sidebarCollapsed ? uiText.header.collapseChatList : uiText.header.expandChatList,
 )
 </script>
 
@@ -33,8 +34,8 @@ const sidebarToggleLabel = computed(() =>
         class="new-session"
         type="button"
         :disabled="serverStatus !== 'online'"
-        aria-label="新建对话"
-        title="新建对话"
+        :aria-label="uiText.header.newChat"
+        :title="uiText.header.newChat"
         @click="emit('newSession')"
       >
         <SquarePen :size="16" stroke-width="2.1" />
@@ -48,8 +49,8 @@ const sidebarToggleLabel = computed(() =>
       <button
         class="trace-summary"
         type="button"
-        :aria-label="traceCollapsed ? '显示浏览器' : '隐藏浏览器'"
-        :title="traceCollapsed ? '显示浏览器' : '隐藏浏览器'"
+        :aria-label="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
+        :title="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
         @click="emit('toggleWorkspace')"
       >
         <PanelRight :size="17" stroke-width="2.1" />

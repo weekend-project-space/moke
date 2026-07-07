@@ -8,6 +8,7 @@ import type {
   ProcessNote,
 } from '../types/conversation'
 import { createProcessGroupView, formatProcessGroupLabel } from './processDisplay'
+import { uiText } from '../text/uiText'
 import {
   describeToolCall,
   formatJson,
@@ -59,7 +60,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         const toolName = formatToolName(call?.payload.tool, options.toolLabels)
         notes.push({
           id: `process-${event.id}`,
-          label: `工具执行失败：${toolName} · ${shortText(summarizeOutput(event.payload.output), 72)}`,
+          label: uiText.process.toolFailed(toolName, shortText(summarizeOutput(event.payload.output), 72)),
           tone: 'error',
           time: parseEventTime(event),
         })
@@ -68,7 +69,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (event.type === 'approval.required') {
         notes.push({
           id: `process-${event.id}`,
-          label: `等待确认：${shortText(String(event.payload.reason || '需要确认后继续执行'), 72)}`,
+          label: uiText.process.waitingApproval(shortText(String(event.payload.reason || 'Approval is required to continue'), 72)),
           tone: 'ask',
           time: parseEventTime(event),
         })
@@ -77,7 +78,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (event.type === 'agent.error') {
         notes.push({
           id: `process-${event.id}`,
-          label: `运行失败：${shortText(String(event.payload.message || '未知错误'), 72)}`,
+          label: `Run failed: ${shortText(String(event.payload.message || uiText.process.unknownError), 72)}`,
           tone: 'error',
           time: parseEventTime(event),
         })
@@ -325,7 +326,7 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
     title: message.name || 'tool',
     detail: shortText(detail, 160),
     tone: message.status === 'error' ? 'error' : 'neutral',
-    actionLabel: message.status === 'error' ? '执行失败' : '校验结果',
+    actionLabel: message.status === 'error' ? uiText.process.failed : uiText.process.validationResult,
     time: parseMessageTime(message),
     objectLabel: shortText(detail, 120),
     renderer: 'generic',
@@ -344,11 +345,11 @@ function summarizeToolFailure(parsed: unknown, fallbackName?: string) {
       const path = typeof error.path === 'string' ? error.path : ''
       const message = typeof error.message === 'string' ? error.message : ''
       const target = path || extractPathFromErrorMessage(message)
-      return target ? `${tool || '工具'} · ${target}` : `${tool || '工具'}执行失败`
+      return target ? `${tool || uiText.process.tool} · ${target}` : `${tool || uiText.process.tool} failed`
     }
   }
 
-  return fallbackName ? `${fallbackName}执行失败` : '工具执行失败'
+  return fallbackName ? `${fallbackName} failed` : uiText.process.toolFailedFallback
 }
 
 function extractPathFromErrorMessage(message: string) {
@@ -363,10 +364,10 @@ function createEventProcessItem(note: ProcessNote): ProcessItem {
   return {
     id: `process-event-${note.id}`,
     kind: 'event',
-    title: note.tone === 'error' ? '运行提示' : '执行过程',
+    title: note.tone === 'error' ? uiText.process.runIssue : uiText.process.runStatus,
     detail: note.label,
     tone: note.tone,
-    actionLabel: note.tone === 'error' ? '遇到问题' : '执行状态',
+    actionLabel: note.tone === 'error' ? uiText.process.issue : uiText.process.eventStatus,
     time: note.time,
     objectLabel: note.label,
     renderer: 'generic',
@@ -389,7 +390,7 @@ function latestProcessActivity(
     const toolName = formatToolName(latestCall.payload.tool, toolLabels)
     return {
       id: `process-active-${latestCall.id}`,
-      label: `正在${toolName}`,
+      label: uiText.process.active(toolName),
       tone: 'neutral',
       time: time || parseEventTime(latestCall),
     }
@@ -398,7 +399,7 @@ function latestProcessActivity(
   if (completedTools > 0) {
     return {
       id: 'process-completed-tools',
-      label: `已完成 ${completedTools} 个步骤`,
+      label: uiText.process.completedSteps(completedTools),
       tone: 'neutral',
       time,
     }

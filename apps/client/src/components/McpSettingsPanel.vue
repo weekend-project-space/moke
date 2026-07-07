@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RotateCw, Save } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
+import { uiText } from '../text/uiText'
 
 type McpServerSummary = {
   id: string
@@ -29,8 +30,8 @@ const restartRequired = ref(false)
 const statusText = computed(() => {
   if (error.value) return error.value
   if (message.value) return message.value
-  if (!exists.value) return 'No MCP config file yet'
-  return valid.value ? `${servers.value.length} server${servers.value.length === 1 ? '' : 's'}` : 'Invalid MCP config'
+  if (!exists.value) return uiText.mcp.noConfig
+  return valid.value ? uiText.mcp.serverCount(servers.value.length) : uiText.mcp.invalidConfig
 })
 
 function applyResult(data: any) {
@@ -53,7 +54,7 @@ async function loadMcpSettings() {
     if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
     applyResult(data)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load MCP config'
+    error.value = err instanceof Error ? err.message : uiText.mcp.loadFailed
   } finally {
     loading.value = false
   }
@@ -72,9 +73,9 @@ async function validateMcpSettings() {
     const data = await response.json()
     if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
     applyResult(data)
-    message.value = data.valid ? 'MCP config is valid' : ''
+    message.value = data.valid ? uiText.mcp.validConfig : ''
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to validate MCP config'
+    error.value = err instanceof Error ? err.message : uiText.mcp.validateFailed
   } finally {
     validating.value = false
   }
@@ -94,9 +95,9 @@ async function saveMcpSettings() {
     if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
     applyResult(data)
     if (!data.valid) return
-    message.value = 'Saved. Restart server to apply MCP changes.'
+    message.value = uiText.mcp.savedRestart
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to save MCP config'
+    error.value = err instanceof Error ? err.message : uiText.mcp.saveFailed
   } finally {
     saving.value = false
   }
@@ -117,7 +118,7 @@ onMounted(() => {
     <div class="mcp-settings">
       <div class="mcp-config-meta">
         <span>{{ configPath }}</span>
-        <button type="button" class="settings-icon-button" title="Reload" aria-label="Reload" :disabled="loading" @click="loadMcpSettings">
+        <button type="button" class="settings-icon-button" :title="uiText.mcp.reload" :aria-label="uiText.mcp.reload" :disabled="loading" @click="loadMcpSettings">
           <RotateCw :size="14" />
         </button>
       </div>
@@ -130,11 +131,11 @@ onMounted(() => {
       ></textarea>
 
       <div v-if="error" class="settings-note error">{{ error }}</div>
-      <div v-else-if="restartRequired" class="settings-note">Saved config will take effect after server restart.</div>
-      <div v-else-if="servers.length === 0" class="settings-note">No MCP servers configured.</div>
+      <div v-else-if="restartRequired" class="settings-note">{{ uiText.mcp.restartRequired }}</div>
+      <div v-else-if="servers.length === 0" class="settings-note">{{ uiText.mcp.noServers }}</div>
 
       <details class="mcp-config-tip">
-        <summary>Simple example</summary>
+        <summary>{{ uiText.mcp.simpleExample }}</summary>
         <pre>{
   "mcpServers": {
     "moke_local": {
@@ -148,7 +149,7 @@ onMounted(() => {
       <div v-if="servers.length > 0" class="mcp-server-list">
         <div v-for="server in servers" :key="server.id" class="mcp-server-row">
           <strong>{{ server.id }}</strong>
-          <span>{{ server.enabled ? 'enabled' : 'disabled' }}</span>
+          <span>{{ server.enabled ? uiText.mcp.enabled : uiText.mcp.disabled }}</span>
           <code>{{ server.command }} {{ server.args.join(' ') }}</code>
         </div>
       </div>
@@ -156,11 +157,11 @@ onMounted(() => {
       <div class="settings-actions">
         <button type="button" class="settings-secondary" :disabled="validating || loading" @click="validateMcpSettings">
           <RotateCw :size="14" />
-          {{ validating ? 'Validating' : 'Validate' }}
+          {{ validating ? uiText.mcp.validating : uiText.mcp.validate }}
         </button>
         <button type="button" class="settings-primary" :disabled="saving || loading" @click="saveMcpSettings">
           <Save :size="14" />
-          {{ saving ? 'Saving' : 'Save' }}
+          {{ saving ? uiText.mcp.saving : uiText.mcp.save }}
         </button>
       </div>
     </div>

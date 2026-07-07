@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PendingApproval } from '../types/conversation'
+import { uiText } from '../text/uiText'
 
 defineProps<{
   approval: PendingApproval
@@ -10,19 +11,20 @@ const emit = defineEmits<{
 }>()
 
 const text = {
-  allowCommandOnce: '\u5141\u8bb8\u672c\u6b21',
-  allowExternalPath: '\u5141\u8bb8\u8bbf\u95ee\u5916\u90e8\u76ee\u5f55\uff1f',
-  allowSession: '\u672c\u4f1a\u8bdd\u5141\u8bb8',
-  allowTool: '\u5141\u8bb8\u6267\u884c\u590d\u6742\u547d\u4ee4\uff1f',
-  commandWillRun: '\u5c06\u6267\u884c\uff1a',
-  editContent: '\u7f16\u8f91\u5185\u5bb9',
-  externalPathReason: '\u539f\u56e0\uff1a\u8bbf\u95ee\u8303\u56f4\u8d85\u51fa\u5f53\u524d\u5de5\u4f5c\u533a',
-  permanent: '\u6c38\u4e45\u5141\u8bb8',
-  readFile: '\u8bfb\u53d6\u6587\u4ef6',
-  reject: '\u62d2\u7edd',
-  runCommand: '\u8fd0\u884c\u547d\u4ee4',
-  unknownTool: '\u5f85\u786e\u8ba4\u64cd\u4f5c',
-  writeFile: '\u5199\u5165\u6587\u4ef6',
+  allowCommandOnce: uiText.approval.allowOnce,
+  allowExternalPath: uiText.approval.allowExternalPath,
+  allowSession: uiText.approval.allowSession,
+  allowTool: uiText.approval.allowTool,
+  commandWillRun: uiText.approval.commandWillRun,
+  editContent: uiText.approval.editContent,
+  externalPathReason: uiText.approval.externalPathReason,
+  permanent: uiText.approval.permanent,
+  readFile: uiText.approval.readFile,
+  reject: uiText.approval.reject,
+  requestAccess: uiText.approval.requestAccess,
+  runCommand: uiText.approval.runCommand,
+  unknownTool: uiText.approval.unknownTool,
+  writeFile: uiText.approval.writeFile,
 }
 
 function toolLabel(tool: string) {
@@ -47,7 +49,7 @@ function title(approval: PendingApproval) {
 
 function detail(approval: PendingApproval) {
   const tool = toolLabel(approval.action?.tool || '')
-  if (isWorkspacePathApproval(approval)) return `${tool} \u8bf7\u6c42\u8bbf\u95ee\uff1a`
+  if (isWorkspacePathApproval(approval)) return `${tool} ${text.requestAccess}`
   return `${tool} ${text.commandWillRun}`
 }
 
@@ -60,7 +62,7 @@ function targetText(approval: PendingApproval) {
 
 function reasonText(approval: PendingApproval) {
   if (isWorkspacePathApproval(approval)) return text.externalPathReason
-  return approval.reason ? `\u539f\u56e0\uff1a${approval.reason}` : ''
+  return approval.reason ? `Reason: ${approval.reason}` : ''
 }
 </script>
 

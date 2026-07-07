@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
 import type { Message } from '../types/conversation'
+import { uiText } from '../text/uiText'
 
 defineProps<{
   copiedKey: string
@@ -28,8 +29,8 @@ const emit = defineEmits<{
         v-if="message.role === 'assistant'"
         class="message-action"
         type="button"
-        :aria-label="copiedKey === id ? '已复制' : '复制内容'"
-        :title="copiedKey === id ? '已复制' : '复制内容'"
+        :aria-label="copiedKey === id ? uiText.message.copied : uiText.message.copyContent"
+        :title="copiedKey === id ? uiText.message.copied : uiText.message.copyContent"
         @click="emit('copy', { key: id, content: message.content })"
       >
         <Check v-if="copiedKey === id" :size="14" stroke-width="2.2" />
@@ -39,8 +40,8 @@ const emit = defineEmits<{
         v-if="message.id"
         class="message-action"
         type="button"
-        aria-label="Fork 对话"
-        title="Fork 对话"
+        :aria-label="uiText.message.forkChat"
+        :title="uiText.message.forkChat"
         @click="emit('fork', message.id)"
       >
         <GitBranchPlus :size="14" stroke-width="2.2" />
@@ -49,8 +50,8 @@ const emit = defineEmits<{
         v-if="showContinue"
         class="message-action"
         type="button"
-        aria-label="继续整理"
-        title="继续整理"
+        :aria-label="uiText.message.continue"
+        :title="uiText.message.continue"
         @click="emit('continue')"
       >
         <ArrowRight :size="14" stroke-width="2.2" />

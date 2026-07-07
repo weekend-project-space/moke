@@ -13,6 +13,7 @@ import { useAgentSession } from './composables/useAgentSession'
 import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
 import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
 import { useResizablePanels } from './composables/useResizablePanels'
+import { uiText } from './text/uiText'
 import type { Message, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
@@ -113,59 +114,59 @@ const {
 })
 const taskTemplates: TaskTemplate[] = [
   {
-    title: '看看当前项目结构',
-    description: '了解项目组成和关键文件',
-    prompt: '帮我看看当前项目结构，先总结它是做什么的，再列出我接下来最该看的文件。',
+    title: uiText.chat.exploreTitle,
+    description: uiText.chat.exploreDescription,
+    prompt: uiText.chat.explorePrompt,
   },
   {
-    title: '打开网页并总结重点',
-    description: '读取当前浏览器页面',
-    prompt: '打开当前浏览器页面，帮我总结重点内容。',
+    title: uiText.chat.summarizePageTitle,
+    description: uiText.chat.summarizePageDescription,
+    prompt: uiText.chat.summarizePagePrompt,
   },
   {
-    title: '找一下最近改过的文件',
-    description: '辅助定位变更影响',
-    prompt: '帮我找一下项目里最近改过的文件，并简要说明可能影响了哪些功能。',
+    title: uiText.chat.findChangesTitle,
+    description: uiText.chat.findChangesDescription,
+    prompt: uiText.chat.findChangesPrompt,
   },
   {
-    title: '帮我检查这段报错',
-    description: '分析原因和最小修复',
-    prompt: '帮我检查这段报错，先分析原因，再给出最小修复方案。',
+    title: uiText.chat.checkErrorTitle,
+    description: uiText.chat.checkErrorDescription,
+    prompt: uiText.chat.checkErrorPrompt,
   },
 ]
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => {
-  if (showSettings.value) return '设置'
-  return currentSession.value ? sessionLabel(currentSession.value) : '新对话'
+  if (showSettings.value) return uiText.app.settings
+  return currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat
 })
 const sessionSubtitle = computed(() => {
-  if (showSettings.value) return '模型、权限和浏览器'
-  if (pendingAsk.value) return '等待回应'
-  if (pendingApproval.value) return '等待确认'
-  if (isRunning.value) return '处理中'
+  if (showSettings.value) return uiText.app.settingsSubtitle
+  if (pendingAsk.value) return uiText.app.waitingForResponse
+  if (pendingApproval.value) return uiText.app.waitingForApproval
+  if (isRunning.value) return uiText.app.working
   return ''
 })
 const serverStatusLabel = computed(() => {
   const labels = {
-    checking: '正在连接',
-    online: '已连接',
-    offline: '未连接',
+    checking: uiText.app.connecting,
+    online: uiText.app.connected,
+    offline: uiText.app.disconnected,
   }
 
   return labels[serverStatus.value]
 })
 const toolLabels: Record<string, string> = {
-  apply_patch: '编辑内容',
-  bash: '运行命令',
-  cat: '读取文件',
-  exec_command: '运行命令',
-  find: '查找内容',
-  grep: '查找内容',
-  ls: '浏览文件',
-  npm: '运行检查',
-  rg: '查找内容',
-  sed: '读取片段',
-  view_image: '查看图片',
+  apply_patch: uiText.toolLabel.applyPatch,
+  bash: uiText.toolLabel.bash,
+  cat: uiText.toolLabel.cat,
+  exec_command: uiText.toolLabel.execCommand,
+  find: uiText.toolLabel.find,
+  grep: uiText.toolLabel.grep,
+  ls: uiText.toolLabel.ls,
+  npm: uiText.toolLabel.npm,
+  rg: uiText.toolLabel.rg,
+  sed: uiText.toolLabel.sed,
+  view_image: uiText.toolLabel.viewImage,
 }
 const {
   displayItems,
@@ -186,11 +187,11 @@ const {
 })
 const conversationScrollKey = computed(() => `${messages.value.length}:${events.value.length}:${streamingText.value.length}`)
 const timelineNote = computed(() => {
-  if (serverStatus.value === 'checking') return '正在连接 Moke'
-  if (serverStatus.value === 'offline') return 'Moke 未连接'
+  if (serverStatus.value === 'checking') return uiText.app.connectingToMoke
+  if (serverStatus.value === 'offline') return uiText.app.disconnectedFromMoke
   if (runError.value) return runError.value
-  if (pendingAsk.value) return 'Moke 正在等待你的回应'
-  if (pendingApproval.value) return '需要你确认后继续执行'
+  if (pendingAsk.value) return uiText.app.waitingForResponseNote
+  if (pendingApproval.value) return uiText.app.approvalRequiredNote
   if (isRunning.value) return ''
   return ''
 })
@@ -210,7 +211,7 @@ const primaryDisabled = computed(() => {
 })
 const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !input.value.trim())
 const queuedMessageCount = computed(() => queuedMessages.value.length)
-const queuedMessageLabel = computed(() => queuedStopRequested.value ? '停止后发送' : `${queuedMessageCount.value} 条待发送`)
+const queuedMessageLabel = computed(() => queuedStopRequested.value ? uiText.composer.sendAfterStopping : uiText.composer.queued(queuedMessageCount.value))
 const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${message}`).join('\n'))
 const queuedMessageItems = computed(() => queuedMessages.value.map((message) => ({
   content: message,
@@ -222,7 +223,7 @@ function isFinalAssistantMessage(message: Message | undefined) {
 }
 
 function sessionLabel(session: SessionSummary) {
-  return session.title || session.preview || '新对话'
+  return session.title || session.preview || uiText.app.newChat
 }
 
 function sessionMeta(session: SessionSummary) {
@@ -231,7 +232,7 @@ function sessionMeta(session: SessionSummary) {
 
 function formatSessionTime(value: string) {
   const time = Date.parse(value)
-  if (Number.isNaN(time)) return '刚刚'
+  if (Number.isNaN(time)) return 'Just now'
 
   const date = new Date(time)
   const now = new Date()
@@ -266,7 +267,7 @@ function formatTimelineTime(time: number) {
   }).format(date)
 
   if (targetDay === today) return timeLabel
-  if (targetDay === today - 24 * 60 * 60 * 1000) return `昨天 ${timeLabel}`
+  if (targetDay === today - 24 * 60 * 60 * 1000) return `Yesterday ${timeLabel}`
 
   const dateLabel = new Intl.DateTimeFormat('zh-CN', {
     month: 'numeric',
@@ -275,7 +276,7 @@ function formatTimelineTime(time: number) {
 
   if (date.getFullYear() === now.getFullYear()) return `${dateLabel} ${timeLabel}`
 
-  return `${date.getFullYear()}年${dateLabel} ${timeLabel}`
+  return `${date.getFullYear()} ${dateLabel} ${timeLabel}`
 }
 
 function readSessionIdFromHash() {
@@ -517,7 +518,7 @@ onUnmounted(() => {
 
 <template>
   <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
-    <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="关闭对话列表"
+    <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="Close chat list"
       @click="closeSidebar"></button>
     <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
       :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
@@ -527,7 +528,7 @@ onUnmounted(() => {
     <div
       class="sidebar-resizer"
       role="separator"
-      aria-label="调整对话列表宽度"
+      aria-label="Resize chat list"
       aria-orientation="vertical"
       tabindex="0"
       @keydown="handleSidebarResizeKeydown"
@@ -578,8 +579,8 @@ onUnmounted(() => {
         v-if="showJumpToBottom && !showSettings"
         class="jump-inline"
         type="button"
-        aria-label="跳到底部"
-        title="跳到底部"
+        :aria-label="uiText.app.jumpToBottom"
+        :title="uiText.app.jumpToBottom"
         @click="jumpToConversationBottom"
       >
         <ArrowDown :size="15" stroke-width="2.2" />
@@ -598,27 +599,27 @@ onUnmounted(() => {
         <div class="queued-message-bar">
           <Clock3 :size="14" stroke-width="2.2" />
           <span>{{ queuedMessageLabel }}</span>
-          <button type="button" aria-label="清空待发送消息" title="清空待发送消息" @click="cancelQueuedMessage">
+          <button type="button" :aria-label="uiText.composer.clearQueued" :title="uiText.composer.clearQueued" @click="cancelQueuedMessage">
             <X :size="14" stroke-width="2.2" />
           </button>
           <button
             v-if="isRunning && !pendingAsk && !queuedStopRequested"
             type="button"
             class="primary"
-            aria-label="停止当前并发送"
-            title="停止当前并发送"
+            :aria-label="uiText.composer.stopAndSendNext"
+            :title="uiText.composer.stopAndSendNext"
             @click="stopAndSendQueuedMessage"
           >
             <SkipForward :size="14" stroke-width="2.2" />
           </button>
         </div>
-        <div class="queued-message-list" aria-label="待发送队列">
+        <div class="queued-message-list" :aria-label="uiText.composer.queuedMessages">
           <div v-for="(item, index) in queuedMessageItems" :key="`${index}-${item.content}`" class="queued-message-item">
             <span class="queued-message-text">{{ item.preview }}</span>
             <button
               type="button"
-              :aria-label="`取消第 ${index + 1} 条待发送消息`"
-              :title="`取消第 ${index + 1} 条`"
+              :aria-label="uiText.composer.removeQueued(index + 1)"
+              :title="uiText.composer.removeQueuedTitle(index + 1)"
               @click="cancelQueuedMessageAt(index)"
             >
               <X :size="13" stroke-width="2.2" />
@@ -635,7 +636,7 @@ onUnmounted(() => {
       v-if="!traceCollapsed"
       class="workspace-resizer"
       role="separator"
-      aria-label="调整工作区宽度"
+      aria-label="Resize workspace"
       aria-orientation="vertical"
       tabindex="0"
       @keydown="handleWorkspaceResizeKeydown"

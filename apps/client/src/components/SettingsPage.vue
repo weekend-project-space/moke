@@ -2,6 +2,7 @@
 import { FolderX, Plus, RotateCw, Save, SendHorizontal, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
 import McpSettingsPanel from './McpSettingsPanel.vue'
+import { uiText } from '../text/uiText'
 
 type WorkspaceRootPermission = {
   path: string
@@ -122,7 +123,7 @@ async function loadSettings() {
     selectedProviderId.value = activeProviderId.value
     syncEditingProvider()
   } catch {
-    modelError.value = '模型设置加载失败'
+    modelError.value = uiText.settings.loadFailed
     providers.value = [createProvider()]
     activeProviderId.value = providers.value[0].id
     selectedProviderId.value = providers.value[0].id
@@ -152,7 +153,7 @@ async function saveModelProviders(nextActiveProviderId = activeProviderId.value)
     syncEditingProvider()
     markSaved()
   } catch {
-    modelError.value = '模型设置保存失败'
+    modelError.value = uiText.settings.modelSaveFailed
   }
 }
 
@@ -196,11 +197,11 @@ async function testModel() {
     })
     const data = await response.json()
     modelTest.value = response.ok && data.ok ? 'ok' : 'error'
-    modelTestMessage.value = data.message || (data.ok ? '模型可用' : '模型测试失败')
+    modelTestMessage.value = data.message || (data.ok ? uiText.settings.modelAvailable : uiText.settings.modelTestFailed)
     if (Array.isArray(data.models)) modelOptions.value = data.models
   } catch {
     modelTest.value = 'error'
-    modelTestMessage.value = '模型测试失败'
+    modelTestMessage.value = uiText.settings.modelTestFailed
   }
 }
 
@@ -216,10 +217,10 @@ async function loadModelOptions() {
     const data = await response.json()
     if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`)
     modelOptions.value = data.models || []
-    modelListMessage.value = modelOptions.value.length > 0 ? `已加载 ${modelOptions.value.length} 个模型` : '没有可用模型'
+    modelListMessage.value = modelOptions.value.length > 0 ? uiText.settings.modelsLoaded(modelOptions.value.length) : uiText.settings.noModels
   } catch (error) {
     modelOptions.value = []
-    modelListMessage.value = error instanceof Error ? error.message : '模型加载失败'
+    modelListMessage.value = error instanceof Error ? error.message : uiText.settings.modelLoadFailed
   } finally {
     loadingModels.value = false
   }
@@ -234,7 +235,7 @@ async function loadPermissions() {
     const data = await response.json()
     permissions.value = data.workspace_roots || []
   } catch {
-    permissionError.value = '授权目录加载失败'
+    permissionError.value = uiText.settings.permissionsLoadFailed
   } finally {
     loadingPermissions.value = false
   }
@@ -252,7 +253,7 @@ async function revokePermission(path: string) {
     const data = await response.json()
     permissions.value = data.workspace_roots || []
   } catch {
-    permissionError.value = '移除授权失败'
+    permissionError.value = uiText.settings.removePermissionFailed
   }
 }
 
@@ -271,7 +272,7 @@ onMounted(() => {
 <template>
   <section class="settings-page">
     <header class="settings-header">
-      <button type="button" class="settings-secondary" @click="emit('close')">返回对话</button>
+      <button type="button" class="settings-secondary" @click="emit('close')">{{ uiText.settings.returnToChat }}</button>
     </header>
 
     <nav class="settings-tabs" aria-label="Settings sections">
@@ -288,7 +289,7 @@ onMounted(() => {
 
     <div v-if="activeSettingsTab === 'model'" class="settings-section">
       <div class="settings-section-heading">
-        <h3>模型</h3>
+        <h3>{{ uiText.settings.model }}</h3>
         <span>{{ modelTestMessage || modelListMessage }}</span>
       </div>
       <div v-if="modelError" class="settings-note error">{{ modelError }}</div>
@@ -303,39 +304,39 @@ onMounted(() => {
             @click="selectProvider(provider)"
           >
             <strong>{{ provider.name }}</strong>
-            <small>{{ provider.model }}<span v-if="provider.id === activeProviderId"> · 当前</span></small>
+            <small>{{ provider.model }}<span v-if="provider.id === activeProviderId"> · {{ uiText.settings.active }}</span></small>
           </button>
           <button type="button" class="provider-add" @click="addProvider">
             <Plus :size="14" />
-            新增 Provider
+            {{ uiText.settings.addProvider }}
           </button>
         </aside>
 
         <div class="provider-form">
           <label class="settings-row">
-            <span>名称</span>
+            <span>{{ uiText.settings.name }}</span>
             <input v-model="editingProvider.name" type="text" spellcheck="false" />
           </label>
           <label class="settings-row">
-            <span>类型</span>
+            <span>{{ uiText.settings.providerType }}</span>
             <select v-model="editingProvider.type">
               <option value="openai-compatible">OpenAI Compatible</option>
             </select>
           </label>
           <label class="settings-row">
-            <span>API Base URL</span>
+            <span>{{ uiText.settings.apiBaseUrl }}</span>
             <input v-model="editingProvider.apiBaseUrl" type="url" spellcheck="false" />
           </label>
           <label class="settings-row">
-            <span>API Key</span>
+            <span>{{ uiText.settings.apiKey }}</span>
             <input v-model="editingProvider.apiKey" type="password" spellcheck="false" autocomplete="off" />
           </label>
           <label class="settings-row">
-            <span>Model</span>
+            <span>{{ uiText.settings.model }}</span>
             <div class="settings-inline-control">
               <input v-model="editingProvider.model" list="model-options" type="text" spellcheck="false" />
               <button type="button" class="settings-secondary" :disabled="loadingModels" @click="loadModelOptions">
-                {{ loadingModels ? '加载中' : '加载模型' }}
+                {{ loadingModels ? uiText.settings.loading : uiText.settings.loadModels }}
               </button>
               <datalist id="model-options">
                 <option v-for="model in modelOptions" :key="model" :value="model" />
@@ -343,25 +344,25 @@ onMounted(() => {
             </div>
           </label>
           <label class="settings-row">
-            <span>Timeout</span>
+            <span>{{ uiText.settings.timeout }}</span>
             <input v-model.number="editingProvider.timeoutMs" type="number" min="1000" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS" step="1000" />
           </label>
 
           <div class="settings-actions">
             <button type="button" class="settings-secondary" @click="testModel">
               <RotateCw :size="14" />
-              {{ modelTest === 'checking' ? '测试中' : '测试模型' }}
+              {{ modelTest === 'checking' ? uiText.settings.testing : uiText.settings.testModel }}
             </button>
             <button type="button" class="settings-secondary" :disabled="editingProvider.id === activeProviderId" @click="activateProvider">
-              设为当前
+              {{ uiText.settings.setActive }}
             </button>
             <button type="button" class="settings-secondary" :disabled="providers.length <= 1" @click="deleteProvider">
               <Trash2 :size="14" />
-              删除
+              {{ uiText.settings.delete }}
             </button>
             <button type="button" class="settings-primary" @click="saveModelProviders()">
               <Save :size="14" />
-              {{ saved ? '已保存' : '保存' }}
+              {{ saved ? uiText.settings.saved : uiText.settings.save }}
             </button>
           </div>
         </div>
@@ -372,18 +373,18 @@ onMounted(() => {
 
     <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section">
       <div class="settings-section-heading">
-        <h3>权限</h3>
-        <button type="button" class="settings-icon-button" title="刷新" aria-label="刷新" @click="loadPermissions">
+        <h3>{{ uiText.settings.permissions }}</h3>
+        <button type="button" class="settings-icon-button" :title="uiText.settings.refresh" :aria-label="uiText.settings.refresh" @click="loadPermissions">
           <RotateCw :size="14" />
         </button>
       </div>
       <div v-if="permissionError" class="settings-note error">{{ permissionError }}</div>
-      <div v-else-if="loadingPermissions" class="settings-note">正在加载</div>
-      <div v-else-if="permissions.length === 0" class="settings-note">暂无授权目录</div>
+      <div v-else-if="loadingPermissions" class="settings-note">{{ uiText.settings.loading }}</div>
+      <div v-else-if="permissions.length === 0" class="settings-note">{{ uiText.settings.noPermissions }}</div>
       <div v-else class="permission-list">
         <div v-for="permission in permissions" :key="permission.path" class="permission-row">
           <span>{{ permission.path }}</span>
-          <button type="button" title="移除" aria-label="移除" @click="revokePermission(permission.path)">
+          <button type="button" :title="uiText.settings.remove" :aria-label="uiText.settings.remove" @click="revokePermission(permission.path)">
             <FolderX :size="14" />
           </button>
         </div>
@@ -392,27 +393,27 @@ onMounted(() => {
 
     <div v-else-if="activeSettingsTab === 'browser'" class="settings-section">
       <div class="settings-section-heading">
-        <h3>浏览器</h3>
+        <h3>{{ uiText.settings.browser }}</h3>
       </div>
       <label class="settings-row">
-        <span>默认首页</span>
+        <span>{{ uiText.settings.defaultHome }}</span>
         <input v-model="browserSettings.browserHomeUrl" type="url" spellcheck="false" />
       </label>
       <label class="settings-row">
-        <span>链接打开方式</span>
+        <span>{{ uiText.settings.homeOpenMode }}</span>
         <select v-model="browserSettings.linkOpenMode">
-          <option value="current">当前标签</option>
-          <option value="new-tab">新标签</option>
+          <option value="current">{{ uiText.settings.currentTab }}</option>
+          <option value="new-tab">{{ uiText.settings.newTab }}</option>
         </select>
       </label>
       <div class="settings-actions">
         <button type="button" class="settings-secondary" @click="openHomeUrl">
           <SendHorizontal :size="14" />
-          打开首页
+          {{ uiText.settings.openHome }}
         </button>
         <button type="button" class="settings-primary" @click="saveBrowserSettings">
           <Save :size="14" />
-          {{ saved ? '已保存' : '保存' }}
+          {{ saved ? uiText.settings.saved : uiText.settings.save }}
         </button>
       </div>
     </div>

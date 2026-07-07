@@ -8,15 +8,16 @@ import type {
   ToolStepViewItem,
 } from '../types/conversation'
 import { summarizeOutput } from './toolDisplay'
+import { uiText } from '../text/uiText'
 
-const DONE = '\u5df2\u5b8c\u6210'
+const DONE = uiText.process.done
 
 export function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
   const viewItems = mergeToolSteps(items)
   const times = processItemTimes(viewItems)
 
   return {
-    label: '\u5904\u7406\u7ec6\u8282',
+    label: uiText.process.details,
     items: viewItems,
     hasError: viewItems.some((item) => item.tone === 'error'),
     startedAt: times[0],
@@ -25,10 +26,10 @@ export function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
 }
 
 export function formatProcessGroupLabel(group: ProcessGroupView, isActive = false, runtimeNow = Date.now()) {
-  if (!group.startedAt) return '\u5904\u7406\u7ec6\u8282'
+  if (!group.startedAt) return uiText.process.details
 
   const end = isActive ? runtimeNow : group.endedAt || group.startedAt
-  return `\u5df2\u5904\u7406 ${formatDuration(end - group.startedAt)}`
+  return `Processed ${formatDuration(end - group.startedAt)}`
 }
 
 function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
@@ -165,8 +166,8 @@ function createToolBatchView(steps: ToolStepViewItem[]): ToolBatchViewItem {
 }
 
 function toolBatchCountLabel(step: ToolStepViewItem, count: number) {
-  if (step.renderer === 'directory') return `${count} \u4e2a\u76ee\u5f55`
-  return `${count} \u9879`
+  if (step.renderer === 'directory') return `${count} ${count === 1 ? 'directory' : 'directories'}`
+  return `${count} item${count === 1 ? '' : 's'}`
 }
 
 function createToolStepView(call: ProcessItem): ToolStepViewItem {
@@ -178,7 +179,7 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     tone: call.tone,
     time: call.time,
     toolName: call.title,
-    actionLabel: call.actionLabel || '\u8fd0\u884c\u5de5\u5177',
+    actionLabel: call.actionLabel || uiText.tool.runTool,
     objectLabel: call.objectLabel || call.detail,
     renderer: call.renderer || 'generic',
     summary: call.summary || {},
@@ -314,13 +315,13 @@ function processItemTimes(items: ProcessViewItem[]) {
 
 function formatDuration(durationMs: number) {
   const seconds = Math.max(1, Math.round(durationMs / 1000))
-  if (seconds < 60) return `${seconds} \u79d2`
+  if (seconds < 60) return `${seconds}s`
 
   const minutes = Math.floor(seconds / 60)
   const restSeconds = seconds % 60
-  if (minutes < 60) return restSeconds ? `${minutes} \u5206 ${restSeconds} \u79d2` : `${minutes} \u5206`
+  if (minutes < 60) return restSeconds ? `${minutes}m ${restSeconds}s` : `${minutes}m`
 
   const hours = Math.floor(minutes / 60)
   const restMinutes = minutes % 60
-  return restMinutes ? `${hours} \u5c0f\u65f6 ${restMinutes} \u5206` : `${hours} \u5c0f\u65f6`
+  return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`
 }

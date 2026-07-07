@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, Terminal } from 'lucide-vue-next'
 import type { ToolCategory, ProcessViewItem } from '../types/conversation'
 import ToolStepDetails from './ToolStepDetails.vue'
+import { uiText } from '../text/uiText'
 
 defineProps<{
   label: string
@@ -54,7 +55,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <span class="process-tool-title">
             {{ processItem.kind === 'tool-batch' ? `${processItem.actionLabel} · ${processItem.countLabel}` : processItem.actionLabel }}
           </span>
-          <span v-if="processItem.tone === 'error'" class="process-tool-status">失败</span>
+          <span v-if="processItem.tone === 'error'" class="process-tool-status">{{ uiText.process.failed }}</span>
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
           <span class="process-step-caret" aria-hidden="true">

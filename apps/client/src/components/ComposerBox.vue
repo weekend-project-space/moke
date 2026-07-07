@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowUp, Square } from 'lucide-vue-next'
 import { nextTick, ref } from 'vue'
+import { uiText } from '../text/uiText'
 
 const props = defineProps<{
   inputValue: string
@@ -58,7 +59,7 @@ defineExpose({ focus, resize })
             ref="textarea"
             :value="props.inputValue"
             rows="1"
-            placeholder="输入给 Moke 的消息"
+            :placeholder="uiText.composer.placeholder"
             @input="handleInput"
             @keydown.enter="$emit('enter', $event)"
           ></textarea>
@@ -70,8 +71,8 @@ defineExpose({ focus, resize })
             type="submit"
             :class="{ stop: primaryIsStop }"
             :disabled="primaryDisabled"
-            :aria-label="primaryIsStop ? '停止运行' : '发送消息'"
-            :title="primaryIsStop ? '停止运行' : '发送消息'"
+            :aria-label="primaryIsStop ? uiText.composer.stop : uiText.composer.send"
+            :title="primaryIsStop ? uiText.composer.stop : uiText.composer.send"
           >
             <Square v-if="primaryIsStop" :size="15" fill="currentColor" stroke-width="2.2" />
             <ArrowUp v-else :size="17" stroke-width="2.4" />

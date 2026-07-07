@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Archive, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { uiText } from '../text/uiText'
 
 type SessionSummary = {
   id: string
@@ -138,22 +139,22 @@ onUnmounted(() => {
   <aside class="sidebar" @click="closeContextMenu">
     <section class="brand">
       <div class="brand-header">
-        <span class="brand-title">对话</span>
+        <span class="brand-title">{{ uiText.sidebar.title }}</span>
       </div>
       <label class="session-search">
         <Search :size="14" stroke-width="2.2" />
-        <input v-model="searchQuery" type="search" placeholder="搜索对话" @keydown.esc.prevent="clearSearch" />
+        <input v-model="searchQuery" type="search" :placeholder="uiText.sidebar.search" @keydown.esc.prevent="clearSearch" />
       </label>
     </section>
 
     <section class="session-list">
       <div v-if="sessions.length === 0" class="sidebar-empty">
-        <strong>还没有对话</strong>
-        <span>点击顶部的新建按钮开始对话。</span>
+        <strong>{{ uiText.sidebar.emptyTitle }}</strong>
+        <span>{{ uiText.sidebar.emptyDescription }}</span>
       </div>
       <div v-else-if="filteredSessions.length === 0" class="sidebar-empty">
-        <strong>没有找到</strong>
-        <span>换个关键词试试看。</span>
+        <strong>{{ uiText.sidebar.noResultsTitle }}</strong>
+        <span>{{ uiText.sidebar.noResultsDescription }}</span>
       </div>
       <article
         v-for="session in filteredSessions"
@@ -188,7 +189,7 @@ onUnmounted(() => {
               ref="editingInput"
               v-model="editingTitle"
               type="text"
-              aria-label="对话名称"
+              :aria-label="uiText.sidebar.chatName"
               @blur="submitRename()"
               @keydown.esc.prevent="cancelRename"
             />
@@ -200,8 +201,8 @@ onUnmounted(() => {
           class="session-archive-hover"
           type="button"
           :disabled="disabled"
-          aria-label="归档"
-          title="归档"
+          :aria-label="uiText.sidebar.archive"
+          :title="uiText.sidebar.archive"
           @click.stop="archiveSession(session)"
         >
           <Archive :size="13" stroke-width="2.1" />
@@ -214,12 +215,12 @@ onUnmounted(() => {
         class="sidebar-settings"
         type="button"
         :class="{ active: settingsActive }"
-        aria-label="设置"
-        title="设置"
+        :aria-label="uiText.sidebar.settings"
+        :title="uiText.sidebar.settings"
         @click="emit('openSettings')"
       >
         <Settings :size="15" stroke-width="2.1" />
-        <span>设置</span>
+        <span>{{ uiText.sidebar.settings }}</span>
       </button>
     </footer>
   </aside>
@@ -237,7 +238,7 @@ onUnmounted(() => {
       <button type="button" role="menuitem" @click="togglePinned(contextMenu.session)">
         <PinOff v-if="contextMenu.session.pinned" :size="14" stroke-width="2.1" />
         <Pin v-else :size="14" stroke-width="2.1" />
-        <span>{{ contextMenu.session.pinned ? '取消置顶' : '置顶' }}</span>
+        <span>{{ contextMenu.session.pinned ? uiText.sidebar.unpin : uiText.sidebar.pin }}</span>
       </button>
       <button
         type="button"
@@ -246,7 +247,7 @@ onUnmounted(() => {
         @click="startRename(contextMenu.session)"
       >
         <Pencil :size="14" stroke-width="2.1" />
-        <span>重命名</span>
+        <span>{{ uiText.sidebar.rename }}</span>
       </button>
       <button
         type="button"
@@ -255,7 +256,7 @@ onUnmounted(() => {
         @click="archiveSession(contextMenu.session)"
       >
         <Archive :size="14" stroke-width="2.1" />
-        <span>归档</span>
+        <span>{{ uiText.sidebar.archive }}</span>
       </button>
     </div>
   </Teleport>

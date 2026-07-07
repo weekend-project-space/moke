@@ -5,6 +5,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessGroup from './ProcessGroup.vue'
 import type { DisplayItem, TaskTemplate } from '../types/conversation'
+import { uiText } from '../text/uiText'
 
 const props = defineProps<{
   copiedKey: string
@@ -70,7 +71,7 @@ markdown.renderer.rules.fence = (tokens, index, options) => {
   const encoded = encodeURIComponent(token.content)
   const langLabel = markdown.utils.escapeHtml(lang)
 
-  return `<figure class="code-block"><figcaption><span>${langLabel}</span><button type="button" data-code-copy="${encoded}" aria-label="复制代码" title="复制代码"></button></figcaption><pre><code class="language-${langLabel}">${code}</code></pre></figure>`
+  return `<figure class="code-block"><figcaption><span>${langLabel}</span><button type="button" data-code-copy="${encoded}" aria-label="${uiText.message.copyCode}" title="${uiText.message.copyCode}"></button></figcaption><pre><code class="language-${langLabel}">${code}</code></pre></figure>`
 }
 
 function renderMarkdown(content: string) {
@@ -175,7 +176,7 @@ defineExpose({
     <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
     <div v-if="showEmptyState" class="empty-state">
-      <h3>想让 Moke 帮你做什么？</h3>
+      <h3>{{ uiText.chat.emptyTitle }}</h3>
       <div class="suggestion-grid">
         <button v-for="template in taskTemplates" :key="template.title" type="button" @click="emit('applySuggestion', template.prompt)">
           <span>{{ template.title }}</span>
@@ -204,7 +205,7 @@ defineExpose({
         :show-continue="showLastMessageContinue && item.id === lastAssistantDisplayItemId"
         @copy="emit('copyMessage', $event)"
         @fork="emit('forkMessage', $event)"
-        @continue="emit('applySuggestion', '基于上面的结果，继续帮我整理成更清晰的下一步。')"
+        @continue="emit('applySuggestion', uiText.chat.continuePrompt)"
       />
       <div v-if="shouldShowProcessDivider(item, index)" class="process-result-divider" aria-hidden="true"></div>
     </template>
@@ -215,7 +216,7 @@ defineExpose({
       </article>
     </div>
     <div v-else-if="showThinking" class="message-row assistant">
-      <article class="bubble assistant thinking" aria-label="Moke 正在思考">
+      <article class="bubble assistant thinking" :aria-label="uiText.chat.thinking">
         <span class="dot"></span>
         <span class="dot"></span>
         <span class="dot"></span>
