@@ -1,12 +1,65 @@
 import { ChatOpenAI } from '@langchain/openai';
 
+import type { ReasoningEffort } from '../../protocol/src/index.js';
+
 export type ChatModelSettings = {
   apiKey: string;
   apiBaseUrl: string;
   maxRetries: number;
   model: string;
+  reasoningEffort: ReasoningEffort;
+  reasoningProvider: 'none' | 'llama.cpp';
+  showRawReasoning: boolean;
   timeoutMs: number;
 };
+
+export function normalizeReasoningEffort(input: unknown): ChatModelSettings['reasoningEffort'] {
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
+    ? input
+    : 'medium';
+}
+
+export function normalizeReasoningProvider(input: unknown): ChatModelSettings['reasoningProvider'] {
+  return input === 'llama.cpp' ? input : 'none';
+}
+
+function normalizeBoolean(input: unknown, fallback = false) {
+  if (typeof input === 'boolean') return input;
+  if (input === 'true') return true;
+  if (input === 'false') return false;
+  return fallback;
+}
+
+function llamaCppThinkingBudget(reasoningEffort: ChatModelSettings['reasoningEffort']) {
+  switch (reasoningEffort) {
+    case 'low':
+      return 256;
+    case 'medium':
+      return 512;
+    case 'high':
+      return 1024;
+    case 'ultra':
+      return 2048;
+    default:
+      return 0;
+  }
+}
+
+export function createModelKwargs(settings: ChatModelSettings): Record<string, unknown> {
+  if (settings.reasoningProvider !== 'llama.cpp') return {};
+
+  const enableThinking = settings.reasoningEffort !== 'off';
+  return {
+    return_progress: settings.showRawReasoning && enableThinking,
+    reasoning_format: 'auto',
+    chat_template_kwargs: {
+      enable_thinking: enableThinking,
+    },
+    thinking_budget_tokens: llamaCppThinkingBudget(settings.reasoningEffort),
+    reasoning_control: true,
+    backend_sampling: false,
+  };
+}
 
 function normalizeMaxRetries(input: unknown) {
   const maxRetries = Number(input);
@@ -20,6 +73,9 @@ export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {})
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'http://localhost:8080/v1',
     maxRetries: normalizeMaxRetries(input.maxRetries ?? process.env.OPENAI_MAX_RETRIES),
     model: input.model || process.env.OPENAI_MODEL || 'qwen3.6-35BA3B',
+    reasoningEffort: normalizeReasoningEffort(input.reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT),
+    reasoningProvider: normalizeReasoningProvider(input.reasoningProvider ?? process.env.OPENAI_REASONING_PROVIDER),
+    showRawReasoning: normalizeBoolean(input.showRawReasoning ?? process.env.OPENAI_SHOW_RAW_REASONING),
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1000),
   };
 }
@@ -34,6 +90,7 @@ export function createChatModel(input: Partial<ChatModelSettings> = {}) {
     apiKey: settings.apiKey,
     maxRetries: settings.maxRetries,
     model: settings.model,
+    modelKwargs: createModelKwargs(settings),
     temperature: 0,
     timeout: settings.timeoutMs,
     configuration: {

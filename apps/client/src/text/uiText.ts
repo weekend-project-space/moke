@@ -60,6 +60,18 @@ const composer = {
   sendAfterStopping: 'Send after stopping',
   stop: 'Stop running',
   stopAndSendNext: 'Stop current response and send next',
+  thinking: 'Thinking',
+  thinkingAuto: 'Auto',
+  thinkingOption: (value: string) => {
+    const labels: Record<string, string> = {
+      off: 'Off',
+      low: 'Low',
+      medium: 'Medium',
+      high: 'High',
+      ultra: 'Ultra',
+    }
+    return labels[value] || value
+  },
 } as const
 
 const header = {
@@ -92,6 +104,7 @@ const process = {
   notFound: 'No matching content found',
   output: 'Output',
   readEmpty: 'File is empty',
+  reasoning: 'Reasoning',
   runIssue: 'Run note',
   runStatus: 'Process',
   shell: 'Shell',
@@ -136,9 +149,20 @@ const settings = {
   refresh: 'Refresh',
   remove: 'Remove',
   removePermissionFailed: 'Failed to remove authorization',
+  reasoning: 'Reasoning',
+  reasoningHigh: 'High',
+  reasoningHint: 'Controls llama.cpp thinking budget for compatible local servers.',
+  reasoningLow: 'Low',
+  reasoningMedium: 'Medium',
+  reasoningOff: 'Off',
+  reasoningProvider: 'Reasoning mode',
+  reasoningProviderHint: 'Standard mode sends no provider-specific thinking parameters.',
+  reasoningProviderLlamaCpp: 'llama.cpp thinking',
+  reasoningProviderNone: 'Standard chat',
+  reasoningUltra: 'Ultra',
   retries: 'Retries',
   retriesHint: 'Retry failed model requests. Use 0 for fast local failures.',
-  retriesPreview: (seconds: number, retries: number) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'}`,
+  retriesPreview: (seconds: number, retries: number, reasoning: string) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'} / ${reasoning}`,
   returnToChat: 'Back to chat',
   save: 'Save',
   saved: 'Saved',
@@ -147,6 +171,9 @@ const settings = {
   testing: 'Testing',
   timeout: 'Timeout',
   timeoutHint: 'Seconds before a model request is stopped. Max 3600.',
+  showRawReasoning: 'Show raw reasoning',
+  showRawReasoningHint: 'Shows llama.cpp reasoning when the server returns it separately.',
+  standardPreview: (seconds: number, retries: number) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'}`,
 } as const
 
 const mcp = {

@@ -18,9 +18,17 @@ export class SettingsService {
   }
 
   get() {
+    const activeProvider =
+      this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
+
     return {
       activeProviderId: this.settings.activeProviderId,
       providers: this.settings.providers.map((provider) => ({ ...provider })),
+      reasoningCapability: {
+        efforts: ['off', 'low', 'medium', 'high', 'ultra'],
+        rawSupported: activeProvider?.reasoningProvider === 'llama.cpp',
+        supported: activeProvider?.reasoningProvider === 'llama.cpp',
+      },
     };
   }
 
@@ -65,7 +73,16 @@ export class SettingsService {
   }
 }
 
-async function listProviderModels(provider: ReturnType<typeof normalizeProvider>) {
+type ListProviderModelsResult = {
+  ok: boolean;
+  stage: 'auth' | 'models' | 'network';
+  models: string[];
+  message: string;
+  status?: number;
+  model_count?: number;
+};
+
+async function listProviderModels(provider: ReturnType<typeof normalizeProvider>): Promise<ListProviderModelsResult> {
   if (!provider.apiKey) {
     return {
       ok: false,

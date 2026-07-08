@@ -1,6 +1,6 @@
-import type { ServerResponse } from 'node:http';
-
 export type RiskLevel = 'safe' | 'write' | 'dangerous';
+
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'ultra';
 
 export type RunStatus =
   | 'queued'
@@ -15,12 +15,15 @@ export type RunStatus =
 export type AgentEvent = {
   id: string;
   seq: number;
-  type: string;
+  type: AgentEventType;
   run_id: string;
   session_id: string;
   ts: string;
-  payload: Record<string, unknown>;
-};
+} & AgentEventPayloadUnion;
+
+export type AgentEventType = keyof AgentEventPayloadMap;
+
+export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
 
 export type ToolCall = {
   id: string;
@@ -49,6 +52,7 @@ export type AssistantMessage = {
   role: 'assistant';
   content: string;
   created_at: string;
+  reasoning?: string;
   tool_calls?: ToolCall[];
 };
 
@@ -71,6 +75,13 @@ export type Session = {
   updated_at: string;
   messages: Message[];
   metadata: Record<string, unknown>;
+};
+
+export type SessionSummary = Omit<Session, 'messages' | 'metadata'> & {
+  archived: boolean;
+  pinned: boolean;
+  preview: string;
+  message_count: number;
 };
 
 export type PendingAsk = {
@@ -98,21 +109,79 @@ export type PendingApproval = {
   created_at: string;
 };
 
-export type Run = {
+export type RunSnapshot = {
   id: string;
   session_id: string;
   status: RunStatus;
   seq: number;
   events: AgentEvent[];
-  clients: Set<ServerResponse>;
-  started_at: number;
-  abort: boolean;
   pending_ask?: PendingAsk;
   pending_approval?: PendingApproval;
 };
+
+export type Run = RunSnapshot;
 
 export type RuntimeLimits = {
   max_steps: number;
   max_tool_calls: number;
   timeout_ms: number;
 };
+
+export type AgentEventPayloadMap = {
+  'agent.started': {
+    input: string;
+  };
+  'agent.plan': {
+    mode: string;
+    planner: string;
+    model: string;
+    tools: string[];
+  };
+  'agent.state': {
+    state: 'reason' | 'act' | 'respond' | string;
+  };
+  'agent.message.delta': {
+    channel?: AgentMessageDeltaChannel;
+    content: string;
+  };
+  'agent.message.done': {
+    message: Message;
+  };
+  'tool.call': {
+    call_id: string;
+    tool: string;
+    input: Record<string, unknown>;
+    risk: RiskLevel;
+    source?: {
+      type: 'local' | 'mcp';
+      server_id?: string;
+    };
+  };
+  'tool.result': {
+    call_id: string;
+    status: 'ok' | 'error' | string;
+    duration_ms: number;
+    output: unknown;
+  };
+  'ask_user.required': PendingAsk;
+  'approval.required': PendingApproval;
+  'agent.done': {
+    status: RunStatus;
+    usage?: {
+      steps: number;
+      tool_calls: number;
+      duration_ms: number;
+    };
+  };
+  'agent.error': {
+    code: string;
+    message: string;
+  };
+};
+
+type AgentEventPayloadUnion = {
+  [Type in AgentEventType]: {
+    type: Type;
+    payload: AgentEventPayloadMap[Type];
+  };
+}[AgentEventType];

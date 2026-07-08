@@ -1,5 +1,5 @@
 import { computed, nextTick, reactive, ref } from 'vue'
-import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, SessionSummary } from '../types/conversation'
+import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../types/conversation'
 import { uiText } from '../text/uiText'
 
 type UseAgentSessionOptions = {
@@ -34,6 +34,9 @@ type ActiveRunSummary = {
 export type SendMessageInput = {
   content: string
   attachments?: ImageAttachment[]
+  options?: {
+    reasoningEffort?: ReasoningEffort
+  }
 }
 
 function createRunState(runId = ''): SessionRunState {
@@ -287,6 +290,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const draft = typeof input === 'string' ? { content: input } : input
     const trimmedContent = draft.content.trim()
     const attachments = draft.attachments || []
+    const runOptions = {
+      stream: true,
+      ...(draft.options?.reasoningEffort ? { reasoningEffort: draft.options.reasoningEffort } : {}),
+    }
     if ((!trimmedContent && !attachments.length) || isRunning.value) return false
 
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
@@ -319,7 +326,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             content: trimmedContent,
             ...(attachments.length ? { attachments } : {}),
           },
-          options: { stream: true },
+          options: runOptions,
         }),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -395,7 +402,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         const nextState = ensureRunState(targetSessionId)
 
         if (event.type === 'agent.message.delta') {
-          nextState.streamingText += event.payload.content || ''
+          const channel = event.payload.channel || 'answer'
+          if (channel !== 'reasoning') nextState.streamingText += event.payload.content || ''
         }
 
         if (event.type === 'approval.required') {

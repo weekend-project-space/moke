@@ -21,9 +21,12 @@ import {
   createFinalMessage,
   createHistoryMessages,
   createSystemMessage,
+  createThinkTagSplitter,
   createUserMessage,
   getMessageText,
+  getReasoningText,
   isAI,
+  stripThinkBlocks,
 } from './messages.js';
 import {
   createChatModel,
@@ -96,10 +99,20 @@ async function streamModelStep(input: {
   eventBus: AgentRunInput['eventBus'];
   messages: BaseMessage[];
   model: StreamableChatModel;
+  showRawReasoning: boolean;
   signal?: AbortSignal;
   timeoutMs: number;
 }) {
   const chunks: AIMessageChunk[] = [];
+  const thinkTags = createThinkTagSplitter();
+  let previousReasoningText = '';
+  let reasoning = '';
+
+  function emitReasoning(content: string) {
+    if (!content || !input.showRawReasoning) return;
+    reasoning += content;
+    input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content });
+  }
 
   await withTimeout(
     (async () => {
@@ -109,9 +122,25 @@ async function streamModelStep(input: {
         throwIfAborted(input.signal);
         chunks.push(chunk);
 
-        const content = getMessageText(chunk);
-        if (content) input.eventBus.emit('agent.message.delta', { content });
+        const reasoningText = getReasoningText(chunk);
+        if (reasoningText && input.showRawReasoning) {
+          const reasoningDelta = reasoningText.startsWith(previousReasoningText)
+            ? reasoningText.slice(previousReasoningText.length)
+            : reasoningText;
+          previousReasoningText = reasoningText.startsWith(previousReasoningText)
+            ? reasoningText
+            : `${previousReasoningText}${reasoningText}`;
+          emitReasoning(reasoningDelta);
+        }
+
+        const split = thinkTags.consume(getMessageText(chunk));
+        emitReasoning(split.reasoning);
+        if (split.content) input.eventBus.emit('agent.message.delta', { channel: 'answer', content: split.content });
       }
+
+      const flushed = thinkTags.flush();
+      emitReasoning(flushed.reasoning);
+      if (flushed.content) input.eventBus.emit('agent.message.delta', { channel: 'answer', content: flushed.content });
     })(),
     input.timeoutMs,
     input.signal,
@@ -121,7 +150,10 @@ async function streamModelStep(input: {
     throw new Error('LLM stream completed without output');
   }
 
-  return chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]);
+  return {
+    message: chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]),
+    reasoning,
+  };
 }
 
 export class ReActAgent {
@@ -139,8 +171,12 @@ export class ReActAgent {
     toolRegistry,
     context,
     limits: rawLimits,
+    options: rawOptions = {},
   }: AgentRunInput): Promise<AgentRunResult> {
-    const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
+    const modelSettings = {
+      ...resolveChatModelSettings(this.config.getModelSettings?.()),
+      ...(rawOptions.reasoningEffort ? { reasoningEffort: rawOptions.reasoningEffort } : {}),
+    };
     if (!modelSettings.apiKey) {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
     }
@@ -161,6 +197,7 @@ export class ReActAgent {
     let finalContent = '';
     let finalContentStreamed = false;
     let hasObservation = false;
+    let accumulatedReasoning = '';
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
@@ -175,19 +212,22 @@ export class ReActAgent {
       eventBus.emit('agent.state', { state: 'reason' });
       messages[0] = createSystemMessage(runtimeTools, context);
 
-      const aiMessage = await streamModelStep({
+      const stepResult = await streamModelStep({
         eventBus,
         messages,
         model: modelWithTools,
+        showRawReasoning: modelSettings.showRawReasoning,
         signal: context.abortSignal,
         timeoutMs,
       });
+      const aiMessage = stepResult.message;
+      accumulatedReasoning += stepResult.reasoning;
       throwIfAborted(context.abortSignal);
       messages.push(aiMessage);
 
       const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
       if (calls.length === 0) {
-        const content = getMessageText(aiMessage).trim();
+        const content = stripThinkBlocks(getMessageText(aiMessage));
         finalContent = content || '我暂时没有更多可补充的信息。';
         finalContentStreamed = Boolean(content);
         break;
@@ -209,7 +249,7 @@ export class ReActAgent {
           message: {
             id: messageId(),
             role: 'assistant',
-            content: getMessageText(aiMessage).trim(),
+            content: stripThinkBlocks(getMessageText(aiMessage)),
             created_at: now(),
             tool_calls: persistedToolCalls,
           },
@@ -238,7 +278,7 @@ export class ReActAgent {
         const startedAt = Date.now();
         try {
           if (isFinishCall) {
-            finalContent = readFinishContent(call.args || {});
+            finalContent = stripThinkBlocks(readFinishContent(call.args || {}));
             const output = {
               status: 'finished',
               content: finalContent,
@@ -339,9 +379,9 @@ export class ReActAgent {
     }
 
     const content = finalContent;
-    const message = createFinalMessage(content);
+    const message = createFinalMessage(content, accumulatedReasoning);
     eventBus.emit('agent.state', { state: 'respond' });
-    if (!finalContentStreamed) eventBus.emit('agent.message.delta', { content });
+    if (!finalContentStreamed) eventBus.emit('agent.message.delta', { channel: 'answer', content });
     eventBus.emit('agent.message.done', { message });
 
     return { toolCalls, message };

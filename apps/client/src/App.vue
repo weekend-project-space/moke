@@ -14,7 +14,7 @@ import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
 import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
 import { useResizablePanels } from './composables/useResizablePanels'
 import { uiText } from './text/uiText'
-import type { ImageAttachment, Message, SessionSummary, TaskTemplate } from './types/conversation'
+import type { ImageAttachment, Message, ReasoningEffort, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
 const attachments = ref<ImageAttachment[]>([])
@@ -22,6 +22,15 @@ const MAX_QUEUED_MESSAGES = 3
 type DraftMessage = {
   content: string
   attachments: ImageAttachment[]
+  options?: {
+    reasoningEffort?: ReasoningEffort
+  }
+}
+type ComposerReasoningEffort = 'default' | ReasoningEffort
+type ReasoningCapability = {
+  efforts: ReasoningEffort[]
+  rawSupported: boolean
+  supported: boolean
 }
 const queuedMessages = ref<DraftMessage[]>([])
 const queuedSessionId = ref('')
@@ -34,6 +43,12 @@ const showJumpToBottom = ref(false)
 const showSettings = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
+const composerReasoningEffort = ref<ComposerReasoningEffort>('default')
+const reasoningCapability = ref<ReasoningCapability>({
+  efforts: [],
+  rawSupported: false,
+  supported: false,
+})
 let runtimeTimer: number | undefined
 const {
   closeSidebar,
@@ -60,6 +75,7 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+const COMPOSER_REASONING_KEY = 'moke.composer.reasoning-effort.v1'
 const SESSION_HASH_KEY = 'session'
 const {
   cancelRun,
@@ -206,6 +222,7 @@ const queuedMessageItems = computed(() => queuedMessages.value.map((message) => 
   content: draftPreview(message),
   preview: draftPreview(message),
 })))
+const composerReasoningOptions = computed(() => reasoningCapability.value.supported ? reasoningCapability.value.efforts : [])
 
 function isFinalAssistantMessage(message: Message | undefined) {
   return message?.role === 'assistant' && isVisibleMessage(message)
@@ -297,6 +314,74 @@ function resizeComposer() {
   composerBox.value?.resize()
 }
 
+async function loadReasoningCapability() {
+  if (serverStatus.value !== 'online') return
+
+  try {
+    const response = await fetch(`${apiBase}/api/settings`)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    const capability = data.reasoningCapability || {}
+    const efforts = Array.isArray(capability.efforts)
+      ? capability.efforts.filter(isReasoningEffort)
+      : []
+    reasoningCapability.value = {
+      efforts,
+      rawSupported: capability.rawSupported === true,
+      supported: capability.supported === true && efforts.length > 0,
+    }
+    normalizeComposerReasoningEffort()
+  } catch {
+    reasoningCapability.value = {
+      efforts: [],
+      rawSupported: false,
+      supported: false,
+    }
+    composerReasoningEffort.value = 'default'
+  }
+}
+
+function isReasoningEffort(value: unknown): value is ReasoningEffort {
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'ultra'
+}
+
+function isComposerReasoningEffort(value: unknown): value is ComposerReasoningEffort {
+  return value === 'default' || isReasoningEffort(value)
+}
+
+function loadComposerReasoningEffort() {
+  try {
+    const stored = window.localStorage.getItem(COMPOSER_REASONING_KEY)
+    if (isComposerReasoningEffort(stored)) composerReasoningEffort.value = stored
+  } catch {
+    composerReasoningEffort.value = 'default'
+  }
+}
+
+function persistComposerReasoningEffort(value: ComposerReasoningEffort) {
+  try {
+    window.localStorage.setItem(COMPOSER_REASONING_KEY, value)
+  } catch {
+    // Keep the current in-memory selection when localStorage is unavailable.
+  }
+}
+
+function normalizeComposerReasoningEffort() {
+  if (composerReasoningEffort.value === 'default') return
+  if (
+    !reasoningCapability.value.supported ||
+    !reasoningCapability.value.efforts.includes(composerReasoningEffort.value)
+  ) {
+    composerReasoningEffort.value = 'default'
+  }
+}
+
+function currentRunOptions() {
+  return composerReasoningEffort.value === 'default'
+    ? undefined
+    : { reasoningEffort: composerReasoningEffort.value }
+}
+
 async function selectSession(id: string) {
   conversationView.value?.resetAutoScroll()
   if (await selectAgentSession(id)) {
@@ -339,6 +424,7 @@ function openSettings() {
 
 function closeSettings() {
   showSettings.value = false
+  void loadReasoningCapability()
 }
 
 function sendOnEnter(event: KeyboardEvent) {
@@ -401,7 +487,7 @@ async function submitMessage() {
   const content = input.value.trim()
   if ((!content && !attachments.value.length) || isRunning.value) return
 
-  await sendContent({ content, attachments: [...attachments.value] }, true)
+  await sendContent({ content, attachments: [...attachments.value], options: currentRunOptions() }, true)
 }
 
 async function sendContent(draft: DraftMessage, restoreOnFail: boolean) {
@@ -427,7 +513,7 @@ function queueCurrentInput() {
   if ((!content && !attachments.value.length) || !sessionId.value) return
   if (queuedMessages.value.length >= MAX_QUEUED_MESSAGES) return
 
-  queuedMessages.value = [...queuedMessages.value, { content, attachments: [...attachments.value] }]
+  queuedMessages.value = [...queuedMessages.value, { content, attachments: [...attachments.value], options: currentRunOptions() }]
   queuedSessionId.value = sessionId.value
   queuedStopRequested.value = false
   input.value = ''
@@ -500,13 +586,19 @@ watch(isRunning, (running) => {
   }, 1000)
 })
 
+watch(composerReasoningEffort, (value) => {
+  persistComposerReasoningEffort(value)
+})
+
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('resize', handleWindowResize)
+  loadComposerReasoningEffort()
   initBrowserWorkspace()
   initResizablePanels()
 
   if (await checkServer()) {
+    await loadReasoningCapability()
     await loadSessions()
     await loadActiveRuns()
     const initialSession = initialSessionFromHash()
@@ -646,7 +738,12 @@ onUnmounted(() => {
           </div>
         </div>
         <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
-          :primary-is-stop="primaryIsStop" :attachments="attachments" @update:input-value="input = $event" @input="handleInput"
+          :primary-is-stop="primaryIsStop" :attachments="attachments"
+          :reasoning-effort="composerReasoningEffort"
+          :reasoning-options="composerReasoningOptions"
+          @update:input-value="input = $event"
+          @update:reasoning-effort="composerReasoningEffort = $event"
+          @input="handleInput"
           @add-attachments="addAttachments" @remove-attachment="removeAttachment"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />
       </div>

@@ -193,6 +193,7 @@ defineExpose({
         :items="item.items"
         :collapsed="item.collapsed"
         :has-error="item.hasError"
+        :is-active="item.isActive"
         :render-markdown="renderMarkdown"
         @toggle="emit('toggleProcessGroup', item.id)"
       />

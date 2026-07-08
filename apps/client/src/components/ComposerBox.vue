@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ArrowUp, Image, Plus, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Brain, Check, ChevronDown, Image, Plus, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../text/uiText'
-import type { ImageAttachment } from '../types/conversation'
+import type { ImageAttachment, ReasoningEffort } from '../types/conversation'
+
+type ComposerReasoningEffort = 'default' | ReasoningEffort
 
 const props = defineProps<{
   attachments: ImageAttachment[]
   inputValue: string
   primaryDisabled: boolean
   primaryIsStop: boolean
+  reasoningEffort: ComposerReasoningEffort
+  reasoningOptions: ReasoningEffort[]
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +21,7 @@ const emit = defineEmits<{
   input: []
   enter: [event: KeyboardEvent]
   removeAttachment: [id: string]
+  'update:reasoningEffort': [value: ComposerReasoningEffort]
   'update:inputValue': [value: string]
 }>()
 
@@ -25,6 +30,7 @@ const composerEl = ref<HTMLFormElement | null>(null)
 const dragDepth = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
+const thinkingMenuOpen = ref(false)
 const isDraggingImage = ref(false)
 
 function resize() {
@@ -54,6 +60,19 @@ function handleInput(event: Event) {
     resize()
     emit('input')
   })
+}
+
+function reasoningLabel(value: ComposerReasoningEffort) {
+  return value === 'default' ? uiText.composer.thinkingAuto : uiText.composer.thinkingOption(value)
+}
+
+function thinkingOptions() {
+  return ['default' as const, ...props.reasoningOptions]
+}
+
+function chooseReasoning(value: ComposerReasoningEffort) {
+  thinkingMenuOpen.value = false
+  emit('update:reasoningEffort', value)
 }
 
 function imageId() {
@@ -100,14 +119,21 @@ function chooseImages() {
 }
 
 function toggleAddMenu() {
+  thinkingMenuOpen.value = false
   addMenuOpen.value = !addMenuOpen.value
 }
 
+function toggleThinkingMenu() {
+  addMenuOpen.value = false
+  thinkingMenuOpen.value = !thinkingMenuOpen.value
+}
+
 function closeAddMenuOnOutsideClick(event: PointerEvent) {
-  if (!addMenuOpen.value) return
+  if (!addMenuOpen.value && !thinkingMenuOpen.value) return
   const target = event.target
   if (target instanceof Node && composerEl.value?.contains(target)) return
   addMenuOpen.value = false
+  thinkingMenuOpen.value = false
 }
 
 onMounted(() => {
@@ -140,6 +166,7 @@ function handleDragEnter(event: DragEvent) {
   dragDepth.value += 1
   isDraggingImage.value = true
   addMenuOpen.value = false
+  thinkingMenuOpen.value = false
 }
 
 function handleDragOver(event: DragEvent) {
@@ -174,6 +201,19 @@ defineExpose({ focus, resize })
       <button type="button" @click="chooseImages">
         <Image :size="15" stroke-width="2.1" />
         <span>{{ uiText.composer.chooseImage }}</span>
+      </button>
+    </div>
+    <div v-if="thinkingMenuOpen" class="composer-option-list composer-thinking-menu">
+      <button
+        v-for="option in thinkingOptions()"
+        :key="option"
+        type="button"
+        :class="{ active: option === props.reasoningEffort }"
+        @click="chooseReasoning(option)"
+      >
+        <Check v-if="option === props.reasoningEffort" :size="14" stroke-width="2.2" />
+        <Brain v-else :size="14" stroke-width="2.1" />
+        <span>{{ reasoningLabel(option) }}</span>
       </button>
     </div>
     <div
@@ -220,6 +260,19 @@ defineExpose({ focus, resize })
             @click="toggleAddMenu"
           >
             <Plus :size="17" stroke-width="2.2" />
+          </button>
+          <button
+            v-if="props.reasoningOptions.length"
+            class="composer-thinking-action"
+            type="button"
+            :aria-label="uiText.composer.thinking"
+            :title="uiText.composer.thinking"
+            :class="{ active: thinkingMenuOpen }"
+            @click="toggleThinkingMenu"
+          >
+            <Brain :size="14" stroke-width="2.1" />
+            <span>{{ reasoningLabel(props.reasoningEffort) }}</span>
+            <ChevronDown :size="13" stroke-width="2.2" />
           </button>
           <input
             ref="fileInput"

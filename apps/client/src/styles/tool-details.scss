@@ -403,4 +403,20 @@
   white-space: pre-wrap;
 }
 
+.process-item .process-reasoning-body {
+  max-height: 220px;
+  margin: 4px 0 8px 23px;
+  padding: 5px 0 5px 10px;
+  overflow: auto;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--ink-muted), transparent 78%);
+  border-radius: 0;
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 14%);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 

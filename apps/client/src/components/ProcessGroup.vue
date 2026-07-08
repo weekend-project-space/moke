@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, Terminal } from 'lucide-vue-next'
+import { BrainCircuit, ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, Terminal } from 'lucide-vue-next'
 import type { ToolCategory, ProcessViewItem } from '../types/conversation'
 import ToolStepDetails from './ToolStepDetails.vue'
 import { uiText } from '../text/uiText'
@@ -9,6 +9,7 @@ defineProps<{
   items: ProcessViewItem[]
   collapsed: boolean
   hasError: boolean
+  isActive?: boolean
   renderMarkdown: (content: string) => string
 }>()
 
@@ -36,6 +37,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
         v-for="processItem in items"
         :key="processItem.id"
         class="process-item"
+        :open="processItem.kind === 'reasoning' && isActive"
         :class="[
           processItem.tone,
           processItem.kind,
@@ -44,6 +46,17 @@ function iconKind(step: { toolCategory: ToolCategory }) {
       >
         <summary v-if="processItem.kind === 'assistant'" class="process-assistant-summary">
           <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
+        </summary>
+        <summary v-else-if="processItem.kind === 'reasoning'" class="process-reasoning-summary">
+          <span class="process-tool-icon" aria-hidden="true">
+            <BrainCircuit :size="14" stroke-width="1.8" />
+          </span>
+          <span class="process-tool-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
+          <small v-if="processItem.detail" class="process-tool-detail">{{ processItem.detail }}</small>
+          <span class="process-step-caret" aria-hidden="true">
+            <ChevronRight class="when-closed" :size="15" stroke-width="2" />
+            <ChevronDown class="when-open" :size="15" stroke-width="2" />
+          </span>
         </summary>
         <summary v-else-if="processItem.kind === 'tool-step' || processItem.kind === 'tool-batch'" class="process-tool-step-summary">
           <span class="process-tool-icon" aria-hidden="true">
@@ -68,6 +81,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <small class="process-tool-detail">{{ processItem.objectLabel || processItem.detail }}</small>
         </summary>
         <ToolStepDetails v-if="processItem.kind === 'tool-step'" :step="processItem" />
+        <pre v-else-if="processItem.kind === 'reasoning' && processItem.raw" class="process-reasoning-body">{{ processItem.raw }}</pre>
         <div v-else-if="processItem.kind === 'tool-batch'" class="process-batch-list">
           <details
             v-for="step in processItem.steps"

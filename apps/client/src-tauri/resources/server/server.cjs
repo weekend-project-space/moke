@@ -84885,6 +84885,9 @@ var RunManager = class {
         input: input.content,
         attachments: input.attachments,
         history,
+        options: {
+          reasoningEffort: options.reasoningEffort
+        },
         eventBus,
         toolRegistry: this.config.toolRegistry,
         context: {
@@ -85052,12 +85055,12 @@ var RunManager = class {
     run.status = "running";
     this.config.onChange?.();
     const scope = options.scope || "session";
-    const cleanup = decision === "approved" && pendingApproval.kind === "workspace_path" && pendingApproval.suggested_root ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope) : void 0;
+    const cleanupResult = decision === "approved" && pendingApproval.kind === "workspace_path" && pendingApproval.suggested_root ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope) : void 0;
     pending.resolve({
       approved: decision === "approved",
       scope,
       message: options.message,
-      cleanup
+      cleanup: typeof cleanupResult === "function" ? cleanupResult : void 0
     });
     return { status: 200, run };
   }
@@ -85292,7 +85295,8 @@ You may answer directly when no tool is needed.
 If you have used any tool observation in this run, only calling finish ends the current run.
 Do not call project tools for greetings, small talk, or self-introduction; answer directly.
 Use tools only when the user asks about project files, code, docs, or local context.
-Do not include hidden reasoning, chain-of-thought, or <think> blocks.
+Do not include hidden reasoning, chain-of-thought, or <think> blocks in the final answer.
+If the provider exposes reasoning separately, keep it separate from the final answer.
 
 Available tools:
 ${customToolList || "None"}
@@ -85313,12 +85317,13 @@ function createSystemMessage(runtimeTools, context2) {
 
 ${extraContext}`);
 }
-function createFinalMessage(content) {
+function createFinalMessage(content, reasoning) {
   return {
     id: `msg_${Date.now()}`,
     role: "assistant",
     content,
-    created_at: (/* @__PURE__ */ new Date()).toISOString()
+    created_at: (/* @__PURE__ */ new Date()).toISOString(),
+    ...reasoning?.trim() ? { reasoning: reasoning.trim() } : {}
   };
 }
 function createUserContent(content, attachments = []) {
@@ -85396,6 +85401,82 @@ function getMessageText(message) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content.map((item) => "text" in item ? item.text : "").join("\n");
+}
+function collectReasoningValue(value) {
+  if (!value) return [];
+  if (typeof value === "string") return value ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(collectReasoningValue);
+  if (typeof value !== "object") return [];
+  const record2 = value;
+  return [
+    ...collectReasoningValue(record2.reasoning),
+    ...collectReasoningValue(record2.reasoning_content),
+    ...collectReasoningValue(record2.reasoningText),
+    ...collectReasoningValue(record2.thinking),
+    ...collectReasoningValue(record2.text),
+    ...collectReasoningValue(record2.summary)
+  ];
+}
+function getReasoningText(message) {
+  const chunks = [];
+  const content = message.content;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (!item || typeof item !== "object") continue;
+      const record2 = item;
+      if (record2.type === "reasoning" || record2.type === "reasoning_content" || record2.type === "thinking" || record2.type === "reasoning_text") {
+        chunks.push(...collectReasoningValue(record2));
+      }
+    }
+  }
+  const messageRecord = message;
+  chunks.push(...collectReasoningValue(messageRecord.additional_kwargs));
+  chunks.push(...collectReasoningValue(messageRecord.response_metadata));
+  return chunks.map((chunk) => chunk.trim()).filter(Boolean).join("\n");
+}
+function partialTagSuffixLength(text, tag) {
+  const max = Math.min(text.length, tag.length - 1);
+  for (let length = max; length > 0; length--) {
+    if (tag.startsWith(text.slice(-length))) return length;
+  }
+  return 0;
+}
+function createThinkTagSplitter() {
+  let inThink = false;
+  let pending = "";
+  function consume(input) {
+    let text = pending + input;
+    pending = "";
+    let content = "";
+    let reasoning = "";
+    while (text) {
+      const tag = inThink ? "</think>" : "<think>";
+      const index2 = text.indexOf(tag);
+      if (index2 >= 0) {
+        if (inThink) reasoning += text.slice(0, index2);
+        else content += text.slice(0, index2);
+        text = text.slice(index2 + tag.length);
+        inThink = !inThink;
+        continue;
+      }
+      const keep = partialTagSuffixLength(text, tag);
+      const stable = keep ? text.slice(0, -keep) : text;
+      pending = keep ? text.slice(-keep) : "";
+      if (inThink) reasoning += stable;
+      else content += stable;
+      text = "";
+    }
+    return { content, reasoning };
+  }
+  function flush() {
+    const output = inThink ? { content: "", reasoning: pending } : { content: pending, reasoning: "" };
+    pending = "";
+    return output;
+  }
+  return { consume, flush };
+}
+function stripThinkBlocks(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 function isAI(message) {
   return AIMessage.isInstance(message);
@@ -100056,6 +100137,46 @@ init_tools2();
 init_singletons();
 
 // packages/agent-re-act/src/llm-client.ts
+function normalizeReasoningEffort(input) {
+  return input === "off" || input === "low" || input === "medium" || input === "high" || input === "ultra" ? input : "medium";
+}
+function normalizeReasoningProvider(input) {
+  return input === "llama.cpp" ? input : "none";
+}
+function normalizeBoolean(input, fallback = false) {
+  if (typeof input === "boolean") return input;
+  if (input === "true") return true;
+  if (input === "false") return false;
+  return fallback;
+}
+function llamaCppThinkingBudget(reasoningEffort) {
+  switch (reasoningEffort) {
+    case "low":
+      return 256;
+    case "medium":
+      return 512;
+    case "high":
+      return 1024;
+    case "ultra":
+      return 2048;
+    default:
+      return 0;
+  }
+}
+function createModelKwargs(settings) {
+  if (settings.reasoningProvider !== "llama.cpp") return {};
+  const enableThinking = settings.reasoningEffort !== "off";
+  return {
+    return_progress: settings.showRawReasoning && enableThinking,
+    reasoning_format: "auto",
+    chat_template_kwargs: {
+      enable_thinking: enableThinking
+    },
+    thinking_budget_tokens: llamaCppThinkingBudget(settings.reasoningEffort),
+    reasoning_control: true,
+    backend_sampling: false
+  };
+}
 function normalizeMaxRetries(input) {
   const maxRetries = Number(input);
   const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : 3;
@@ -100067,6 +100188,9 @@ function resolveChatModelSettings(input = {}) {
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || "http://localhost:8080/v1",
     maxRetries: normalizeMaxRetries(input.maxRetries ?? process.env.OPENAI_MAX_RETRIES),
     model: input.model || process.env.OPENAI_MODEL || "qwen3.6-35BA3B",
+    reasoningEffort: normalizeReasoningEffort(input.reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT),
+    reasoningProvider: normalizeReasoningProvider(input.reasoningProvider ?? process.env.OPENAI_REASONING_PROVIDER),
+    showRawReasoning: normalizeBoolean(input.showRawReasoning ?? process.env.OPENAI_SHOW_RAW_REASONING),
     timeoutMs: input.timeoutMs || Number(process.env.OPENAI_TIMEOUT_MS || 30 * 60 * 1e3)
   };
 }
@@ -100079,6 +100203,7 @@ function createChatModel(input = {}) {
     apiKey: settings.apiKey,
     maxRetries: settings.maxRetries,
     model: settings.model,
+    modelKwargs: createModelKwargs(settings),
     temperature: 0,
     timeout: settings.timeoutMs,
     configuration: {
@@ -100153,15 +100278,33 @@ function toToolCallArgs(args) {
 }
 async function streamModelStep(input) {
   const chunks = [];
+  const thinkTags = createThinkTagSplitter();
+  let previousReasoningText = "";
+  let reasoning = "";
+  function emitReasoning(content) {
+    if (!content || !input.showRawReasoning) return;
+    reasoning += content;
+    input.eventBus.emit("agent.message.delta", { channel: "reasoning", content });
+  }
   await withTimeout(
     (async () => {
       const stream = await input.model.stream(input.messages, { signal: input.signal });
       for await (const chunk of stream) {
         throwIfAborted(input.signal);
         chunks.push(chunk);
-        const content = getMessageText(chunk);
-        if (content) input.eventBus.emit("agent.message.delta", { content });
+        const reasoningText = getReasoningText(chunk);
+        if (reasoningText && input.showRawReasoning) {
+          const reasoningDelta = reasoningText.startsWith(previousReasoningText) ? reasoningText.slice(previousReasoningText.length) : reasoningText;
+          previousReasoningText = reasoningText.startsWith(previousReasoningText) ? reasoningText : `${previousReasoningText}${reasoningText}`;
+          emitReasoning(reasoningDelta);
+        }
+        const split = thinkTags.consume(getMessageText(chunk));
+        emitReasoning(split.reasoning);
+        if (split.content) input.eventBus.emit("agent.message.delta", { channel: "answer", content: split.content });
       }
+      const flushed = thinkTags.flush();
+      emitReasoning(flushed.reasoning);
+      if (flushed.content) input.eventBus.emit("agent.message.delta", { channel: "answer", content: flushed.content });
     })(),
     input.timeoutMs,
     input.signal
@@ -100169,7 +100312,10 @@ async function streamModelStep(input) {
   if (chunks.length === 0) {
     throw new Error("LLM stream completed without output");
   }
-  return chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]);
+  return {
+    message: chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]),
+    reasoning
+  };
 }
 var ReActAgent = class {
   constructor(config2 = {}) {
@@ -100183,9 +100329,13 @@ var ReActAgent = class {
     eventBus,
     toolRegistry,
     context: context2,
-    limits: rawLimits
+    limits: rawLimits,
+    options: rawOptions = {}
   }) {
-    const modelSettings = resolveChatModelSettings(this.config.getModelSettings?.());
+    const modelSettings = {
+      ...resolveChatModelSettings(this.config.getModelSettings?.()),
+      ...rawOptions.reasoningEffort ? { reasoningEffort: rawOptions.reasoningEffort } : {}
+    };
     if (!modelSettings.apiKey) {
       throw new Error("OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.");
     }
@@ -100205,6 +100355,7 @@ var ReActAgent = class {
     let finalContent = "";
     let finalContentStreamed = false;
     let hasObservation = false;
+    let accumulatedReasoning = "";
     eventBus.emit("agent.started", { input });
     eventBus.emit("agent.plan", {
       mode: "react",
@@ -100216,18 +100367,21 @@ var ReActAgent = class {
       throwIfAborted(context2.abortSignal);
       eventBus.emit("agent.state", { state: "reason" });
       messages[0] = createSystemMessage(runtimeTools, context2);
-      const aiMessage = await streamModelStep({
+      const stepResult = await streamModelStep({
         eventBus,
         messages,
         model: modelWithTools,
+        showRawReasoning: modelSettings.showRawReasoning,
         signal: context2.abortSignal,
         timeoutMs
       });
+      const aiMessage = stepResult.message;
+      accumulatedReasoning += stepResult.reasoning;
       throwIfAborted(context2.abortSignal);
       messages.push(aiMessage);
       const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
       if (calls.length === 0) {
-        const content2 = getMessageText(aiMessage).trim();
+        const content2 = stripThinkBlocks(getMessageText(aiMessage));
         finalContent = content2 || "\u6211\u6682\u65F6\u6CA1\u6709\u66F4\u591A\u53EF\u8865\u5145\u7684\u4FE1\u606F\u3002";
         finalContentStreamed = Boolean(content2);
         break;
@@ -100246,7 +100400,7 @@ var ReActAgent = class {
           message: {
             id: messageId(),
             role: "assistant",
-            content: getMessageText(aiMessage).trim(),
+            content: stripThinkBlocks(getMessageText(aiMessage)),
             created_at: now2(),
             tool_calls: persistedToolCalls
           }
@@ -100272,7 +100426,7 @@ var ReActAgent = class {
         const startedAt = Date.now();
         try {
           if (isFinishCall) {
-            finalContent = readFinishContent(call3.args || {});
+            finalContent = stripThinkBlocks(readFinishContent(call3.args || {}));
             const output2 = {
               status: "finished",
               content: finalContent
@@ -100364,9 +100518,9 @@ var ReActAgent = class {
       finalContent = createStepLimitContent(hasObservation);
     }
     const content = finalContent;
-    const message = createFinalMessage(content);
+    const message = createFinalMessage(content, accumulatedReasoning);
     eventBus.emit("agent.state", { state: "respond" });
-    if (!finalContentStreamed) eventBus.emit("agent.message.delta", { content });
+    if (!finalContentStreamed) eventBus.emit("agent.message.delta", { channel: "answer", content });
     eventBus.emit("agent.message.done", { message });
     return { toolCalls, message };
   }
@@ -105960,13 +106114,19 @@ function registerSessionRoutes(router) {
     });
     session.updated_at = createdAt;
     const options = requestBody.options && typeof requestBody.options === "object" ? requestBody.options : {};
-    const run = context2.runManager.createRun(session, { content, attachments }, options);
+    const run = context2.runManager.createRun(session, { content, attachments }, {
+      ...options,
+      reasoningEffort: normalizeRunReasoningEffort(options.reasoningEffort)
+    });
     return json3(200, {
       run_id: run.id,
       session_id: session.id,
       events_url: `/api/runs/${run.id}/events`
     });
   });
+}
+function normalizeRunReasoningEffort(input) {
+  return input === "off" || input === "low" || input === "medium" || input === "high" || input === "ultra" ? input : void 0;
 }
 var MAX_IMAGE_ATTACHMENTS = 4;
 var MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
@@ -110067,6 +110227,9 @@ var MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1e3;
 var MODEL_PROVIDER_MAX_RETRIES_MIN = 0;
 var MODEL_PROVIDER_MAX_RETRIES_MAX = 6;
 var MODEL_PROVIDER_MAX_RETRIES_DEFAULT = 3;
+var MODEL_PROVIDER_REASONING_EFFORT_DEFAULT = "medium";
+var MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT = "none";
+var MODEL_PROVIDER_SHOW_RAW_REASONING_DEFAULT = false;
 var MODEL_PROVIDER_DEFAULT_NAME = "Local Qwen";
 var MODEL_PROVIDER_DEFAULT_API_KEY = "test";
 var MODEL_PROVIDER_DEFAULT_BASE_URL = "http://localhost:8080/v1";
@@ -110084,6 +110247,18 @@ function normalizeProviderMaxRetries(input, fallback = MODEL_PROVIDER_MAX_RETRIE
   const normalized = Number.isFinite(maxRetries) ? Math.trunc(maxRetries) : fallback;
   return Math.max(MODEL_PROVIDER_MAX_RETRIES_MIN, Math.min(normalized, MODEL_PROVIDER_MAX_RETRIES_MAX));
 }
+function normalizeProviderReasoningEffort(input, fallback = MODEL_PROVIDER_REASONING_EFFORT_DEFAULT) {
+  return input === "off" || input === "low" || input === "medium" || input === "high" || input === "ultra" ? input : fallback;
+}
+function normalizeProviderReasoningProvider(input, fallback = MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT) {
+  return input === "llama.cpp" ? input : fallback;
+}
+function normalizeProviderShowRawReasoning(input, fallback = MODEL_PROVIDER_SHOW_RAW_REASONING_DEFAULT) {
+  if (typeof input === "boolean") return input;
+  if (input === "true") return true;
+  if (input === "false") return false;
+  return fallback;
+}
 function defaultProvider() {
   return {
     id: createProviderId(),
@@ -110093,6 +110268,9 @@ function defaultProvider() {
     apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
     maxRetries: normalizeProviderMaxRetries(process.env.OPENAI_MAX_RETRIES),
     model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
+    reasoningEffort: normalizeProviderReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
+    reasoningProvider: normalizeProviderReasoningProvider(process.env.OPENAI_REASONING_PROVIDER),
+    showRawReasoning: normalizeProviderShowRawReasoning(process.env.OPENAI_SHOW_RAW_REASONING),
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS)
   };
 }
@@ -110102,6 +110280,9 @@ function providerToModelSettings(provider) {
     apiBaseUrl: provider.apiBaseUrl,
     maxRetries: provider.maxRetries,
     model: provider.model,
+    reasoningEffort: provider.reasoningEffort,
+    reasoningProvider: provider.reasoningProvider,
+    showRawReasoning: provider.showRawReasoning,
     timeoutMs: provider.timeoutMs
   };
 }
@@ -110115,6 +110296,9 @@ function normalizeProvider(input = {}, fallback = defaultProvider()) {
     apiBaseUrl: typeof input.apiBaseUrl === "string" && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     maxRetries: normalizeProviderMaxRetries(input.maxRetries, fallback.maxRetries),
     model: typeof input.model === "string" && input.model.trim() ? input.model.trim() : fallback.model,
+    reasoningEffort: normalizeProviderReasoningEffort(input.reasoningEffort, fallback.reasoningEffort),
+    reasoningProvider: normalizeProviderReasoningProvider(input.reasoningProvider, fallback.reasoningProvider),
+    showRawReasoning: normalizeProviderShowRawReasoning(input.showRawReasoning, fallback.showRawReasoning),
     timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs)
   };
 }
@@ -110164,9 +110348,15 @@ var SettingsService = class {
   settingsPath;
   settings;
   get() {
+    const activeProvider = this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
     return {
       activeProviderId: this.settings.activeProviderId,
-      providers: this.settings.providers.map((provider) => ({ ...provider }))
+      providers: this.settings.providers.map((provider) => ({ ...provider })),
+      reasoningCapability: {
+        efforts: ["off", "low", "medium", "high", "ultra"],
+        rawSupported: activeProvider?.reasoningProvider === "llama.cpp",
+        supported: activeProvider?.reasoningProvider === "llama.cpp"
+      }
     };
   }
   getModelSettings() {
@@ -110278,9 +110468,11 @@ function loadState({ statePath, sessions, runs }) {
       runs.set(storedRun.id, {
         ...storedRun,
         status,
-        abort: status === "failed" ? true : storedRun.abort,
+        abort: status === "failed" ? true : storedRun.abort === true,
         pending_ask: void 0,
-        clients: /* @__PURE__ */ new Set()
+        pending_approval: void 0,
+        clients: /* @__PURE__ */ new Set(),
+        started_at: storedRun.started_at || Date.now()
       });
     }
   } catch (error51) {
@@ -110297,7 +110489,7 @@ function createStateSaver({ statePath, sessions, runs }) {
     saveTimer = void 0;
     const state = {
       sessions: [...sessions.values()],
-      runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run)
+      runs: [...runs.values()].map(({ clients, pending_ask, pending_approval, ...run }) => run)
     };
     try {
       (0, import_node_fs7.mkdirSync)((0, import_node_path11.dirname)(statePath), { recursive: true });

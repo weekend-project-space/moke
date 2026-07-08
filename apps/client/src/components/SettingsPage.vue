@@ -18,6 +18,9 @@ type ModelProviderProfile = {
   apiKey: string
   maxRetries: number
   timeoutMs: number
+  reasoningEffort: 'off' | 'low' | 'medium' | 'high' | 'ultra'
+  reasoningProvider: 'none' | 'llama.cpp'
+  showRawReasoning: boolean
 }
 
 type BrowserSettings = {
@@ -65,12 +68,18 @@ const modelTest = ref<'idle' | 'checking' | 'ok' | 'error'>('idle')
 const modelTestMessage = ref('')
 const modelListMessage = ref('')
 const selectedProvider = computed(() => providers.value.find((provider) => provider.id === selectedProviderId.value) || null)
+const isLlamaCppReasoning = computed(() => editingProvider.reasoningProvider === 'llama.cpp')
 const editingTimeoutSeconds = computed({
   get: () => Math.round(editingProvider.timeoutMs / 1000),
   set: (value: number) => {
     editingProvider.timeoutMs = Math.max(1, Math.min(Math.trunc(Number(value) || 1), 3600)) * 1000
   },
 })
+const advancedPreview = computed(() =>
+  isLlamaCppReasoning.value
+    ? uiText.settings.retriesPreview(editingTimeoutSeconds.value, editingProvider.maxRetries, editingProvider.reasoningEffort)
+    : uiText.settings.standardPreview(editingTimeoutSeconds.value, editingProvider.maxRetries),
+)
 
 function createProvider(): ModelProviderProfile {
   return {
@@ -81,14 +90,28 @@ function createProvider(): ModelProviderProfile {
     apiBaseUrl: 'http://localhost:8080/v1',
     maxRetries: 3,
     model: 'qwen3.6-35BA3B',
+    reasoningEffort: 'medium',
+    reasoningProvider: 'none',
+    showRawReasoning: false,
     timeoutMs: 30 * 60 * 1000,
   }
+}
+
+function normalizeReasoningEffort(input: unknown): ModelProviderProfile['reasoningEffort'] {
+  return input === 'off' || input === 'low' || input === 'high' || input === 'ultra' ? input : 'medium'
+}
+
+function normalizeReasoningProvider(input: unknown): ModelProviderProfile['reasoningProvider'] {
+  return input === 'llama.cpp' ? input : 'none'
 }
 
 function copyProvider(provider: ModelProviderProfile) {
   Object.assign(editingProvider, {
     ...provider,
     maxRetries: Number.isFinite(Number(provider.maxRetries)) ? provider.maxRetries : 3,
+    reasoningEffort: normalizeReasoningEffort(provider.reasoningEffort),
+    reasoningProvider: normalizeReasoningProvider(provider.reasoningProvider),
+    showRawReasoning: Boolean(provider.showRawReasoning),
   })
 }
 
@@ -358,7 +381,7 @@ onMounted(() => {
           <details class="settings-advanced">
             <summary>
               <span>{{ uiText.settings.advanced }}</span>
-              <small>{{ uiText.settings.retriesPreview(editingTimeoutSeconds, editingProvider.maxRetries) }}</small>
+              <small>{{ advancedPreview }}</small>
             </summary>
             <label class="settings-row">
               <span>{{ uiText.settings.timeout }}</span>
@@ -372,6 +395,36 @@ onMounted(() => {
               <div class="settings-stacked-control">
                 <input v-model.number="editingProvider.maxRetries" type="number" min="0" :max="MODEL_PROVIDER_MAX_RETRIES_MAX" step="1" />
                 <small>{{ uiText.settings.retriesHint }}</small>
+              </div>
+            </label>
+            <label class="settings-row">
+              <span>{{ uiText.settings.reasoningProvider }}</span>
+              <div class="settings-stacked-control">
+                <select v-model="editingProvider.reasoningProvider">
+                  <option value="none">{{ uiText.settings.reasoningProviderNone }}</option>
+                  <option value="llama.cpp">{{ uiText.settings.reasoningProviderLlamaCpp }}</option>
+                </select>
+                <small>{{ uiText.settings.reasoningProviderHint }}</small>
+              </div>
+            </label>
+            <label v-if="isLlamaCppReasoning" class="settings-row">
+              <span>{{ uiText.settings.reasoning }}</span>
+              <div class="settings-stacked-control">
+                <select v-model="editingProvider.reasoningEffort">
+                  <option value="off">{{ uiText.settings.reasoningOff }}</option>
+                  <option value="low">{{ uiText.settings.reasoningLow }}</option>
+                  <option value="medium">{{ uiText.settings.reasoningMedium }}</option>
+                  <option value="high">{{ uiText.settings.reasoningHigh }}</option>
+                  <option value="ultra">{{ uiText.settings.reasoningUltra }}</option>
+                </select>
+                <small>{{ uiText.settings.reasoningHint }}</small>
+              </div>
+            </label>
+            <label v-if="isLlamaCppReasoning" class="settings-row">
+              <span>{{ uiText.settings.showRawReasoning }}</span>
+              <div class="settings-stacked-control">
+                <input v-model="editingProvider.showRawReasoning" type="checkbox" />
+                <small>{{ uiText.settings.showRawReasoningHint }}</small>
               </div>
             </label>
           </details>

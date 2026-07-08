@@ -173,7 +173,8 @@
   display: flex;
   min-height: 39px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
   padding: 0 8px 8px 12px;
 }
 
@@ -185,6 +186,31 @@
 .composer-secondary-action.active {
   color: var(--ink);
   background: var(--surface-panel-muted);
+}
+
+.composer button.composer-thinking-action {
+  width: auto;
+  min-width: 0;
+  gap: 5px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-soft);
+  background: transparent;
+
+  span {
+    max-width: 76px;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    font-weight: 430;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover,
+  &.active {
+    color: var(--ink);
+    background: var(--surface-panel-muted);
+  }
 }
 
 .composer-option-list {
@@ -236,6 +262,11 @@
   padding: 0 10px;
   background: transparent;
   box-shadow: none;
+}
+
+.composer-thinking-menu button.active {
+  color: var(--ink);
+  background: var(--surface-control-hover);
 }
 
 .queued-message-panel {
@@ -425,6 +456,7 @@
 
 .composer button {
   @include icon-control(30px, var(--radius-pill), var(--surface-panel-muted));
+  background: none;
   flex: 0 0 auto;
   cursor: pointer;
   transition:
@@ -439,6 +471,7 @@
 }
 
 .composer button.primary-action {
+  margin-left: auto;
   color: var(--surface-solid);
   background: var(--primary);
   box-shadow: none;

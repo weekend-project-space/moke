@@ -1,5 +1,5 @@
 import { ReActAgent } from '../../../packages/agent-re-act/src/index.js';
-import { RunManager, ToolRegistry } from '../../../packages/agent-runtime/src/index.js';
+import { RunManager, ToolRegistry, type RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
 import { LocalSystemBackend, registerAgentTools } from '../../../packages/agent-tools/src/index.js';
 import {
   ContentManager,
@@ -9,7 +9,7 @@ import {
 } from '../../../packages/agent-skills/src/index.js';
 import { registerBrowserTools } from '../../../packages/browser-tools/src/index.js';
 import type { ChatModelSettings } from '../../../packages/agent-re-act/src/llm-client.js';
-import type { Run, Session } from '../../../packages/protocol/src/index.js';
+import type { Session } from '../../../packages/protocol/src/index.js';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
 
 export function createToolRegistry(workspace: string, browserBridge: BrowserBridge) {
@@ -27,7 +27,7 @@ export function createToolRegistry(workspace: string, browserBridge: BrowserBrid
 }
 
 export function createRunManager(input: {
-  runs: Map<string, Run>;
+  runs: Map<string, RuntimeRun>;
   sessions: Map<string, Session>;
   toolRegistry: ToolRegistry;
   workspace: string;

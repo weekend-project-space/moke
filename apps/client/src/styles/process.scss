@@ -121,6 +121,26 @@
     }
   }
 
+  &.reasoning {
+    margin: 3px 0 6px;
+
+    .process-tool-icon,
+    .process-tool-title,
+    .process-tool-detail,
+    .process-step-caret {
+      color: color-mix(in srgb, var(--ink-muted), transparent 14%);
+    }
+
+    &:hover {
+      .process-tool-icon,
+      .process-tool-title,
+      .process-tool-detail,
+      .process-step-caret {
+        color: color-mix(in srgb, var(--ink-soft), transparent 8%);
+      }
+    }
+  }
+
   &.error {
     .process-tool-title,
     .process-tool-detail {
@@ -147,6 +167,22 @@
   }
 
   .process-tool-detail {
+    text-align: left;
+  }
+}
+
+.process-reasoning-summary {
+  display: inline-flex;
+  max-width: 100%;
+  column-gap: 6px;
+  align-items: center;
+
+  .process-tool-title {
+    flex: 0 0 auto;
+  }
+
+  .process-tool-detail {
+    flex: 1 1 auto;
     text-align: left;
   }
 }

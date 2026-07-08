@@ -1,9 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { Run, Session } from '../../../packages/protocol/src/index.js';
+import type { RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
+import type { RunSnapshot, Session } from '../../../packages/protocol/src/index.js';
 
-type StoredRun = Omit<Run, 'clients'>;
+type StoredRun = RunSnapshot & {
+  started_at?: number;
+  abort?: boolean;
+};
 
 type StoredState = {
   sessions: Session[];
@@ -13,7 +17,7 @@ type StoredState = {
 type StateStoreInput = {
   statePath: string;
   sessions: Map<string, Session>;
-  runs: Map<string, Run>;
+  runs: Map<string, RuntimeRun>;
 };
 
 export function loadState({ statePath, sessions, runs }: StateStoreInput) {
@@ -34,9 +38,11 @@ export function loadState({ statePath, sessions, runs }: StateStoreInput) {
       runs.set(storedRun.id, {
         ...storedRun,
         status,
-        abort: status === 'failed' ? true : storedRun.abort,
+        abort: status === 'failed' ? true : storedRun.abort === true,
         pending_ask: undefined,
+        pending_approval: undefined,
         clients: new Set(),
+        started_at: storedRun.started_at || Date.now(),
       });
     }
   } catch (error) {
@@ -56,7 +62,7 @@ export function createStateSaver({ statePath, sessions, runs }: StateStoreInput)
     saveTimer = undefined;
     const state: StoredState = {
       sessions: [...sessions.values()],
-      runs: [...runs.values()].map(({ clients, pending_ask, ...run }) => run),
+      runs: [...runs.values()].map(({ clients, pending_ask, pending_approval, ...run }) => run),
     };
 
     try {

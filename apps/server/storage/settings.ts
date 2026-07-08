@@ -14,6 +14,9 @@ export type ModelProviderProfile = {
   apiBaseUrl: string;
   maxRetries: number;
   model: string;
+  reasoningEffort: ChatModelSettings['reasoningEffort'];
+  reasoningProvider: ChatModelSettings['reasoningProvider'];
+  showRawReasoning: boolean;
   timeoutMs: number;
 };
 
@@ -30,6 +33,9 @@ export type ModelProviderInput = {
   apiBaseUrl?: unknown;
   maxRetries?: unknown;
   model?: unknown;
+  reasoningEffort?: unknown;
+  reasoningProvider?: unknown;
+  showRawReasoning?: unknown;
   timeoutMs?: unknown;
 };
 
@@ -44,6 +50,9 @@ export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1000;
 export const MODEL_PROVIDER_MAX_RETRIES_MIN = 0;
 export const MODEL_PROVIDER_MAX_RETRIES_MAX = 6;
 export const MODEL_PROVIDER_MAX_RETRIES_DEFAULT = 3;
+export const MODEL_PROVIDER_REASONING_EFFORT_DEFAULT: ChatModelSettings['reasoningEffort'] = 'medium';
+export const MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT: ChatModelSettings['reasoningProvider'] = 'none';
+export const MODEL_PROVIDER_SHOW_RAW_REASONING_DEFAULT = false;
 export const MODEL_PROVIDER_DEFAULT_NAME = 'Local Qwen';
 export const MODEL_PROVIDER_DEFAULT_API_KEY = 'test';
 export const MODEL_PROVIDER_DEFAULT_BASE_URL = 'http://localhost:8080/v1';
@@ -65,6 +74,32 @@ export function normalizeProviderMaxRetries(input: unknown, fallback = MODEL_PRO
   return Math.max(MODEL_PROVIDER_MAX_RETRIES_MIN, Math.min(normalized, MODEL_PROVIDER_MAX_RETRIES_MAX));
 }
 
+export function normalizeProviderReasoningEffort(
+  input: unknown,
+  fallback = MODEL_PROVIDER_REASONING_EFFORT_DEFAULT,
+): ChatModelSettings['reasoningEffort'] {
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
+    ? input
+    : fallback;
+}
+
+export function normalizeProviderReasoningProvider(
+  input: unknown,
+  fallback = MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT,
+): ChatModelSettings['reasoningProvider'] {
+  return input === 'llama.cpp' ? input : fallback;
+}
+
+export function normalizeProviderShowRawReasoning(
+  input: unknown,
+  fallback = MODEL_PROVIDER_SHOW_RAW_REASONING_DEFAULT,
+) {
+  if (typeof input === 'boolean') return input;
+  if (input === 'true') return true;
+  if (input === 'false') return false;
+  return fallback;
+}
+
 function defaultProvider(): ModelProviderProfile {
   return {
     id: createProviderId(),
@@ -74,6 +109,9 @@ function defaultProvider(): ModelProviderProfile {
     apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
     maxRetries: normalizeProviderMaxRetries(process.env.OPENAI_MAX_RETRIES),
     model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
+    reasoningEffort: normalizeProviderReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
+    reasoningProvider: normalizeProviderReasoningProvider(process.env.OPENAI_REASONING_PROVIDER),
+    showRawReasoning: normalizeProviderShowRawReasoning(process.env.OPENAI_SHOW_RAW_REASONING),
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS),
   };
 }
@@ -84,6 +122,9 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
     apiBaseUrl: provider.apiBaseUrl,
     maxRetries: provider.maxRetries,
     model: provider.model,
+    reasoningEffort: provider.reasoningEffort,
+    reasoningProvider: provider.reasoningProvider,
+    showRawReasoning: provider.showRawReasoning,
     timeoutMs: provider.timeoutMs,
   };
 }
@@ -99,6 +140,9 @@ export function normalizeProvider(input: ModelProviderInput = {}, fallback = def
     apiBaseUrl: typeof input.apiBaseUrl === 'string' && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     maxRetries: normalizeProviderMaxRetries(input.maxRetries, fallback.maxRetries),
     model: typeof input.model === 'string' && input.model.trim() ? input.model.trim() : fallback.model,
+    reasoningEffort: normalizeProviderReasoningEffort(input.reasoningEffort, fallback.reasoningEffort),
+    reasoningProvider: normalizeProviderReasoningProvider(input.reasoningProvider, fallback.reasoningProvider),
+    showRawReasoning: normalizeProviderShowRawReasoning(input.showRawReasoning, fallback.showRawReasoning),
     timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs),
   };
 }

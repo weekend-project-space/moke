@@ -1,4 +1,4 @@
-import type { Run } from '../../../packages/protocol/src/index.js';
+import type { RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';
@@ -76,7 +76,7 @@ function getRun(context: RoutesContext, id: string) {
 
 function handleChoose(
   context: RoutesContext,
-  run: Run,
+  run: RuntimeRun,
   body: Record<string, unknown>,
   json: (status: number, body: unknown) => void,
 ) {
@@ -104,7 +104,7 @@ function handleChoose(
 
 function handleApprove(
   context: RoutesContext,
-  run: Run,
+  run: RuntimeRun,
   body: Record<string, unknown>,
   json: (status: number, body: unknown) => void,
 ) {

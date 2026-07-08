@@ -43,8 +43,19 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     const callsById = new Map<string, AgentEvent>()
     let completedTools = 0
     let latestToolTime = 0
+    let reasoningText = ''
+    let reasoningTime = 0
 
     for (const event of options.events.value) {
+      if (event.type === 'agent.message.delta' && event.payload.channel === 'reasoning') {
+        const content = typeof event.payload.content === 'string' ? event.payload.content : ''
+        if (content) {
+          reasoningText += content
+          reasoningTime = reasoningTime || parseEventTime(event)
+        }
+        continue
+      }
+
       if (event.type === 'tool.call') {
         callsById.set(String(event.payload.call_id || event.id), event)
         latestToolTime = parseEventTime(event) || latestToolTime
@@ -85,6 +96,16 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       }
     }
 
+    if (reasoningText.trim()) {
+      notes.push({
+        id: 'process-reasoning',
+        label: shortText(reasoningText, 96),
+        raw: reasoningText.trim(),
+        tone: 'neutral',
+        time: reasoningTime,
+      })
+    }
+
     const latestActivity = latestProcessActivity(
       callsById,
       completedTools,
@@ -99,6 +120,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
   const displayItems = computed<DisplayItem[]>(() => {
     const items: DisplayItem[] = []
+    const reasoningNote = processNotes.value.find((note) => note.raw)
     const sourceMessages = options.messages.value.filter(
       (message) => message.role !== 'tool' || Boolean(message.content.trim()),
     )
@@ -127,7 +149,8 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (processItems.length) {
         const isCurrentTurn = options.isRunning.value && nextTime === 0
         const groupId = `process-turn-${turnIndex}`
-        const processGroup = createProcessGroupView(processItems)
+        const nextProcessItems = isCurrentTurn && reasoningNote ? [...processItems, createEventProcessItem(reasoningNote)] : processItems
+        const processGroup = createProcessGroupView(sortProcessItemsByTime(nextProcessItems))
         const startedAt = turnStartedAt || processGroup.startedAt
         const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
         if (isCurrentTurn) hasActiveMessageProcessGroup = true
@@ -201,6 +224,9 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
       if (message.content.trim()) {
         movePendingFinalToProcess()
+        if (message.reasoning?.trim()) {
+          processItems.push(createReasoningProcessItem(message, `message-${index}`))
+        }
         pendingFinalMessage = { id: `message-${index}`, message }
         if (time) turnEndedAt = time
       }
@@ -214,7 +240,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       !hasActiveMessageProcessGroup
     ) {
       const groupId = 'process-current-events'
-      const itemsFromEvents = processNotes.value.map(createEventProcessItem)
+      const itemsFromEvents = sortProcessItemsByTime(processNotes.value.map(createEventProcessItem))
       const processGroup = createProcessGroupView(itemsFromEvents)
       const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
       const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
@@ -278,6 +304,20 @@ function parseEventTime(event: AgentEvent) {
   return Number.isNaN(time) ? 0 : time
 }
 
+function sortProcessItemsByTime(items: ProcessItem[]) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const leftTime = left.item.time || 0
+      const rightTime = right.item.time || 0
+      if (!leftTime && !rightTime) return left.index - right.index
+      if (!leftTime) return 1
+      if (!rightTime) return -1
+      return leftTime === rightTime ? left.index - right.index : leftTime - rightTime
+    })
+    .map(({ item }) => item)
+}
+
 function createAssistantProcessItem(message: Message, id: string): ProcessItem {
   return {
     id: `process-assistant-${id}`,
@@ -337,6 +377,25 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   }
 }
 
+function createReasoningProcessItem(message: Message, id: string): ProcessItem {
+  const reasoning = message.reasoning?.trim() || ''
+
+  return {
+    id: `process-reasoning-${id}`,
+    kind: 'reasoning',
+    title: uiText.process.reasoning,
+    detail: shortText(reasoning, 96),
+    tone: 'neutral',
+    actionLabel: uiText.process.reasoning,
+    time: parseMessageTime(message),
+    objectLabel: shortText(reasoning, 96),
+    renderer: 'generic',
+    summary: { preview: shortText(reasoning, 96) },
+    toolCategory: 'run',
+    raw: reasoning,
+  }
+}
+
 function summarizeToolFailure(parsed: unknown, fallbackName?: string) {
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
     const error = (parsed as Record<string, any>).error
@@ -361,6 +420,23 @@ function extractPathFromErrorMessage(message: string) {
 }
 
 function createEventProcessItem(note: ProcessNote): ProcessItem {
+  if (note.raw) {
+    return {
+      id: `process-event-${note.id}`,
+      kind: 'reasoning',
+      title: uiText.process.reasoning,
+      detail: note.label,
+      tone: note.tone,
+      actionLabel: uiText.process.reasoning,
+      time: note.time,
+      objectLabel: note.label,
+      renderer: 'generic',
+      summary: { preview: note.label },
+      toolCategory: 'run',
+      raw: note.raw,
+    }
+  }
+
   return {
     id: `process-event-${note.id}`,
     kind: 'event',

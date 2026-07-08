@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, Run } from '../../protocol/src/index.js';
+import type { AgentEvent, AgentEventPayloadMap, AgentEventType } from '../../protocol/src/index.js';
+import type { RuntimeRun } from './run-state.js';
 
 function id(prefix: string) {
   return `${prefix}_${randomUUID().slice(0, 8)}`;
@@ -12,11 +13,11 @@ function now() {
 
 export class EventBus {
   constructor(
-    private readonly run: Run,
+    private readonly run: RuntimeRun,
     private readonly onEvent?: (event: AgentEvent) => void,
   ) {}
 
-  emit(type: string, payload: Record<string, unknown>) {
+  emit<Type extends AgentEventType>(type: Type, payload: AgentEventPayloadMap[Type]) {
     const event: AgentEvent = {
       id: id('evt'),
       seq: ++this.run.seq,
@@ -25,7 +26,7 @@ export class EventBus {
       session_id: this.run.session_id,
       ts: now(),
       payload,
-    };
+    } as AgentEvent;
 
     this.run.events.push(event);
     this.onEvent?.(event);

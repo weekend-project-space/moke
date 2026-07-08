@@ -6,10 +6,13 @@ export type AgentEvent = {
   payload: Record<string, any>
 }
 
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'ultra'
+
 export type Message = {
   id?: string
   role: 'user' | 'assistant' | 'tool'
   content: string
+  reasoning?: string
   created_at?: string
   attachments?: ImageAttachment[]
   tool_calls?: Array<{
@@ -98,13 +101,14 @@ export type ToolStepSummary = {
 export type ProcessNote = {
   id: string
   label: string
+  raw?: string
   tone: ProcessTone
   time: number
 }
 
 export type ProcessItem = {
   id: string
-  kind: 'assistant' | 'tool-call' | 'tool-result' | 'event'
+  kind: 'assistant' | 'tool-call' | 'tool-result' | 'event' | 'reasoning'
   title: string
   detail: string
   tone: ProcessTone

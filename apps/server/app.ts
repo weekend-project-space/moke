@@ -1,6 +1,7 @@
 import http from 'node:http';
 
-import type { Run, Session } from '../../packages/protocol/src/index.js';
+import type { RuntimeRun } from '../../packages/agent-runtime/src/index.js';
+import type { Session } from '../../packages/protocol/src/index.js';
 import {
   loadFirstEnvFile,
   resolveEnvPaths,
@@ -52,7 +53,7 @@ export async function createApp(): Promise<ServerApp> {
   const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, workspace } = config;
 
   const sessions = new Map<string, Session>();
-  const runs = new Map<string, Run>();
+  const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);

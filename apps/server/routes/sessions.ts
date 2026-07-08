@@ -1,4 +1,4 @@
-import type { ImageAttachment, Session } from '../../../packages/protocol/src/index.js';
+import type { ImageAttachment, ReasoningEffort, Session } from '../../../packages/protocol/src/index.js';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import {
@@ -95,7 +95,10 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     session.updated_at = createdAt;
 
     const options = requestBody.options && typeof requestBody.options === 'object' ? requestBody.options : {};
-    const run = context.runManager.createRun(session, { content, attachments }, options);
+    const run = context.runManager.createRun(session, { content, attachments }, {
+      ...options,
+      reasoningEffort: normalizeRunReasoningEffort((options as Record<string, unknown>).reasoningEffort),
+    });
 
     return json(200, {
       run_id: run.id,
@@ -103,6 +106,12 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       events_url: `/api/runs/${run.id}/events`,
     });
   });
+}
+
+function normalizeRunReasoningEffort(input: unknown): ReasoningEffort | undefined {
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
+    ? input
+    : undefined;
 }
 
 const MAX_IMAGE_ATTACHMENTS = 4;

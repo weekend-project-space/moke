@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, ImageAttachment, Message, Run, Session } from '../../protocol/src/index.js';
+import type { AgentEventPayloadMap, ImageAttachment, Message, ReasoningEffort, Session } from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
+import type { RuntimeRun } from './run-state.js';
 import type {
   RuntimeContentManager,
   ToolApprovalDecision,
@@ -18,7 +19,7 @@ function id(prefix: string) {
 
 type RunManagerConfig = {
   sessions: Map<string, Session>;
-  runs: Map<string, Run>;
+  runs: Map<string, RuntimeRun>;
   agent: Agent;
   toolRegistry: ToolRegistry;
   workspace: string;
@@ -30,6 +31,7 @@ type RunManagerConfig = {
 type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
+  reasoningEffort?: ReasoningEffort;
   timeout_ms?: number;
 };
 
@@ -38,7 +40,7 @@ type RunMessageInput = {
   attachments?: ImageAttachment[];
 };
 
-function readSessionMessage(event: AgentEvent) {
+function readSessionMessage(event: { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
   if (!message || typeof message !== 'object') return null;
 
@@ -76,7 +78,7 @@ export class RunManager {
   constructor(private readonly config: RunManagerConfig) { }
 
   createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
-    const run: Run = {
+    const run: RuntimeRun = {
       id: id('run'),
       session_id: session.id,
       status: 'running',
@@ -93,7 +95,7 @@ export class RunManager {
     return run;
   }
 
-  private async execute(run: Run, session: Session, input: RunMessageInput, options: RunOptions) {
+  private async execute(run: RuntimeRun, session: Session, input: RunMessageInput, options: RunOptions) {
     let assistantMessageSaved = false;
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
@@ -127,6 +129,9 @@ export class RunManager {
         input: input.content,
         attachments: input.attachments,
         history,
+        options: {
+          reasoningEffort: options.reasoningEffort,
+        },
         eventBus,
         toolRegistry: this.config.toolRegistry,
         context: {
@@ -180,7 +185,7 @@ export class RunManager {
   }
 
   private approveWorkspacePath(
-    run: Run,
+    run: RuntimeRun,
     eventBus: EventBus,
     input: WorkspacePathApprovalRequest,
   ): Promise<WorkspacePathApprovalDecision> {
@@ -213,7 +218,7 @@ export class RunManager {
   }
 
   private approveTool(
-    run: Run,
+    run: RuntimeRun,
     eventBus: EventBus,
     input: ToolApprovalRequest,
   ): Promise<ToolApprovalDecision> {
@@ -244,7 +249,7 @@ export class RunManager {
   }
 
   private askUser(
-    run: Run,
+    run: RuntimeRun,
     eventBus: EventBus,
     input: { callId: string; question: string; options: Array<{ id: string; label: string }> },
   ): Promise<{ id: string; label: string }> {
@@ -332,7 +337,7 @@ export class RunManager {
     run.status = 'running';
     this.config.onChange?.();
     const scope = options.scope || 'session';
-    const cleanup =
+    const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
         : undefined;
@@ -341,7 +346,7 @@ export class RunManager {
       approved: decision === 'approved',
       scope,
       message: options.message,
-      cleanup,
+      cleanup: typeof cleanupResult === 'function' ? cleanupResult : undefined,
     });
 
     return { status: 200 as const, run };
