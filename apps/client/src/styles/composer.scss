@@ -161,6 +161,14 @@
     inset 0 0 0 0.5px var(--panel-raised);
 }
 
+.composer-panel.dragging .composer-input-row {
+  border-color: var(--border-focus);
+  background: color-mix(in srgb, var(--accent-faint) 45%, var(--panel-strong));
+  box-shadow:
+    0 0 0 3px var(--focus-ring),
+    var(--shadow-input);
+}
+
 .composer-footer {
   display: flex;
   min-height: 39px;

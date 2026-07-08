@@ -50,7 +50,7 @@ const composer = {
   chooseImage: 'Choose image',
   clearQueued: 'Clear queued messages',
   imageAttachment: 'Image attachment',
-  placeholder: 'Message Moke',
+  placeholder: 'Type a message',
   queued: (count: number) => `${count} queued`,
   queuedMessages: 'Queued messages',
   removeImage: 'Remove image',

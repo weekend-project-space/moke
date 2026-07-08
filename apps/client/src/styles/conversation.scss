@@ -10,6 +10,7 @@
 
   &.user {
     align-items: flex-end;
+    gap: 7px;
   }
 
   &.assistant {
@@ -81,25 +82,24 @@
   }
 }
 
-.message-attachments {
-  display: flex;
-  flex-wrap: wrap;
+.user-attachments {
+  display: grid;
+  max-width: min(360px, 72%);
+  justify-items: end;
   gap: 8px;
-  margin-bottom: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, max-content));
+  justify-content: end;
 
   img {
     display: block;
-    max-width: min(260px, 100%);
-    max-height: 220px;
+    max-width: min(360px, 100%);
+    max-height: 260px;
     border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     object-fit: contain;
-    background: var(--surface-muted);
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-hairline);
   }
-}
-
-.bubble.user .message-attachments {
-  justify-content: flex-end;
 }
 
 @keyframes thinking-bounce {
@@ -262,6 +262,10 @@
   }
 
   .bubble.user {
+    max-width: 96%;
+  }
+
+  .user-attachments {
     max-width: 96%;
   }
 }

@@ -20,8 +20,8 @@ const emit = defineEmits<{
 
 <template>
   <article class="message-row" :class="message.role">
-    <div class="bubble" :class="message.role">
-      <div v-if="message.attachments?.length" class="message-attachments">
+    <template v-if="message.role === 'user'">
+      <div v-if="message.attachments?.length" class="user-attachments">
         <img
           v-for="attachment in message.attachments"
           :key="attachment.id"
@@ -29,10 +29,12 @@ const emit = defineEmits<{
           :alt="attachment.name || uiText.composer.imageAttachment"
         />
       </div>
-      <div v-if="message.role === 'assistant'" class="markdown" v-html="renderMarkdown(message.content)"></div>
-      <template v-else>
-        <span v-if="message.content">{{ message.content }}</span>
-      </template>
+      <div v-if="message.content" class="bubble user">
+        <span>{{ message.content }}</span>
+      </div>
+    </template>
+    <div v-else class="bubble" :class="message.role">
+      <div class="markdown" v-html="renderMarkdown(message.content)"></div>
     </div>
     <div v-if="message.role === 'assistant'" class="message-actions">
       <button

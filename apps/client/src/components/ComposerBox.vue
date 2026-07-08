@@ -22,8 +22,10 @@ const emit = defineEmits<{
 
 const addMenuOpen = ref(false)
 const composerEl = ref<HTMLFormElement | null>(null)
+const dragDepth = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
+const isDraggingImage = ref(false)
 
 function resize() {
   const input = textarea.value
@@ -88,6 +90,10 @@ async function addImageFiles(files: File[]) {
   emit('addAttachments', attachments)
 }
 
+function imageFilesFromDataTransfer(dataTransfer: DataTransfer | null) {
+  return Array.from(dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'))
+}
+
 function chooseImages() {
   addMenuOpen.value = false
   fileInput.value?.click()
@@ -119,10 +125,43 @@ function handleFileChange(event: Event) {
 }
 
 function handlePaste(event: ClipboardEvent) {
-  const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith('image/'))
+  const files = imageFilesFromDataTransfer(event.clipboardData)
   if (!files.length) return
 
   event.preventDefault()
+  void addImageFiles(files)
+}
+
+function handleDragEnter(event: DragEvent) {
+  const files = imageFilesFromDataTransfer(event.dataTransfer)
+  if (!files.length) return
+
+  event.preventDefault()
+  dragDepth.value += 1
+  isDraggingImage.value = true
+  addMenuOpen.value = false
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!isDraggingImage.value) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleDragLeave(event: DragEvent) {
+  if (!isDraggingImage.value) return
+  event.preventDefault()
+  dragDepth.value = Math.max(0, dragDepth.value - 1)
+  if (dragDepth.value === 0) isDraggingImage.value = false
+}
+
+function handleDrop(event: DragEvent) {
+  const files = imageFilesFromDataTransfer(event.dataTransfer)
+  if (!files.length) return
+
+  event.preventDefault()
+  dragDepth.value = 0
+  isDraggingImage.value = false
   void addImageFiles(files)
 }
 
@@ -137,7 +176,15 @@ defineExpose({ focus, resize })
         <span>{{ uiText.composer.chooseImage }}</span>
       </button>
     </div>
-    <div class="composer-panel input-mode" @click="focusFromPanelClick">
+    <div
+      class="composer-panel input-mode"
+      :class="{ dragging: isDraggingImage }"
+      @click="focusFromPanelClick"
+      @dragenter="handleDragEnter"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
       <div class="composer-input-row">
         <div v-if="props.attachments.length" class="composer-attachments">
           <div v-for="attachment in props.attachments" :key="attachment.id" class="composer-attachment">
