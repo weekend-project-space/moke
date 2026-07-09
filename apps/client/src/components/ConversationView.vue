@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessGroup from './ProcessGroup.vue'
 import type { DisplayItem, TaskTemplate } from '../types/conversation'
@@ -32,6 +32,10 @@ const emit = defineEmits<{
 const conversationEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 const showJumpToBottom = ref(false)
+let pendingScrollForce = false
+let disposed = false
+let scrollFrame: number | undefined
+let scrollScheduled = false
 const lastAssistantDisplayItemId = computed(() => {
   for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
     const item = props.displayItems[index]
@@ -102,6 +106,24 @@ function scrollToBottom(force = false) {
   setJumpToBottomVisible(false)
 }
 
+function scheduleScrollToBottom(force = false) {
+  pendingScrollForce = pendingScrollForce || force
+  if (scrollScheduled) return
+
+  scrollScheduled = true
+  void nextTick(() => {
+    if (disposed) return
+    scrollFrame = window.requestAnimationFrame(() => {
+      if (disposed) return
+      const shouldForce = pendingScrollForce
+      pendingScrollForce = false
+      scrollFrame = undefined
+      scrollScheduled = false
+      scrollToBottom(shouldForce)
+    })
+  })
+}
+
 function resetAutoScroll() {
   autoScroll.value = true
   setJumpToBottomVisible(false)
@@ -138,7 +160,7 @@ function handleConversationClick(event: MouseEvent) {
 
 function jumpToBottom() {
   resetAutoScroll()
-  void nextTick(() => scrollToBottom(true))
+  scheduleScrollToBottom(true)
 }
 
 function setJumpToBottomVisible(visible: boolean) {
@@ -160,9 +182,14 @@ watch(
   () => props.scrollKey,
   () => {
     if (!autoScroll.value) setJumpToBottomVisible(true)
-    void nextTick(() => scrollToBottom())
+    scheduleScrollToBottom()
   },
 )
+
+onUnmounted(() => {
+  disposed = true
+  if (scrollFrame !== undefined) window.cancelAnimationFrame(scrollFrame)
+})
 
 defineExpose({
   jumpToBottom,
@@ -213,7 +240,7 @@ defineExpose({
 
     <div v-if="streamingText" class="message-row assistant">
       <article class="bubble assistant">
-        <div class="markdown" :class="{ streaming: isRunning }" v-html="renderMarkdown(streamingText)"></div>
+        <div class="markdown streaming" v-html="renderMarkdown(streamingText)"></div>
       </article>
     </div>
     <div v-else-if="showThinking" class="message-row assistant">

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEventPayloadMap, ImageAttachment, Message, ReasoningEffort, Session } from '../../protocol/src/index.js';
+import type { AgentEvent, AgentEventPayloadMap, ImageAttachment, Message, ReasoningEffort, Session } from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
 import type { RuntimeRun } from './run-state.js';
@@ -40,7 +40,7 @@ type RunMessageInput = {
   attachments?: ImageAttachment[];
 };
 
-function readSessionMessage(event: { payload: AgentEventPayloadMap['agent.message.done'] }) {
+function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
   if (!message || typeof message !== 'object') return null;
 
@@ -51,6 +51,13 @@ function readSessionMessage(event: { payload: AgentEventPayloadMap['agent.messag
     typeof candidate.created_at !== 'string'
   ) {
     return null;
+  }
+
+  if (event.step && candidate.role === 'assistant') {
+    return {
+      ...candidate,
+      step: event.step,
+    } as Message;
   }
 
   return candidate as Message;

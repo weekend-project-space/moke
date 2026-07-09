@@ -19,11 +19,19 @@ export type AgentEvent = {
   run_id: string;
   session_id: string;
   ts: string;
+  step?: AgentStep;
 } & AgentEventPayloadUnion;
 
 export type AgentEventType = keyof AgentEventPayloadMap;
 
 export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
+
+export type AgentStepPhase = 'reason' | 'act' | 'respond';
+
+export type AgentStep = {
+  index: number;
+  phase: AgentStepPhase;
+};
 
 export type ToolCall = {
   id: string;
@@ -52,6 +60,7 @@ export type AssistantMessage = {
   role: 'assistant';
   content: string;
   created_at: string;
+  step?: AgentStep;
   reasoning?: string;
   tool_calls?: ToolCall[];
 };

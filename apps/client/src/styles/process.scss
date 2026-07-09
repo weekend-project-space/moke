@@ -91,7 +91,9 @@
     .process-tool-icon,
     .process-tool-title,
     .process-tool-separator,
-    .process-tool-detail {
+    .process-tool-detail,
+    .process-reasoning-icon,
+    .process-reasoning-title {
       color: var(--ink);
     }
   }
@@ -122,19 +124,17 @@
   }
 
   &.reasoning {
-    margin: 3px 0 6px;
+    margin: 2px 0 5px;
 
-    .process-tool-icon,
-    .process-tool-title,
-    .process-tool-detail,
+    .process-reasoning-icon,
+    .process-reasoning-title,
     .process-step-caret {
-      color: color-mix(in srgb, var(--ink-muted), transparent 14%);
+      color: color-mix(in srgb, var(--ink-muted), transparent 12%);
     }
 
     &:hover {
-      .process-tool-icon,
-      .process-tool-title,
-      .process-tool-detail,
+      .process-reasoning-icon,
+      .process-reasoning-title,
       .process-step-caret {
         color: color-mix(in srgb, var(--ink-soft), transparent 8%);
       }
@@ -176,15 +176,26 @@
   max-width: 100%;
   column-gap: 6px;
   align-items: center;
+  padding: 1px 0 2px;
 
-  .process-tool-title {
-    flex: 0 0 auto;
+  .process-step-caret {
+    margin-left: -2px;
   }
+}
 
-  .process-tool-detail {
-    flex: 1 1 auto;
-    text-align: left;
-  }
+.process-reasoning-icon {
+  display: inline-flex;
+  width: 17px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+}
+
+.process-reasoning-title {
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .process-step-caret,
@@ -198,13 +209,11 @@
 }
 
 .process-item[open] > summary .process-step-caret .when-closed,
-.process-batch-step[open] > summary .process-step-caret .when-closed,
 .tool-detail-raw[open] > summary .tool-detail-raw-caret .when-closed {
   display: none;
 }
 
 .process-item:not([open]) > summary .process-step-caret .when-open,
-.process-batch-step:not([open]) > summary .process-step-caret .when-open,
 .tool-detail-raw:not([open]) > summary .tool-detail-raw-caret .when-open {
   display: none;
 }
@@ -251,6 +260,18 @@
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.process-reasoning-body {
+  max-height: 260px;
+  margin: 4px 0 8px 23px;
+  padding: 2px 0 4px 0;
+  overflow: auto;
+  color: color-mix(in srgb, var(--ink-muted), var(--ink) 14%);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.56;
+  white-space: pre-wrap;
 }
 
 

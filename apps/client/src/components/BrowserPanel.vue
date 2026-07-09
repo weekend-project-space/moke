@@ -28,8 +28,6 @@ const nativeAvailable = ref(false)
 const windowElement = ref<HTMLElement | null>(null)
 const viewportElement = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
-let refreshTimer = 0
-let syncTimer = 0
 let unlistenBrowserState: (() => void) | null = null
 
 const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
@@ -104,43 +102,6 @@ async function syncBrowserBounds() {
   }
 }
 
-function scheduleStateRefresh() {
-  if (refreshTimer) window.clearTimeout(refreshTimer)
-
-  refreshTimer = window.setTimeout(async () => {
-    refreshTimer = 0
-    if (!nativeAvailable.value || !activePage.value) return
-
-    try {
-      applyState(await browserApi.state())
-    } catch {
-      // The next explicit browser action will surface any persistent error.
-    }
-  }, 900)
-}
-
-function stopStateSync() {
-  if (!syncTimer) return
-
-  window.clearInterval(syncTimer)
-  syncTimer = 0
-}
-
-function startStateSync() {
-  stopStateSync()
-  if (!nativeAvailable.value || !props.active || !activePage.value) return
-
-  syncTimer = window.setInterval(async () => {
-    if (!nativeAvailable.value || !props.active || !activePage.value) return
-
-    try {
-      applyState(await browserApi.refreshState(activePage.value.pageId))
-    } catch {
-      // Native page-load events and explicit browser actions still surface persistent errors.
-    }
-  }, 800)
-}
-
 async function withBusy(action: () => Promise<void>) {
   if (isBusy.value) return
 
@@ -167,7 +128,6 @@ async function submitAddress() {
         visible: true,
         bounds: getViewportBounds(),
       }))
-      scheduleStateRefresh()
       return
     }
 
@@ -176,7 +136,6 @@ async function submitAddress() {
       type: 'url',
       url,
     }))
-    scheduleStateRefresh()
   })
 }
 
@@ -192,7 +151,6 @@ async function createTab() {
     syncAddressFromPage()
     await nextTick()
     await syncBrowserBounds()
-    scheduleStateRefresh()
   })
 }
 
@@ -206,7 +164,6 @@ async function openUrl(url: string) {
       bounds: getViewportBounds(),
     }))
     await syncBrowserBounds()
-    scheduleStateRefresh()
   })
 }
 
@@ -215,7 +172,6 @@ async function selectTab(tab: BrowserPage) {
 
   await withBusy(async () => {
     applyState(await browserApi.show(tab.pageId, getViewportBounds()))
-    scheduleStateRefresh()
   })
 }
 
@@ -236,7 +192,6 @@ async function reloadPage(ignoreCache = false) {
       type: 'reload',
       ignoreCache,
     }))
-    scheduleStateRefresh()
   })
 }
 
@@ -249,7 +204,6 @@ async function navigateHistory(type: 'back' | 'forward') {
       pageId: currentPage.pageId,
       type,
     }))
-    scheduleStateRefresh()
   })
 }
 
@@ -289,20 +243,17 @@ onMounted(async () => {
   })
 
   try {
-    unlistenBrowserState = await browserApi.listenStateChanged((result) => {
-      applyState(result)
+    unlistenBrowserState = await browserApi.listenStateChanged((change) => {
+      applyState(change.state)
     })
   } catch {
     unlistenBrowserState = null
   }
 
-  startStateSync()
   window.addEventListener('resize', syncBrowserBounds)
 })
 
 onUnmounted(() => {
-  if (refreshTimer) window.clearTimeout(refreshTimer)
-  stopStateSync()
   unlistenBrowserState?.()
   unlistenBrowserState = null
   resizeObserver?.disconnect()
@@ -314,7 +265,6 @@ watch(
   () => props.active,
   () => {
     void syncVisibility()
-    startStateSync()
   },
   { flush: 'post' },
 )
@@ -323,7 +273,6 @@ watch(
   activeTabKey,
   () => {
     void syncVisibility()
-    startStateSync()
   },
   { flush: 'post' },
 )

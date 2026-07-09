@@ -41,33 +41,30 @@ function iconKind(step: { toolCategory: ToolCategory }) {
         :class="[
           processItem.tone,
           processItem.kind,
-          processItem.kind === 'tool-step' || processItem.kind === 'tool-batch' ? `category-${processItem.toolCategory}` : '',
+          processItem.kind === 'tool-step' ? `category-${processItem.toolCategory}` : '',
         ]"
       >
         <summary v-if="processItem.kind === 'assistant'" class="process-assistant-summary">
           <div class="markdown" v-html="renderMarkdown(processItem.raw || processItem.detail)"></div>
         </summary>
         <summary v-else-if="processItem.kind === 'reasoning'" class="process-reasoning-summary">
-          <span class="process-tool-icon" aria-hidden="true">
+          <span class="process-reasoning-icon" aria-hidden="true">
             <BrainCircuit :size="14" stroke-width="1.8" />
           </span>
-          <span class="process-tool-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
-          <small v-if="processItem.detail" class="process-tool-detail">{{ processItem.detail }}</small>
+          <span class="process-reasoning-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
           <span class="process-step-caret" aria-hidden="true">
             <ChevronRight class="when-closed" :size="15" stroke-width="2" />
             <ChevronDown class="when-open" :size="15" stroke-width="2" />
           </span>
         </summary>
-        <summary v-else-if="processItem.kind === 'tool-step' || processItem.kind === 'tool-batch'" class="process-tool-step-summary">
+        <summary v-else-if="processItem.kind === 'tool-step'" class="process-tool-step-summary">
           <span class="process-tool-icon" aria-hidden="true">
             <FilePenLine v-if="iconKind(processItem) === 'change'" :size="14" stroke-width="1.9" />
             <FolderSearch v-else-if="iconKind(processItem) === 'view'" :size="14" stroke-width="1.9" />
             <Terminal v-else-if="iconKind(processItem) === 'run'" :size="14" stroke-width="1.9" />
             <Code2 v-else :size="14" stroke-width="1.9" />
           </span>
-          <span class="process-tool-title">
-            {{ processItem.kind === 'tool-batch' ? `${processItem.actionLabel} · ${processItem.countLabel}` : processItem.actionLabel }}
-          </span>
+          <span class="process-tool-title">{{ processItem.actionLabel }}</span>
           <span v-if="processItem.tone === 'error'" class="process-tool-status">{{ uiText.process.failed }}</span>
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
@@ -81,24 +78,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <small class="process-tool-detail">{{ processItem.objectLabel || processItem.detail }}</small>
         </summary>
         <ToolStepDetails v-if="processItem.kind === 'tool-step'" :step="processItem" />
-        <pre v-else-if="processItem.kind === 'reasoning' && processItem.raw" class="process-reasoning-body">{{ processItem.raw }}</pre>
-        <div v-else-if="processItem.kind === 'tool-batch'" class="process-batch-list">
-          <details
-            v-for="step in processItem.steps"
-            :key="step.id"
-            class="process-batch-step"
-            :class="step.tone"
-          >
-            <summary>
-              <span class="process-batch-title">{{ step.objectLabel }}</span>
-              <span class="process-step-caret" aria-hidden="true">
-                <ChevronRight class="when-closed" :size="15" stroke-width="2" />
-                <ChevronDown class="when-open" :size="15" stroke-width="2" />
-              </span>
-            </summary>
-            <ToolStepDetails :step="step" />
-          </details>
-        </div>
+        <div v-else-if="processItem.kind === 'reasoning' && processItem.raw" class="process-reasoning-body">{{ processItem.raw }}</div>
         <pre v-else-if="processItem.raw && processItem.kind !== 'assistant'">{{ processItem.raw }}</pre>
       </details>
     </div>

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
 import { ToolExecutionError } from '../../agent-runtime/src/index.js';
-import type { ToolCall } from '../../protocol/src/index.js';
+import type { AgentStep, AgentStepPhase, ToolCall } from '../../protocol/src/index.js';
 import {
   ASK_USER_TOOL_NAME,
   FINISH_TOOL_NAME,
@@ -58,6 +58,13 @@ function toToolCallArgs(args: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
 }
 
+function createAgentStep(index: number, phase: AgentStepPhase): AgentStep {
+  return {
+    index,
+    phase,
+  };
+}
+
 export class ReActAgent {
   constructor(
     private readonly config: {
@@ -99,7 +106,7 @@ export class ReActAgent {
     let finalContent = '';
     let finalContentStreamed = false;
     let hasObservation = false;
-    let accumulatedReasoning = '';
+    let finalReasoning = '';
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
@@ -109,9 +116,14 @@ export class ReActAgent {
       tools: runtimeTools.map((tool) => tool.name),
     });
 
+    let currentStepIndex = 0;
+
     for (let step = 0; step < limits.max_steps; step++) {
+      currentStepIndex = step + 1;
+      const reasonStep = createAgentStep(currentStepIndex, 'reason');
+      const actStep = createAgentStep(currentStepIndex, 'act');
       throwIfAborted(context.abortSignal);
-      eventBus.emit('agent.state', { state: 'reason' });
+      eventBus.emit('agent.state', { state: 'reason' }, { step: reasonStep });
 
       const stepResult = await modelAdapter.streamStep({
         eventBus,
@@ -122,16 +134,17 @@ export class ReActAgent {
         messages: modelMessages,
         runtimeTools,
         showRawReasoning: modelSettings.showRawReasoning,
+        step: reasonStep,
         signal: context.abortSignal,
         timeoutMs,
       });
-      accumulatedReasoning += stepResult.reasoning;
       throwIfAborted(context.abortSignal);
 
       const calls = stepResult.toolCalls;
       if (calls.length === 0) {
         const content = stripThinkBlocks(stepResult.content);
         finalContent = content || '我暂时没有更多可补充的信息。';
+        finalReasoning = stepResult.reasoning;
         finalContentStreamed = stepResult.contentStreamed;
         break;
       }
@@ -154,12 +167,13 @@ export class ReActAgent {
             role: 'assistant',
             content: stripThinkBlocks(stepResult.content),
             created_at: now(),
+            ...(stepResult.reasoning.trim() ? { reasoning: stepResult.reasoning.trim() } : {}),
             tool_calls: persistedToolCalls,
           },
-        });
+        }, { step: reasonStep });
       }
 
-      eventBus.emit('agent.state', { state: 'act' });
+      eventBus.emit('agent.state', { state: 'act' }, { step: actStep });
       for (const { call, callId } of callEntries) {
         throwIfAborted(context.abortSignal);
         const isFinishCall = call.name === FINISH_TOOL_NAME;
@@ -176,12 +190,13 @@ export class ReActAgent {
           input: call.args || {},
           risk: runtimeTool?.risk || 'safe',
           source: runtimeTool?.source || { type: 'local' },
-        });
+        }, { step: actStep });
 
         const startedAt = Date.now();
         try {
           if (isFinishCall) {
             finalContent = stripThinkBlocks(readFinishContent(call.args || {}));
+            finalReasoning = stepResult.reasoning;
             const output = {
               status: 'finished',
               content: finalContent,
@@ -192,7 +207,7 @@ export class ReActAgent {
               status: 'ok',
               duration_ms: Date.now() - startedAt,
               output,
-            });
+            }, { step: actStep });
             modelAdapter.appendToolResult(modelMessages, {
               callId,
               name: call.name,
@@ -221,7 +236,7 @@ export class ReActAgent {
             status: 'ok',
             duration_ms: Date.now() - startedAt,
             output,
-          });
+          }, { step: actStep });
           if (!isControlCall) {
             eventBus.emit('agent.message.done', {
               message: {
@@ -233,7 +248,7 @@ export class ReActAgent {
                 name: call.name,
                 status: 'success',
               },
-            });
+            }, { step: actStep });
           }
           modelAdapter.appendToolResult(modelMessages, {
             callId,
@@ -248,7 +263,7 @@ export class ReActAgent {
             status: 'error',
             duration_ms: Date.now() - startedAt,
             output,
-          });
+          }, { step: actStep });
           if (!isControlCall) {
             eventBus.emit('agent.message.done', {
               message: {
@@ -260,7 +275,7 @@ export class ReActAgent {
                 name: call.name,
                 status: 'error',
               },
-            });
+            }, { step: actStep });
           }
           modelAdapter.appendToolResult(modelMessages, {
             callId,
@@ -279,10 +294,11 @@ export class ReActAgent {
     }
 
     const content = finalContent;
-    const message = createFinalMessage(content, accumulatedReasoning);
-    eventBus.emit('agent.state', { state: 'respond' });
-    if (!finalContentStreamed) eventBus.emit('agent.message.delta', { channel: 'answer', content });
-    eventBus.emit('agent.message.done', { message });
+    const message = createFinalMessage(content, finalReasoning);
+    const respondStep = createAgentStep(currentStepIndex + 1, 'respond');
+    eventBus.emit('agent.state', { state: 'respond' }, { step: respondStep });
+    if (!finalContentStreamed) eventBus.emit('agent.message.delta', { channel: 'answer', content }, { step: respondStep });
+    eventBus.emit('agent.message.done', { message }, { step: respondStep });
 
     return { toolCalls, message };
   }

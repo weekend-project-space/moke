@@ -38,95 +38,84 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
   const lastAssistantMessage = computed(() =>
     [...visibleMessages.value].reverse().find((message) => message.role === 'assistant' && message.content.trim()),
   )
-  const activeReasoningNote = computed<ProcessNote | null>(() => {
+
+  const activeEventProcessItems = computed<ProcessItem[]>(() => {
+    const items: ProcessItem[] = []
+    const callsById = new Map<string, AgentEvent>()
     let reasoningText = ''
-    let firstReasoningTime = 0
+    let reasoningTime = 0
+    let reasoningId = ''
+    let reasoningStepId = ''
+
+    function flushReasoning() {
+      if (!reasoningText.trim()) return
+
+      items.push(createEventProcessItem({
+        id: reasoningId || `reasoning-${items.length}`,
+        label: shortText(reasoningText, 96),
+        raw: reasoningText.trim(),
+        tone: 'neutral',
+        time: reasoningTime,
+      }))
+      reasoningText = ''
+      reasoningTime = 0
+      reasoningId = ''
+      reasoningStepId = ''
+    }
 
     for (const event of options.events.value) {
       if (event.type === 'agent.message.delta' && event.payload.channel === 'reasoning') {
         const content = typeof event.payload.content === 'string' ? event.payload.content : ''
-        if (content) {
-          reasoningText += content
-          firstReasoningTime = firstReasoningTime || parseEventTime(event)
-        }
+        const stepId = event.step ? `${event.step.index}:${event.step.phase}` : ''
+        if (!content) continue
+        if (reasoningText && stepId && reasoningStepId && stepId !== reasoningStepId) flushReasoning()
+
+        reasoningText += content
+        reasoningTime = reasoningTime || parseEventTime(event)
+        reasoningId = reasoningId || `reasoning-${stepId || event.id}`
+        reasoningStepId = reasoningStepId || stepId
+        continue
       }
-    }
 
-    if (!reasoningText.trim()) return null
-
-    return {
-      id: 'process-reasoning',
-      label: shortText(reasoningText, 96),
-      raw: reasoningText.trim(),
-      tone: 'neutral',
-      time: firstReasoningTime,
-    }
-  })
-
-  const processNotes = computed<ProcessNote[]>(() => {
-    const notes: ProcessNote[] = []
-    const callsById = new Map<string, AgentEvent>()
-    let completedTools = 0
-    let latestToolTime = 0
-
-    for (const event of options.events.value) {
-      if (event.type === 'agent.message.delta' && event.payload.channel === 'reasoning') continue
+      flushReasoning()
 
       if (event.type === 'tool.call') {
         callsById.set(String(event.payload.call_id || event.id), event)
-        latestToolTime = parseEventTime(event) || latestToolTime
+        items.push(createToolCallEventProcessItem(event, options.toolLabels))
         continue
       }
 
       if (event.type === 'tool.result') {
-        latestToolTime = parseEventTime(event) || latestToolTime
-        if (event.payload.status === 'ok') completedTools += 1
-        if (event.payload.status !== 'error') continue
-
-        const call = callsById.get(String(event.payload.call_id || ''))
-        const toolName = formatToolName(call?.payload.tool, options.toolLabels)
-        notes.push({
-          id: `process-${event.id}`,
-          label: uiText.process.toolFailed(toolName, shortText(summarizeOutput(event.payload.output), 72)),
-          tone: 'error',
-          time: parseEventTime(event),
-        })
+        const callId = String(event.payload.call_id || '')
+        items.push(createToolResultEventProcessItem(event, callsById.get(callId)))
+        continue
       }
 
       if (event.type === 'approval.required') {
-        notes.push({
+        items.push(createEventProcessItem({
           id: `process-${event.id}`,
           label: uiText.process.waitingApproval(shortText(String(event.payload.reason || 'Approval is required to continue'), 72)),
           tone: 'ask',
           time: parseEventTime(event),
-        })
+        }))
       }
 
       if (event.type === 'agent.error') {
-        notes.push({
+        items.push(createEventProcessItem({
           id: `process-${event.id}`,
           label: `Run failed: ${shortText(String(event.payload.message || uiText.process.unknownError), 72)}`,
           tone: 'error',
           time: parseEventTime(event),
-        })
+        }))
       }
     }
 
-    const latestActivity = latestProcessActivity(
-      callsById,
-      completedTools,
-      latestToolTime,
-      options.isRunning.value,
-      options.toolLabels,
-    )
-    if (latestActivity) notes.push(latestActivity)
-
-    return notes.slice(-4)
+    flushReasoning()
+    return items
   })
 
   const displayItems = computed<DisplayItem[]>(() => {
     const items: DisplayItem[] = []
-    const reasoningNote = activeReasoningNote.value
     const sourceMessages = options.messages.value.filter(
       (message) => message.role !== 'tool' || Boolean(message.content.trim()),
     )
@@ -155,7 +144,9 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (processItems.length) {
         const isCurrentTurn = options.isRunning.value && nextTime === 0
         const groupId = `process-turn-${turnIndex}`
-        const nextProcessItems = isCurrentTurn && reasoningNote ? [createEventProcessItem(reasoningNote), ...processItems] : processItems
+        const nextProcessItems = isCurrentTurn
+          ? mergeProcessItems(processItems, activeEventProcessItems.value)
+          : processItems
         const processGroup = createProcessGroupView(nextProcessItems)
         const startedAt = turnStartedAt || processGroup.startedAt
         const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
@@ -221,6 +212,9 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
       if (message.tool_calls?.length) {
         movePendingFinalToProcess()
+        if (message.reasoning?.trim()) {
+          processItems.push(createReasoningProcessItem(message, `message-${index}`))
+        }
         if (message.content.trim()) processItems.push(createAssistantProcessItem(message, `message-${index}`))
         for (const toolCall of message.tool_calls) {
           processItems.push(createToolCallProcessItem(toolCall, `message-${index}-${toolCall.id}`))
@@ -242,12 +236,11 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
     if (
       (options.isRunning.value || options.pendingAsk.value || options.pendingApproval.value || options.runError.value) &&
-      processNotes.value.length &&
+      activeEventProcessItems.value.length &&
       !hasActiveMessageProcessGroup
     ) {
       const groupId = 'process-current-events'
-      const itemsFromEvents = processNotes.value.map(createEventProcessItem)
-      const processGroup = createProcessGroupView(itemsFromEvents)
+      const processGroup = createProcessGroupView(activeEventProcessItems.value)
       const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
       const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
       items.push({
@@ -276,7 +269,6 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
   return {
     displayItems,
     lastAssistantMessage,
-    processNotes,
     toggleProcessGroup,
     visibleMessages,
   }
@@ -342,6 +334,70 @@ function createToolCallProcessItem(toolCall: NonNullable<Message['tool_calls']>[
   }
 }
 
+function mergeProcessItems(messageItems: ProcessItem[], eventItems: ProcessItem[]) {
+  if (!eventItems.length) return messageItems
+  if (!messageItems.length) return eventItems
+
+  const merged = [...messageItems]
+  const seenToolCallIds = new Set(
+    messageItems
+      .map((item) => item.toolCallId)
+      .filter((toolCallId): toolCallId is string => Boolean(toolCallId)),
+  )
+  const seenReasoning = new Set(
+    messageItems
+      .filter((item) => item.kind === 'reasoning' && item.raw)
+      .map((item) => normalizeComparableText(item.raw || '')),
+  )
+  const seenRaw = new Set(
+    messageItems
+      .filter((item) => item.raw)
+      .map((item) => normalizeComparableText(item.raw || '')),
+  )
+
+  for (const item of eventItems) {
+    if (item.toolCallId && seenToolCallIds.has(item.toolCallId)) continue
+
+    const comparableRaw = normalizeComparableText(item.raw || '')
+    if (item.kind === 'reasoning' && comparableRaw && seenReasoning.has(comparableRaw)) continue
+    if (item.kind !== 'event' && comparableRaw && seenRaw.has(comparableRaw)) continue
+
+    merged.push(item)
+    if (item.toolCallId) seenToolCallIds.add(item.toolCallId)
+    if (comparableRaw) seenRaw.add(comparableRaw)
+    if (item.kind === 'reasoning' && comparableRaw) seenReasoning.add(comparableRaw)
+  }
+
+  return merged
+}
+
+function normalizeComparableText(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function createToolCallEventProcessItem(event: AgentEvent, toolLabels: Record<string, string>): ProcessItem {
+  const name = String(event.payload.tool || '')
+  const input = toRecord(event.payload.input)
+  const description = describeToolCall(name, input)
+  const callId = String(event.payload.call_id || event.id)
+
+  return {
+    id: `process-tool-call-event-${event.id}`,
+    kind: 'tool-call',
+    title: formatToolName(name, toolLabels),
+    detail: description.objectLabel,
+    tone: 'neutral',
+    time: parseEventTime(event),
+    actionLabel: description.actionLabel,
+    objectLabel: description.objectLabel,
+    renderer: description.renderer,
+    summary: description.summary,
+    toolCategory: description.toolCategory,
+    raw: formatJson(input),
+    toolCallId: callId,
+  }
+}
+
 function createToolResultProcessItem(message: Message, id: string): ProcessItem {
   const parsed = parseToolContent(message.content)
   const detail =
@@ -369,6 +425,36 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   }
 }
 
+function createToolResultEventProcessItem(event: AgentEvent, callEvent?: AgentEvent): ProcessItem {
+  const output = event.payload.output
+  const toolName = String(callEvent?.payload.tool || 'tool')
+  const parsedOutput = typeof output === 'string' ? parseToolContent(output) : output
+  const detail =
+    event.payload.status === 'error'
+      ? summarizeToolFailure(parsedOutput, toolName)
+      : typeof parsedOutput === 'string'
+        ? parsedOutput
+        : summarizeOutput(toRecord(parsedOutput))
+  const description = describeToolCall(toolName, toRecord(callEvent?.payload.input))
+  const raw = typeof parsedOutput === 'string' ? parsedOutput : formatJson(parsedOutput)
+
+  return {
+    id: `process-tool-result-event-${event.id}`,
+    kind: 'tool-result',
+    title: toolName,
+    detail: shortText(detail, 160),
+    tone: event.payload.status === 'error' ? 'error' : 'neutral',
+    actionLabel: event.payload.status === 'error' ? uiText.process.failed : uiText.process.validationResult,
+    time: parseEventTime(event),
+    objectLabel: shortText(detail, 120),
+    renderer: description.renderer,
+    summary: {},
+    toolCategory: description.toolCategory,
+    raw,
+    toolCallId: String(event.payload.call_id || ''),
+  }
+}
+
 function createReasoningProcessItem(message: Message, id: string): ProcessItem {
   const reasoning = message.reasoning?.trim() || ''
 
@@ -386,6 +472,10 @@ function createReasoningProcessItem(message: Message, id: string): ProcessItem {
     toolCategory: 'run',
     raw: reasoning,
   }
+}
+
+function toRecord(value: unknown): Record<string, any> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : {}
 }
 
 function summarizeToolFailure(parsed: unknown, fallbackName?: string) {
@@ -442,36 +532,4 @@ function createEventProcessItem(note: ProcessNote): ProcessItem {
     summary: { preview: note.label },
     toolCategory: 'run',
   }
-}
-
-function latestProcessActivity(
-  callsById: Map<string, AgentEvent>,
-  completedTools: number,
-  time: number,
-  isRunning: boolean,
-  toolLabels: Record<string, string>,
-): ProcessNote | null {
-  const calls = [...callsById.values()]
-  const latestCall = calls.at(-1)
-
-  if (isRunning && latestCall) {
-    const toolName = formatToolName(latestCall.payload.tool, toolLabels)
-    return {
-      id: `process-active-${latestCall.id}`,
-      label: uiText.process.active(toolName),
-      tone: 'neutral',
-      time: time || parseEventTime(latestCall),
-    }
-  }
-
-  if (completedTools > 0) {
-    return {
-      id: 'process-completed-tools',
-      label: uiText.process.completedSteps(completedTools),
-      tone: 'neutral',
-      time,
-    }
-  }
-
-  return null
 }

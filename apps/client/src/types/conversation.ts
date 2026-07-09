@@ -3,27 +3,63 @@ export type AgentEvent = {
   seq: number
   type: string
   ts: string
+  step?: AgentStep
   payload: Record<string, any>
+}
+
+export type AgentStepPhase = 'reason' | 'act' | 'respond'
+
+export type AgentStep = {
+  index: number
+  phase: AgentStepPhase
 }
 
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max'
 
-export type Message = {
+type BaseMessage = {
   id?: string
-  role: 'user' | 'assistant' | 'tool'
   content: string
-  reasoning?: string
   created_at?: string
+}
+
+export type UserMessage = BaseMessage & {
+  role: 'user'
   attachments?: ImageAttachment[]
+  reasoning?: never
+  step?: never
+  tool_calls?: never
+  tool_call_id?: never
+  name?: never
+  status?: never
+}
+
+export type AssistantMessage = BaseMessage & {
+  role: 'assistant'
+  reasoning?: string
+  step?: AgentStep
   tool_calls?: Array<{
     id: string
     name: string
     args: Record<string, unknown>
   }>
+  attachments?: never
+  tool_call_id?: never
+  name?: never
+  status?: never
+}
+
+export type ToolMessage = BaseMessage & {
+  role: 'tool'
+  reasoning?: never
+  step?: never
+  attachments?: never
+  tool_calls?: never
   tool_call_id?: string
   name?: string
   status?: 'success' | 'error'
 }
+
+export type Message = UserMessage | AssistantMessage | ToolMessage
 
 export type ImageAttachment = {
   id: string
@@ -139,22 +175,7 @@ export type ToolStepViewItem = {
   outputRaw?: string
 }
 
-export type ToolBatchViewItem = {
-  id: string
-  kind: 'tool-batch'
-  title: string
-  detail: string
-  tone: ProcessTone
-  time?: number
-  actionLabel: string
-  objectLabel: string
-  countLabel: string
-  renderer: ToolRendererKind
-  toolCategory: ToolCategory
-  steps: ToolStepViewItem[]
-}
-
-export type ProcessViewItem = ProcessItem | ToolStepViewItem | ToolBatchViewItem
+export type ProcessViewItem = ProcessItem | ToolStepViewItem
 
 export type ProcessGroupView = {
   label: string

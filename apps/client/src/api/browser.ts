@@ -18,6 +18,12 @@ export type BrowserResult = {
   matched?: string
 }
 
+export type BrowserStateChange = {
+  eventType: string
+  pageId?: number
+  state: BrowserResult
+}
+
 export type BrowserSnapshotNode = {
   uid: string
   role: string
@@ -90,11 +96,11 @@ export function isNativeBrowserAvailable() {
 }
 
 export const browserApi = {
-  listenStateChanged(handler: (result: BrowserResult) => void) {
+  listenStateChanged(handler: (change: BrowserStateChange) => void) {
     const listen = window.__TAURI__?.event?.listen
     if (!listen) return Promise.resolve(() => undefined)
 
-    return listen<BrowserResult>('browser_state_changed', (event) => handler(event.payload))
+    return listen<BrowserStateChange>('browser_state_change', (event) => handler(event.payload))
   },
 
   state() {

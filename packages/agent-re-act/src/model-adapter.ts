@@ -1,7 +1,7 @@
 import { AIMessage, AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { ImageAttachment, Message, ToolCall } from '../../protocol/src/index.js';
+import type { AgentStep, ImageAttachment, Message, ToolCall } from '../../protocol/src/index.js';
 import type { AgentRunInput } from '../../agent-runtime/src/index.js';
 import type { AgentToolSpec } from './control-tools.js';
 import {
@@ -24,6 +24,7 @@ export type ModelStepInput = {
   messages: ModelConversationState;
   runtimeTools: AgentToolSpec[];
   showRawReasoning: boolean;
+  step?: AgentStep;
   signal?: AbortSignal;
   timeoutMs: number;
 };
@@ -324,6 +325,7 @@ async function streamChatModel(input: {
   messages: BaseMessage[];
   model: StreamableChatModel;
   showRawReasoning: boolean;
+  step?: AgentStep;
   signal?: AbortSignal;
   timeoutMs: number;
 }) {
@@ -336,7 +338,7 @@ async function streamChatModel(input: {
   function emitReasoning(content: string) {
     if (!content || !input.showRawReasoning) return;
     reasoning += content;
-    input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content });
+    input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content }, { step: input.step });
   }
 
   await withTimeout(
@@ -362,7 +364,7 @@ async function streamChatModel(input: {
         emitReasoning(split.reasoning);
         if (split.content) {
           contentStreamed = true;
-          input.eventBus.emit('agent.message.delta', { channel: 'answer', content: split.content });
+          input.eventBus.emit('agent.message.delta', { channel: 'answer', content: split.content }, { step: input.step });
         }
       }
 
@@ -370,7 +372,7 @@ async function streamChatModel(input: {
       emitReasoning(flushed.reasoning);
       if (flushed.content) {
         contentStreamed = true;
-        input.eventBus.emit('agent.message.delta', { channel: 'answer', content: flushed.content });
+        input.eventBus.emit('agent.message.delta', { channel: 'answer', content: flushed.content }, { step: input.step });
       }
     })(),
     input.timeoutMs,
@@ -438,6 +440,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
       messages: input.messages.langchain,
       model: this.modelWithTools,
       showRawReasoning: input.showRawReasoning,
+      step: input.step,
       signal: input.signal,
       timeoutMs: input.timeoutMs,
     });
@@ -544,7 +547,7 @@ export class ResponsesAdapter implements ModelAdapter {
             if (delta) {
               textParts.push(delta);
               contentStreamed = true;
-              input.eventBus.emit('agent.message.delta', { channel: 'answer', content: delta });
+              input.eventBus.emit('agent.message.delta', { channel: 'answer', content: delta }, { step: input.step });
             }
             continue;
           }

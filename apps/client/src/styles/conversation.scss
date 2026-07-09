@@ -116,24 +116,6 @@
   }
 }
 
-.markdown.streaming > :last-child::after {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 1em;
-  margin-left: 3px;
-  border-radius: 2px;
-  vertical-align: text-bottom;
-  background: var(--accent);
-  animation: cursor-blink 1s steps(2, start) infinite;
-}
-
-@keyframes cursor-blink {
-  to {
-    visibility: hidden;
-  }
-}
-
 .message-action {
   @include icon-control(30px, $color: var(--ink-muted));
   flex: 0 0 auto;

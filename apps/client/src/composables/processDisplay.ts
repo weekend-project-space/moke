@@ -3,7 +3,6 @@ import type {
   ProcessItem,
   ProcessViewItem,
   ToolRendererKind,
-  ToolBatchViewItem,
   ToolStepSummary,
   ToolStepViewItem,
 } from '../types/conversation'
@@ -82,7 +81,7 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
     viewItems.push(item)
   }
 
-  return mergeAdjacentToolBatches(viewItems)
+  return viewItems
 }
 
 function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined, tone: ProcessItem['tone']) {
@@ -99,75 +98,6 @@ function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined
   }
 
   return inputLabel
-}
-
-function mergeAdjacentToolBatches(items: ProcessViewItem[]): ProcessViewItem[] {
-  const merged: ProcessViewItem[] = []
-  let batch: ToolStepViewItem[] = []
-
-  function canBatch(left: ToolStepViewItem, right: ToolStepViewItem) {
-    return (
-      left.actionLabel === right.actionLabel &&
-      left.toolCategory === right.toolCategory &&
-      left.tone === right.tone
-    )
-  }
-
-  function flushBatch() {
-    if (batch.length === 0) return
-    if (batch.length === 1) {
-      merged.push(batch[0])
-      batch = []
-      return
-    }
-
-    merged.push(createToolBatchView(batch))
-    batch = []
-  }
-
-  for (const item of items) {
-    if (item.kind !== 'tool-step') {
-      flushBatch()
-      merged.push(item)
-      continue
-    }
-
-    const last = batch.at(-1)
-    if (!last || canBatch(last, item)) {
-      batch.push(item)
-      continue
-    }
-
-    flushBatch()
-    batch.push(item)
-  }
-
-  flushBatch()
-  return merged
-}
-
-function createToolBatchView(steps: ToolStepViewItem[]): ToolBatchViewItem {
-  const first = steps[0]
-  const countLabel = toolBatchCountLabel(first, steps.length)
-
-  return {
-    id: `process-tool-batch-${first.id}-${steps.length}`,
-    kind: 'tool-batch',
-    title: first.title,
-    detail: countLabel,
-    tone: steps.some((step) => step.tone === 'error') ? 'error' : first.tone,
-    actionLabel: first.actionLabel,
-    objectLabel: '',
-    countLabel,
-    renderer: first.renderer,
-    toolCategory: first.toolCategory,
-    steps,
-  }
-}
-
-function toolBatchCountLabel(step: ToolStepViewItem, count: number) {
-  if (step.renderer === 'directory') return `${count} ${count === 1 ? 'directory' : 'directories'}`
-  return `${count} item${count === 1 ? '' : 's'}`
 }
 
 function createToolStepView(call: ProcessItem): ToolStepViewItem {
@@ -305,10 +235,7 @@ function browserResultPreview(output: Record<string, any>) {
 
 function processItemTimes(items: ProcessViewItem[]) {
   return items
-    .flatMap((item) => {
-      if (item.kind === 'tool-batch') return [item.time, ...item.steps.map((step) => step.time)]
-      return [item.time]
-    })
+    .map((item) => item.time)
     .filter((time): time is number => Boolean(time && time > 0))
     .sort((left, right) => left - right)
 }

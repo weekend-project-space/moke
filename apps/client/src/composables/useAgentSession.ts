@@ -31,6 +31,8 @@ type ActiveRunSummary = {
   pending_approval?: PendingApproval
 }
 
+const STREAM_FLUSH_INTERVAL_MS = 50
+
 export type SendMessageInput = {
   content: string
   attachments?: ImageAttachment[]
@@ -59,6 +61,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const sessions = ref<SessionSummary[]>([])
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
+  const streamBuffers = new Map<string, string>()
+  const streamFlushFrames = new Map<string, number>()
+  const streamFlushTimers = new Map<string, number>()
+  const streamLastFlushAt = new Map<string, number>()
 
   const emptyRunState = createRunState()
   const currentRunState = computed(() => (sessionId.value ? sessionRunStates[sessionId.value] : undefined) || emptyRunState)
@@ -87,23 +93,75 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return sessionRunStates[targetSessionId]
   }
 
-  function resetRunState(targetSessionId: string) {
-    closeEventSource(targetSessionId)
-    delete sessionRunStates[targetSessionId]
-  }
-
   function eventKey(event: AgentEvent) {
     return event.id || `${event.seq || ''}:${event.type}:${event.ts || ''}`
   }
 
-  function appendEvent(targetSessionId: string, event: AgentEvent) {
+  function appendEvent(targetSessionId: string, event: AgentEvent, optionsOverride: { store?: boolean } = {}) {
     const state = ensureRunState(targetSessionId)
     const key = eventKey(event)
     if (state.seenEventKeys.has(key)) return false
 
     state.seenEventKeys.add(key)
-    state.events.push(event)
+    if (optionsOverride.store !== false) state.events.push(event)
     return true
+  }
+
+  function cancelStreamingFlush(targetSessionId: string) {
+    const timer = streamFlushTimers.get(targetSessionId)
+    if (timer !== undefined) window.clearTimeout(timer)
+    streamFlushTimers.delete(targetSessionId)
+
+    const frame = streamFlushFrames.get(targetSessionId)
+    if (frame !== undefined) window.cancelAnimationFrame(frame)
+    streamFlushFrames.delete(targetSessionId)
+  }
+
+  function flushStreamingBuffer(targetSessionId: string) {
+    cancelStreamingFlush(targetSessionId)
+    const state = sessionRunStates[targetSessionId]
+    if (!state) return
+
+    state.streamingText = streamBuffers.get(targetSessionId) || ''
+    streamLastFlushAt.set(targetSessionId, performance.now())
+  }
+
+  function clearStreamingBuffer(targetSessionId: string) {
+    cancelStreamingFlush(targetSessionId)
+    streamBuffers.delete(targetSessionId)
+    streamLastFlushAt.delete(targetSessionId)
+    ensureRunState(targetSessionId).streamingText = ''
+  }
+
+  function scheduleStreamingFlush(targetSessionId: string, immediate = false) {
+    if (streamFlushTimers.has(targetSessionId) || streamFlushFrames.has(targetSessionId)) return
+
+    const elapsed = performance.now() - (streamLastFlushAt.get(targetSessionId) || 0)
+    const delay = immediate ? 0 : Math.max(0, STREAM_FLUSH_INTERVAL_MS - elapsed)
+
+    const scheduleFrame = () => {
+      streamFlushTimers.delete(targetSessionId)
+      streamFlushFrames.set(targetSessionId, window.requestAnimationFrame(() => flushStreamingBuffer(targetSessionId)))
+    }
+
+    if (delay <= 0) {
+      scheduleFrame()
+      return
+    }
+
+    streamFlushTimers.set(targetSessionId, window.setTimeout(scheduleFrame, delay))
+  }
+
+  function appendStreamingDelta(targetSessionId: string, content: string) {
+    if (!content) return
+    streamBuffers.set(targetSessionId, `${streamBuffers.get(targetSessionId) || ''}${content}`)
+    scheduleStreamingFlush(targetSessionId)
+  }
+
+  function resetRunState(targetSessionId: string) {
+    closeEventSource(targetSessionId)
+    clearStreamingBuffer(targetSessionId)
+    delete sessionRunStates[targetSessionId]
   }
 
   async function checkServer() {
@@ -172,7 +230,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         state.eventSource?.close()
         state.runId = run.run_id
         state.events = []
-        state.streamingText = ''
+        clearStreamingBuffer(run.session_id)
         state.seenEventKeys.clear()
       }
 
@@ -304,7 +362,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const state = ensureRunState(targetSessionId)
     state.events = []
     state.seenEventKeys.clear()
-    state.streamingText = ''
+    clearStreamingBuffer(targetSessionId)
     state.pendingApproval = null
     state.pendingAsk = null
     state.runError = ''
@@ -397,14 +455,20 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     for (const type of eventTypes) {
       source.addEventListener(type, (message) => {
         const event = JSON.parse((message as MessageEvent).data) as AgentEvent
-        if (!appendEvent(targetSessionId, event)) return
-
-        const nextState = ensureRunState(targetSessionId)
 
         if (event.type === 'agent.message.delta') {
           const channel = event.payload.channel || 'answer'
-          if (channel !== 'reasoning') nextState.streamingText += event.payload.content || ''
+          const isAnswerDelta = channel !== 'reasoning'
+          if (!appendEvent(targetSessionId, event, { store: !isAnswerDelta })) return
+          if (isAnswerDelta) {
+            appendStreamingDelta(targetSessionId, event.payload.content || '')
+            return
+          }
+        } else if (!appendEvent(targetSessionId, event)) {
+          return
         }
+
+        const nextState = ensureRunState(targetSessionId)
 
         if (event.type === 'approval.required') {
           nextState.pendingApproval = event.payload as PendingApproval
@@ -427,7 +491,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           if (doneMessage && sessionId.value === targetSessionId) {
             messages.value.push(doneMessage)
           }
-          if (options.isFinalAssistantMessage(doneMessage)) nextState.streamingText = ''
+          if (options.isFinalAssistantMessage(doneMessage)) clearStreamingBuffer(targetSessionId)
         }
 
         if (event.type === 'agent.done' || event.type === 'agent.error') {

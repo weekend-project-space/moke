@@ -73,7 +73,7 @@
   border-radius: var(--radius-composer);
   background: var(--panel-strong);
   box-shadow: var(--shadow-input);
-  cursor: text;
+  cursor: default;
   overflow: visible;
 }
 
@@ -81,6 +81,7 @@
   flex: 1 1 auto;
   min-height: 58px;
   padding: 12px 12px 4px;
+  cursor: text;
 }
 
 .composer-attachments {
@@ -139,9 +140,11 @@
   border: 0;
   outline: none;
   color: var(--ink);
+  caret-color: var(--ink);
   background: transparent;
   font-size: var(--font-size-body);
   line-height: 1.45;
+  cursor: text;
   resize: none;
   overflow-y: auto;
 }
@@ -507,6 +510,5 @@
     padding: 10px 0 16px;
   }
 }
-
 
 

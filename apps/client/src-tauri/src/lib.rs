@@ -449,6 +449,39 @@ fn set_history_index_for_url(page: &mut BrowserPageState, url: &str) -> bool {
     }
 }
 
+fn sync_history_for_page_load(page: &mut BrowserPageState, url: &str, is_loading: bool) {
+    if !is_trackable_url(url) {
+        refresh_history_flags(page);
+        return;
+    }
+
+    let previous_url = page.url.clone();
+    let was_loading = page.is_loading;
+
+    if is_loading {
+        if !set_history_index_for_url(page, url) {
+            push_history_entry(page, url.to_string());
+        }
+        return;
+    }
+
+    if was_loading
+        && previous_url != url
+        && page
+            .history
+            .get(page.history_index)
+            .is_some_and(|entry| entry == &previous_url)
+    {
+        page.history[page.history_index] = url.to_string();
+        refresh_history_flags(page);
+        return;
+    }
+
+    if !set_history_index_for_url(page, url) {
+        push_history_entry(page, url.to_string());
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BrowserPageReport {
@@ -458,14 +491,90 @@ struct BrowserPageReport {
     can_go_forward: Option<bool>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserPageChangeReport {
+    page_id: u32,
+    #[serde(rename = "eventType")]
+    event_type: String,
+    url: Option<String>,
+    title: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserStateChange {
+    #[serde(rename = "eventType")]
+    event_type: String,
+    page_id: Option<u32>,
+    state: BrowserResult,
+}
+
 const BROWSER_STATE_QUERY_SCRIPT: &str = r#"
 (() => ({
   url: String(window.location.href || ""),
-  title: String(document.title || ""),
-  canGoBack: window.history.length > 1,
-  canGoForward: false
+  title: String(document.title || "")
 }))()
 "#;
+
+fn browser_state_observer_script(page_id: u32) -> String {
+    format!(
+        r#"
+(() => {{
+  if (window.__MOKE_BROWSER_STATE_OBSERVER__) return;
+  window.__MOKE_BROWSER_STATE_OBSERVER__ = true;
+  const pageId = {page_id};
+  let lastUrl = String(window.location.href || "");
+  let lastTitle = String(document.title || "");
+  let timer = 0;
+
+  const report = (eventType) => {{
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {{
+      const url = String(window.location.href || "");
+      const title = String(document.title || "");
+      if (url === lastUrl && title === lastTitle && eventType !== "history-changed") return;
+      lastUrl = url;
+      lastTitle = title;
+      try {{
+        window.__TAURI__?.core?.invoke?.("browser_report_state_change", {{
+          report: {{
+            pageId,
+            eventType,
+            url,
+            title
+          }}
+        }});
+      }} catch (_) {{}}
+    }}, 40);
+  }};
+
+  const wrapHistory = (name) => {{
+    const original = window.history && window.history[name];
+    if (typeof original !== "function") return;
+    window.history[name] = function (...args) {{
+      const value = original.apply(this, args);
+      report("history-changed");
+      return value;
+    }};
+  }};
+
+  wrapHistory("pushState");
+  wrapHistory("replaceState");
+  window.addEventListener("popstate", () => report("history-changed"));
+  window.addEventListener("hashchange", () => report("hash-changed"));
+
+  if (document.querySelector("title")) {{
+    new MutationObserver(() => report("title-changed")).observe(document.querySelector("title"), {{
+      childList: true,
+      characterData: true,
+      subtree: true
+    }});
+  }}
+}})();
+"#
+    )
+}
 
 const BROWSER_HISTORY_NAVIGATION_SCRIPT: &str = r#"
 (() => {
@@ -980,7 +1089,7 @@ fn refresh_browser_page_state(app: &tauri::AppHandle, state: &BrowserState, page
             };
             if let Some(state) = callback_app.try_state::<BrowserState>() {
                 let _ = update_browser_page_from_report(&state, page_id, payload);
-                emit_browser_state(&callback_app, &state);
+                emit_browser_state_change(&callback_app, &state, "state-refreshed", Some(page_id));
             }
         })
         .map_err(|error| error.to_string())
@@ -1228,9 +1337,16 @@ fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Re
     crop_image(&window_image, x, y, width, height)
 }
 
-fn emit_browser_state(app: &tauri::AppHandle, state: &BrowserState) {
+fn emit_browser_state_change(app: &tauri::AppHandle, state: &BrowserState, event_type: &str, page_id: Option<u32>) {
     if let Ok(result) = browser_result(state) {
-        let _ = app.emit("browser_state_changed", result);
+        let _ = app.emit(
+            "browser_state_change",
+            BrowserStateChange {
+                event_type: event_type.to_string(),
+                page_id,
+                state: result,
+            },
+        );
     }
 }
 
@@ -1378,6 +1494,7 @@ fn create_browser_page(
         .get_window("main")
         .ok_or_else(|| "Main window was not found".to_string())?;
     let webview_builder = WebviewBuilder::new(&label, WebviewUrl::External(url.clone()))
+        .initialization_script(browser_state_observer_script(page_id))
         .on_new_window(move |url, _features| {
             let app = popup_app.clone();
             let handler_app = app.clone();
@@ -1395,13 +1512,16 @@ fn create_browser_page(
             if let Some(state) = page_load_app.try_state::<BrowserState>() {
                 let _ = update_browser_page(&state, load_page_id, |page| {
                     let url = payload.url().to_string();
+                    sync_history_for_page_load(page, &url, is_loading);
                     page.url = url.clone();
-                    if !is_loading && !set_history_index_for_url(page, &url) {
-                        push_history_entry(page, url);
-                    }
                     page.is_loading = is_loading;
                 });
-                emit_browser_state(&page_load_app, &state);
+                emit_browser_state_change(
+                    &page_load_app,
+                    &state,
+                    if is_loading { "page-load-started" } else { "page-load-finished" },
+                    Some(load_page_id),
+                );
                 if !is_loading {
                     let _ = refresh_browser_page_state(&page_load_app, &state, load_page_id);
                 }
@@ -1412,7 +1532,7 @@ fn create_browser_page(
                 let _ = update_browser_page(&state, title_page_id, |page| {
                     page.title = title;
                 });
-                emit_browser_state(&title_app, &state);
+                emit_browser_state_change(&title_app, &state, "title-changed", Some(title_page_id));
             }
         });
     let bounds = resolve_browser_bounds(state, bounds)?;
@@ -1460,7 +1580,7 @@ fn create_browser_page(
     }
 
     let result = browser_result(state)?;
-    let _ = app.emit("browser_state_changed", result.clone());
+    emit_browser_state_change(app, state, "tab-created", Some(page_id));
     Ok(result)
 }
 
@@ -1486,8 +1606,28 @@ async fn browser_refresh_state(
     let report = serde_json::from_value::<BrowserPageReport>(payload)
         .map_err(|error| format!("Browser state returned invalid data: {error}"))?;
     update_browser_page_from_report(&state, page_id, report)?;
-    emit_browser_state(&app, &state);
+    emit_browser_state_change(&app, &state, "state-refreshed", Some(page_id));
     browser_result(&state)
+}
+
+#[tauri::command]
+async fn browser_report_state_change(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    report: BrowserPageChangeReport,
+) -> Result<(), String> {
+    update_browser_page_from_report(
+        &state,
+        report.page_id,
+        BrowserPageReport {
+            url: report.url,
+            title: report.title,
+            can_go_back: None,
+            can_go_forward: None,
+        },
+    )?;
+    emit_browser_state_change(&app, &state, &report.event_type, Some(report.page_id));
+    Ok(())
 }
 
 #[tauri::command]
@@ -2137,6 +2277,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             browser_state,
             browser_refresh_state,
+            browser_report_state_change,
             browser_open,
             browser_navigate,
             browser_evaluate_script,

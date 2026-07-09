@@ -187,7 +187,7 @@ export function getReasoningText(message: BaseMessage) {
   chunks.push(...collectReasoningValue(messageRecord.additional_kwargs));
   chunks.push(...collectReasoningValue(messageRecord.response_metadata));
 
-  return chunks.map((chunk) => chunk.trim()).filter(Boolean).join('\n');
+  return chunks.filter((chunk) => chunk !== '').join('');
 }
 
 function partialTagSuffixLength(text: string, tag: string) {
