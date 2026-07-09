@@ -1,8 +1,10 @@
 import { isNativeBrowserAvailable } from '../api/browser'
 import { connectBrowserBridge } from '../api/browserBridge'
+import type { BrowserBounds } from '../api/browser'
 
 type UseBrowserWorkspaceOptions = {
   apiBase: string
+  getBrowserBounds?: () => BrowserBounds | null
   openUrl?: (url: string) => Promise<void>
   openWorkspace: () => void
 }
@@ -46,8 +48,11 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
   }
 
   function initBrowserWorkspace() {
+    if (!isNativeBrowserAvailable()) return
+
     disconnectBrowserBridge = connectBrowserBridge({
       apiBase: options.apiBase,
+      getBrowserBounds: options.getBrowserBounds,
       showBrowserPanel: options.openWorkspace,
     })
   }

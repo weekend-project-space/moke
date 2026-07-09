@@ -346,6 +346,7 @@ watch(
 )
 
 defineExpose({
+  getBounds: getViewportBounds,
   openUrl,
 })
 </script>

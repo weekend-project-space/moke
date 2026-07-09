@@ -126,6 +126,7 @@ const {
   openLinkInBrowser,
 } = useBrowserWorkspace({
   apiBase,
+  getBrowserBounds: () => browserPanel.value?.getBounds() || null,
   openUrl: async (url) => {
     await nextTick()
     if (!browserPanel.value) throw new Error('Browser panel is not mounted')

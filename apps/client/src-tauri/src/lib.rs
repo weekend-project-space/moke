@@ -960,7 +960,12 @@ fn update_browser_page_from_report(
         if let Some(title) = payload.title {
             page.title = title;
         }
-        let _ = (payload.can_go_back, payload.can_go_forward);
+        if let Some(can_go_back) = payload.can_go_back {
+            page.can_go_back = can_go_back;
+        }
+        if let Some(can_go_forward) = payload.can_go_forward {
+            page.can_go_forward = can_go_forward;
+        }
         page.is_loading = false;
     })
 }
@@ -1007,6 +1012,22 @@ fn eval_browser_json(
     receiver
         .recv_timeout(Duration::from_millis(timeout_ms))
         .map_err(|_| "Browser script timed out".to_string())?
+}
+
+fn unwrap_browser_value(value: serde_json::Value) -> Result<serde_json::Value, String> {
+    if value
+        .get("ok")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        return Ok(value.get("value").cloned().unwrap_or(serde_json::Value::Null));
+    }
+
+    let message = value
+        .get("error")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Browser script failed");
+    Err(message.to_string())
 }
 
 fn snapshot_script(verbose: bool) -> String {
@@ -1425,7 +1446,7 @@ fn create_browser_page(
             page_id,
             label,
             url: url.to_string(),
-            title: "新页面".to_string(),
+            title: "New page".to_string(),
             can_go_back: false,
             can_go_forward: false,
             is_loading: true,
@@ -1455,7 +1476,17 @@ async fn browser_refresh_state(
     page_id: Option<u32>,
 ) -> Result<BrowserResult, String> {
     let page_id = active_page_id(&state, page_id)?;
-    refresh_browser_page_state(&app, &state, page_id)?;
+    let payload = eval_browser_json(
+        &app,
+        &state,
+        Some(page_id),
+        BROWSER_STATE_QUERY_SCRIPT.to_string(),
+        3000,
+    )?;
+    let report = serde_json::from_value::<BrowserPageReport>(payload)
+        .map_err(|error| format!("Browser state returned invalid data: {error}"))?;
+    update_browser_page_from_report(&state, page_id, report)?;
+    emit_browser_state(&app, &state);
     browser_result(&state)
 }
 
@@ -1571,14 +1602,28 @@ async fn browser_evaluate_script(
     let _ = options.dialog_action;
     let script = format!(
         r#"
-(async () => {{
+(() => {{
   const fn = ({function_source});
   const args = {args_json};
-  return await fn(...args);
+  try {{
+    const value = fn(...args);
+    if (value && typeof value.then === "function") {{
+      return {{
+        ok: false,
+        error: "evaluate_script does not support Promise return values yet"
+      }};
+    }}
+    return {{ ok: true, value }};
+  }} catch (error) {{
+    return {{
+      ok: false,
+      error: error && error.message ? String(error.message) : String(error)
+    }};
+  }}
 }})()
 "#
     );
-    let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
+    let value = unwrap_browser_value(eval_browser_json(&app, &state, options.page_id, script, 30000)?)?;
     browser_result_with_value(&state, Some(value), None, None)
 }
 
@@ -1959,9 +2004,10 @@ async fn resize_page(
 ) -> Result<BrowserResult, String> {
     let page_id = active_page_id(&state, page_id)?;
     let webview = browser_webview(&app, &state, page_id)?;
+    let previous_bounds = resolve_browser_bounds(&state, None)?;
     let bounds = BrowserBounds {
-        x: 0.0,
-        y: 0.0,
+        x: previous_bounds.x,
+        y: previous_bounds.y,
         width,
         height,
     };

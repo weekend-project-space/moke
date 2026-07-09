@@ -38,23 +38,39 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
   const lastAssistantMessage = computed(() =>
     [...visibleMessages.value].reverse().find((message) => message.role === 'assistant' && message.content.trim()),
   )
-  const processNotes = computed<ProcessNote[]>(() => {
-    const notes: ProcessNote[] = []
-    const callsById = new Map<string, AgentEvent>()
-    let completedTools = 0
-    let latestToolTime = 0
+  const activeReasoningNote = computed<ProcessNote | null>(() => {
     let reasoningText = ''
-    let reasoningTime = 0
+    let firstReasoningTime = 0
 
     for (const event of options.events.value) {
       if (event.type === 'agent.message.delta' && event.payload.channel === 'reasoning') {
         const content = typeof event.payload.content === 'string' ? event.payload.content : ''
         if (content) {
           reasoningText += content
-          reasoningTime = reasoningTime || parseEventTime(event)
+          firstReasoningTime = firstReasoningTime || parseEventTime(event)
         }
-        continue
       }
+    }
+
+    if (!reasoningText.trim()) return null
+
+    return {
+      id: 'process-reasoning',
+      label: shortText(reasoningText, 96),
+      raw: reasoningText.trim(),
+      tone: 'neutral',
+      time: firstReasoningTime,
+    }
+  })
+
+  const processNotes = computed<ProcessNote[]>(() => {
+    const notes: ProcessNote[] = []
+    const callsById = new Map<string, AgentEvent>()
+    let completedTools = 0
+    let latestToolTime = 0
+
+    for (const event of options.events.value) {
+      if (event.type === 'agent.message.delta' && event.payload.channel === 'reasoning') continue
 
       if (event.type === 'tool.call') {
         callsById.set(String(event.payload.call_id || event.id), event)
@@ -96,16 +112,6 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       }
     }
 
-    if (reasoningText.trim()) {
-      notes.push({
-        id: 'process-reasoning',
-        label: shortText(reasoningText, 96),
-        raw: reasoningText.trim(),
-        tone: 'neutral',
-        time: reasoningTime,
-      })
-    }
-
     const latestActivity = latestProcessActivity(
       callsById,
       completedTools,
@@ -120,7 +126,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
   const displayItems = computed<DisplayItem[]>(() => {
     const items: DisplayItem[] = []
-    const reasoningNote = processNotes.value.find((note) => note.raw)
+    const reasoningNote = activeReasoningNote.value
     const sourceMessages = options.messages.value.filter(
       (message) => message.role !== 'tool' || Boolean(message.content.trim()),
     )
@@ -149,8 +155,8 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       if (processItems.length) {
         const isCurrentTurn = options.isRunning.value && nextTime === 0
         const groupId = `process-turn-${turnIndex}`
-        const nextProcessItems = isCurrentTurn && reasoningNote ? [...processItems, createEventProcessItem(reasoningNote)] : processItems
-        const processGroup = createProcessGroupView(sortProcessItemsByTime(nextProcessItems))
+        const nextProcessItems = isCurrentTurn && reasoningNote ? [createEventProcessItem(reasoningNote), ...processItems] : processItems
+        const processGroup = createProcessGroupView(nextProcessItems)
         const startedAt = turnStartedAt || processGroup.startedAt
         const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
         if (isCurrentTurn) hasActiveMessageProcessGroup = true
@@ -240,7 +246,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       !hasActiveMessageProcessGroup
     ) {
       const groupId = 'process-current-events'
-      const itemsFromEvents = sortProcessItemsByTime(processNotes.value.map(createEventProcessItem))
+      const itemsFromEvents = processNotes.value.map(createEventProcessItem)
       const processGroup = createProcessGroupView(itemsFromEvents)
       const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
       const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
@@ -302,20 +308,6 @@ function latestUserMessageTime(messages: Message[]) {
 function parseEventTime(event: AgentEvent) {
   const time = Date.parse(event.ts)
   return Number.isNaN(time) ? 0 : time
-}
-
-function sortProcessItemsByTime(items: ProcessItem[]) {
-  return items
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const leftTime = left.item.time || 0
-      const rightTime = right.item.time || 0
-      if (!leftTime && !rightTime) return left.index - right.index
-      if (!leftTime) return 1
-      if (!rightTime) return -1
-      return leftTime === rightTime ? left.index - right.index : leftTime - rightTime
-    })
-    .map(({ item }) => item)
 }
 
 function createAssistantProcessItem(message: Message, id: string): ProcessItem {
