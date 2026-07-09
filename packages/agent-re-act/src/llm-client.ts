@@ -7,6 +7,7 @@ export type ChatModelSettings = {
   apiBaseUrl: string;
   maxRetries: number;
   model: string;
+  type: 'openai-compatible' | 'openai-responses';
   reasoningEffort: ReasoningEffort;
   reasoningProvider: 'none' | 'llama.cpp';
   showRawReasoning: boolean;
@@ -14,9 +15,8 @@ export type ChatModelSettings = {
 };
 
 export function normalizeReasoningEffort(input: unknown): ChatModelSettings['reasoningEffort'] {
-  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
-    ? input
-    : 'medium';
+  if (input === 'ultra') return 'max';
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max' ? input : 'medium';
 }
 
 export function normalizeReasoningProvider(input: unknown): ChatModelSettings['reasoningProvider'] {
@@ -38,7 +38,7 @@ function llamaCppThinkingBudget(reasoningEffort: ChatModelSettings['reasoningEff
       return 512;
     case 'high':
       return 1024;
-    case 'ultra':
+    case 'max':
       return 2048;
     default:
       return 0;
@@ -73,6 +73,7 @@ export function resolveChatModelSettings(input: Partial<ChatModelSettings> = {})
     apiBaseUrl: input.apiBaseUrl || process.env.OPENAI_BASE_URL || 'http://localhost:8080/v1',
     maxRetries: normalizeMaxRetries(input.maxRetries ?? process.env.OPENAI_MAX_RETRIES),
     model: input.model || process.env.OPENAI_MODEL || 'qwen3.6-35BA3B',
+    type: input.type === 'openai-responses' ? 'openai-responses' : 'openai-compatible',
     reasoningEffort: normalizeReasoningEffort(input.reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT),
     reasoningProvider: normalizeReasoningProvider(input.reasoningProvider ?? process.env.OPENAI_REASONING_PROVIDER),
     showRawReasoning: normalizeBoolean(input.showRawReasoning ?? process.env.OPENAI_SHOW_RAW_REASONING),

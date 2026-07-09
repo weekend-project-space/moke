@@ -109,7 +109,8 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
 }
 
 function normalizeRunReasoningEffort(input: unknown): ReasoningEffort | undefined {
-  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
+  if (input === 'ultra') return 'max';
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max'
     ? input
     : undefined;
 }

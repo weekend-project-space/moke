@@ -343,10 +343,11 @@ async function loadReasoningCapability() {
 }
 
 function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'ultra'
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'max'
 }
 
 function isComposerReasoningEffort(value: unknown): value is ComposerReasoningEffort {
+  if (value === 'ultra') return false
   return value === 'default' || isReasoningEffort(value)
 }
 

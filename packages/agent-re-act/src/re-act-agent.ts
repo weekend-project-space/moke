@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import { tool } from 'langchain';
-
 import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
 import { ToolExecutionError } from '../../agent-runtime/src/index.js';
 import type { ToolCall } from '../../protocol/src/index.js';
@@ -17,23 +14,9 @@ import {
   readFinishContent,
   type AgentToolSpec,
 } from './control-tools.js';
-import {
-  createFinalMessage,
-  createHistoryMessages,
-  createSystemMessage,
-  createThinkTagSplitter,
-  createUserMessage,
-  getMessageText,
-  getReasoningText,
-  isAI,
-  stripThinkBlocks,
-} from './messages.js';
-import {
-  createChatModel,
-  resolveChatModelSettings,
-  withTimeout,
-  type ChatModelSettings,
-} from './llm-client.js';
+import { createFinalMessage, stripThinkBlocks } from './messages.js';
+import { resolveChatModelSettings, type ChatModelSettings } from './llm-client.js';
+import { createModelAdapter } from './model-adapter.js';
 
 function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
   return {
@@ -49,19 +32,6 @@ function normalizeTimeoutMs(timeoutMs: number) {
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('Run cancelled');
-}
-
-function createModelTool(runtimeTool: AgentToolSpec) {
-  return tool(
-    async () => {
-      throw new Error(`Tool ${runtimeTool.name} is executed by the ReAct runtime loop.`);
-    },
-    {
-      name: runtimeTool.name,
-      description: runtimeTool.description,
-      schema: runtimeTool.schema,
-    },
-  );
 }
 
 function createToolErrorOutput(error: unknown, toolName: string) {
@@ -86,74 +56,6 @@ function messageId() {
 
 function toToolCallArgs(args: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
-}
-
-type StreamableChatModel = {
-  stream(
-    input: BaseMessage[],
-    options?: { signal?: AbortSignal },
-  ): AsyncIterable<AIMessageChunk> | Promise<AsyncIterable<AIMessageChunk>>;
-};
-
-async function streamModelStep(input: {
-  eventBus: AgentRunInput['eventBus'];
-  messages: BaseMessage[];
-  model: StreamableChatModel;
-  showRawReasoning: boolean;
-  signal?: AbortSignal;
-  timeoutMs: number;
-}) {
-  const chunks: AIMessageChunk[] = [];
-  const thinkTags = createThinkTagSplitter();
-  let previousReasoningText = '';
-  let reasoning = '';
-
-  function emitReasoning(content: string) {
-    if (!content || !input.showRawReasoning) return;
-    reasoning += content;
-    input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content });
-  }
-
-  await withTimeout(
-    (async () => {
-      const stream = await input.model.stream(input.messages, { signal: input.signal });
-
-      for await (const chunk of stream) {
-        throwIfAborted(input.signal);
-        chunks.push(chunk);
-
-        const reasoningText = getReasoningText(chunk);
-        if (reasoningText && input.showRawReasoning) {
-          const reasoningDelta = reasoningText.startsWith(previousReasoningText)
-            ? reasoningText.slice(previousReasoningText.length)
-            : reasoningText;
-          previousReasoningText = reasoningText.startsWith(previousReasoningText)
-            ? reasoningText
-            : `${previousReasoningText}${reasoningText}`;
-          emitReasoning(reasoningDelta);
-        }
-
-        const split = thinkTags.consume(getMessageText(chunk));
-        emitReasoning(split.reasoning);
-        if (split.content) input.eventBus.emit('agent.message.delta', { channel: 'answer', content: split.content });
-      }
-
-      const flushed = thinkTags.flush();
-      emitReasoning(flushed.reasoning);
-      if (flushed.content) input.eventBus.emit('agent.message.delta', { channel: 'answer', content: flushed.content });
-    })(),
-    input.timeoutMs,
-    input.signal,
-  );
-
-  if (chunks.length === 0) {
-    throw new Error('LLM stream completed without output');
-  }
-
-  return {
-    message: chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]),
-    reasoning,
-  };
 }
 
 export class ReActAgent {
@@ -182,17 +84,17 @@ export class ReActAgent {
     }
 
     const limits = normalizeLimits(rawLimits);
-    const model = createChatModel(modelSettings);
     const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
     const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
-    const tools = runtimeTools.map(createModelTool);
-    const modelWithTools = tools.length > 0 ? model.bindTools(tools) : model;
-    const messages: BaseMessage[] = [
-      createSystemMessage(runtimeTools, context),
-      ...createHistoryMessages(history),
-      createUserMessage(input, attachments),
-    ];
+    const modelAdapter = createModelAdapter(modelSettings, runtimeTools);
+    const modelMessages = modelAdapter.createInitialState({
+      context,
+      history,
+      input,
+      attachments,
+      runtimeTools,
+    });
     let toolCalls = 0;
     let finalContent = '';
     let finalContentStreamed = false;
@@ -210,26 +112,27 @@ export class ReActAgent {
     for (let step = 0; step < limits.max_steps; step++) {
       throwIfAborted(context.abortSignal);
       eventBus.emit('agent.state', { state: 'reason' });
-      messages[0] = createSystemMessage(runtimeTools, context);
 
-      const stepResult = await streamModelStep({
+      const stepResult = await modelAdapter.streamStep({
         eventBus,
-        messages,
-        model: modelWithTools,
+        input,
+        attachments,
+        context,
+        history,
+        messages: modelMessages,
+        runtimeTools,
         showRawReasoning: modelSettings.showRawReasoning,
         signal: context.abortSignal,
         timeoutMs,
       });
-      const aiMessage = stepResult.message;
       accumulatedReasoning += stepResult.reasoning;
       throwIfAborted(context.abortSignal);
-      messages.push(aiMessage);
 
-      const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
+      const calls = stepResult.toolCalls;
       if (calls.length === 0) {
-        const content = stripThinkBlocks(getMessageText(aiMessage));
+        const content = stripThinkBlocks(stepResult.content);
         finalContent = content || '我暂时没有更多可补充的信息。';
-        finalContentStreamed = Boolean(content);
+        finalContentStreamed = stepResult.contentStreamed;
         break;
       }
 
@@ -249,7 +152,7 @@ export class ReActAgent {
           message: {
             id: messageId(),
             role: 'assistant',
-            content: stripThinkBlocks(getMessageText(aiMessage)),
+            content: stripThinkBlocks(stepResult.content),
             created_at: now(),
             tool_calls: persistedToolCalls,
           },
@@ -290,12 +193,11 @@ export class ReActAgent {
               duration_ms: Date.now() - startedAt,
               output,
             });
-            messages.push(
-              new ToolMessage({
-                content: JSON.stringify(output),
-                tool_call_id: callId,
-              }),
-            );
+            modelAdapter.appendToolResult(modelMessages, {
+              callId,
+              name: call.name,
+              output,
+            });
             break;
           }
 
@@ -333,12 +235,11 @@ export class ReActAgent {
               },
             });
           }
-          messages.push(
-            new ToolMessage({
-              content: JSON.stringify(output),
-              tool_call_id: callId,
-            }),
-          );
+          modelAdapter.appendToolResult(modelMessages, {
+            callId,
+            name: call.name,
+            output,
+          });
         } catch (error) {
           throwIfAborted(context.abortSignal);
           const output = createToolErrorOutput(error, call.name);
@@ -361,13 +262,12 @@ export class ReActAgent {
               },
             });
           }
-          messages.push(
-            new ToolMessage({
-              content: JSON.stringify(output),
-              tool_call_id: callId,
-              status: 'error',
-            }),
-          );
+          modelAdapter.appendToolResult(modelMessages, {
+            callId,
+            name: call.name,
+            output,
+            status: 'error',
+          });
         }
       }
 

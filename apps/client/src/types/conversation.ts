@@ -6,7 +6,7 @@ export type AgentEvent = {
   payload: Record<string, any>
 }
 
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'ultra'
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max'
 
 export type Message = {
   id?: string

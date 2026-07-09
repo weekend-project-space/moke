@@ -68,7 +68,7 @@ const composer = {
       low: 'Low',
       medium: 'Medium',
       high: 'High',
-      ultra: 'Ultra',
+      max: 'Max',
     }
     return labels[value] || value
   },
@@ -159,7 +159,8 @@ const settings = {
   reasoningProviderHint: 'Standard mode sends no provider-specific thinking parameters.',
   reasoningProviderLlamaCpp: 'llama.cpp thinking',
   reasoningProviderNone: 'Standard chat',
-  reasoningUltra: 'Ultra',
+  responsesReasoningHint: 'Controls reasoning effort for OpenAI Responses models that support it.',
+  reasoningMax: 'Max',
   retries: 'Retries',
   retriesHint: 'Retry failed model requests. Use 0 for fast local failures.',
   retriesPreview: (seconds: number, retries: number, reasoning: string) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'} / ${reasoning}`,

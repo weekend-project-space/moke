@@ -25,9 +25,9 @@ export class SettingsService {
       activeProviderId: this.settings.activeProviderId,
       providers: this.settings.providers.map((provider) => ({ ...provider })),
       reasoningCapability: {
-        efforts: ['off', 'low', 'medium', 'high', 'ultra'],
+        efforts: ['off', 'low', 'medium', 'high', 'max'],
         rawSupported: activeProvider?.reasoningProvider === 'llama.cpp',
-        supported: activeProvider?.reasoningProvider === 'llama.cpp',
+        supported: activeProvider?.reasoningProvider === 'llama.cpp' || activeProvider?.type === 'openai-responses',
       },
     };
   }

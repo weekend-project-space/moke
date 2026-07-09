@@ -1,6 +1,6 @@
 export type RiskLevel = 'safe' | 'write' | 'dangerous';
 
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'ultra';
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export type RunStatus =
   | 'queued'

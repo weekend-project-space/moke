@@ -12,13 +12,13 @@ type WorkspaceRootPermission = {
 type ModelProviderProfile = {
   id: string
   name: string
-  type: 'openai-compatible'
+  type: 'openai-compatible' | 'openai-responses'
   model: string
   apiBaseUrl: string
   apiKey: string
   maxRetries: number
   timeoutMs: number
-  reasoningEffort: 'off' | 'low' | 'medium' | 'high' | 'ultra'
+  reasoningEffort: 'off' | 'low' | 'medium' | 'high' | 'max'
   reasoningProvider: 'none' | 'llama.cpp'
   showRawReasoning: boolean
 }
@@ -68,7 +68,9 @@ const modelTest = ref<'idle' | 'checking' | 'ok' | 'error'>('idle')
 const modelTestMessage = ref('')
 const modelListMessage = ref('')
 const selectedProvider = computed(() => providers.value.find((provider) => provider.id === selectedProviderId.value) || null)
+const isOpenAIResponsesProvider = computed(() => editingProvider.type === 'openai-responses')
 const isLlamaCppReasoning = computed(() => editingProvider.reasoningProvider === 'llama.cpp')
+const showsReasoningEffort = computed(() => isOpenAIResponsesProvider.value || isLlamaCppReasoning.value)
 const editingTimeoutSeconds = computed({
   get: () => Math.round(editingProvider.timeoutMs / 1000),
   set: (value: number) => {
@@ -76,7 +78,7 @@ const editingTimeoutSeconds = computed({
   },
 })
 const advancedPreview = computed(() =>
-  isLlamaCppReasoning.value
+  showsReasoningEffort.value
     ? uiText.settings.retriesPreview(editingTimeoutSeconds.value, editingProvider.maxRetries, editingProvider.reasoningEffort)
     : uiText.settings.standardPreview(editingTimeoutSeconds.value, editingProvider.maxRetries),
 )
@@ -98,7 +100,8 @@ function createProvider(): ModelProviderProfile {
 }
 
 function normalizeReasoningEffort(input: unknown): ModelProviderProfile['reasoningEffort'] {
-  return input === 'off' || input === 'low' || input === 'high' || input === 'ultra' ? input : 'medium'
+  if (input === 'ultra') return 'max'
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max' ? input : 'medium'
 }
 
 function normalizeReasoningProvider(input: unknown): ModelProviderProfile['reasoningProvider'] {
@@ -356,6 +359,7 @@ onMounted(() => {
             <span>{{ uiText.settings.providerType }}</span>
             <select v-model="editingProvider.type">
               <option value="openai-compatible">OpenAI Compatible</option>
+              <option value="openai-responses">OpenAI Responses</option>
             </select>
           </label>
           <label class="settings-row">
@@ -397,7 +401,7 @@ onMounted(() => {
                 <small>{{ uiText.settings.retriesHint }}</small>
               </div>
             </label>
-            <label class="settings-row">
+            <label v-if="!isOpenAIResponsesProvider" class="settings-row">
               <span>{{ uiText.settings.reasoningProvider }}</span>
               <div class="settings-stacked-control">
                 <select v-model="editingProvider.reasoningProvider">
@@ -407,7 +411,7 @@ onMounted(() => {
                 <small>{{ uiText.settings.reasoningProviderHint }}</small>
               </div>
             </label>
-            <label v-if="isLlamaCppReasoning" class="settings-row">
+            <label v-if="showsReasoningEffort" class="settings-row">
               <span>{{ uiText.settings.reasoning }}</span>
               <div class="settings-stacked-control">
                 <select v-model="editingProvider.reasoningEffort">
@@ -415,9 +419,9 @@ onMounted(() => {
                   <option value="low">{{ uiText.settings.reasoningLow }}</option>
                   <option value="medium">{{ uiText.settings.reasoningMedium }}</option>
                   <option value="high">{{ uiText.settings.reasoningHigh }}</option>
-                  <option value="ultra">{{ uiText.settings.reasoningUltra }}</option>
+                  <option value="max">{{ uiText.settings.reasoningMax }}</option>
                 </select>
-                <small>{{ uiText.settings.reasoningHint }}</small>
+                <small>{{ isOpenAIResponsesProvider ? uiText.settings.responsesReasoningHint : uiText.settings.reasoningHint }}</small>
               </div>
             </label>
             <label v-if="isLlamaCppReasoning" class="settings-row">

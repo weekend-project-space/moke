@@ -6,6 +6,7 @@ import {
   normalizeProviderReasoningEffort,
   normalizeProviderReasoningProvider,
   normalizeProviderShowRawReasoning,
+  normalizeProviderType,
   providerToModelSettings,
 } from './settings.js';
 
@@ -14,7 +15,8 @@ test('normalizeProviderReasoningEffort accepts known values', () => {
   assert.equal(normalizeProviderReasoningEffort('low'), 'low');
   assert.equal(normalizeProviderReasoningEffort('medium'), 'medium');
   assert.equal(normalizeProviderReasoningEffort('high'), 'high');
-  assert.equal(normalizeProviderReasoningEffort('ultra'), 'ultra');
+  assert.equal(normalizeProviderReasoningEffort('max'), 'max');
+  assert.equal(normalizeProviderReasoningEffort('ultra'), 'max');
 });
 
 test('normalizeProviderReasoningEffort falls back to medium', () => {
@@ -26,17 +28,30 @@ test('normalizeProviderReasoningEffort falls back to medium', () => {
 
 test('providerToModelSettings includes reasoning effort', () => {
   const provider = normalizeProvider({
-    reasoningEffort: 'ultra',
+    reasoningEffort: 'max',
     reasoningProvider: 'llama.cpp',
     showRawReasoning: true,
   });
 
-  assert.equal(provider.reasoningEffort, 'ultra');
+  assert.equal(provider.reasoningEffort, 'max');
   assert.equal(provider.reasoningProvider, 'llama.cpp');
   assert.equal(provider.showRawReasoning, true);
-  assert.equal(providerToModelSettings(provider).reasoningEffort, 'ultra');
+  assert.equal(providerToModelSettings(provider).reasoningEffort, 'max');
   assert.equal(providerToModelSettings(provider).reasoningProvider, 'llama.cpp');
   assert.equal(providerToModelSettings(provider).showRawReasoning, true);
+});
+
+test('normalizeProviderType accepts OpenAI-compatible and Responses providers', () => {
+  assert.equal(normalizeProviderType('openai-compatible'), 'openai-compatible');
+  assert.equal(normalizeProviderType('openai-responses'), 'openai-responses');
+  assert.equal(normalizeProviderType('unknown'), 'openai-compatible');
+});
+
+test('providerToModelSettings includes provider type', () => {
+  const provider = normalizeProvider({ type: 'openai-responses' });
+
+  assert.equal(provider.type, 'openai-responses');
+  assert.equal(providerToModelSettings(provider).type, 'openai-responses');
 });
 
 test('normalizeProviderReasoningProvider accepts llama.cpp only', () => {

@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 
 import type { ChatModelSettings } from '../../../packages/agent-re-act/src/llm-client.js';
 
-export type ModelProviderType = 'openai-compatible';
+export type ModelProviderType = 'openai-compatible' | 'openai-responses';
 
 export type ModelProviderProfile = {
   id: string;
@@ -78,7 +78,8 @@ export function normalizeProviderReasoningEffort(
   input: unknown,
   fallback = MODEL_PROVIDER_REASONING_EFFORT_DEFAULT,
 ): ChatModelSettings['reasoningEffort'] {
-  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'ultra'
+  if (input === 'ultra') return 'max';
+  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max'
     ? input
     : fallback;
 }
@@ -98,6 +99,10 @@ export function normalizeProviderShowRawReasoning(
   if (input === 'true') return true;
   if (input === 'false') return false;
   return fallback;
+}
+
+export function normalizeProviderType(input: unknown, fallback: ModelProviderType = 'openai-compatible'): ModelProviderType {
+  return input === 'openai-compatible' || input === 'openai-responses' ? input : fallback;
 }
 
 function defaultProvider(): ModelProviderProfile {
@@ -122,6 +127,7 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
     apiBaseUrl: provider.apiBaseUrl,
     maxRetries: provider.maxRetries,
     model: provider.model,
+    type: provider.type,
     reasoningEffort: provider.reasoningEffort,
     reasoningProvider: provider.reasoningProvider,
     showRawReasoning: provider.showRawReasoning,
@@ -130,7 +136,7 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
 }
 
 export function normalizeProvider(input: ModelProviderInput = {}, fallback = defaultProvider()): ModelProviderProfile {
-  const type = input.type === 'openai-compatible' ? input.type : fallback.type;
+  const type = normalizeProviderType(input.type, fallback.type);
 
   return {
     id: typeof input.id === 'string' && input.id.trim() ? input.id.trim() : fallback.id || createProviderId(),

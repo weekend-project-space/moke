@@ -5,7 +5,7 @@ import { createModelKwargs, resolveChatModelSettings } from './llm-client.js';
 
 test('createModelKwargs maps llama.cpp reasoning settings', () => {
   const settings = resolveChatModelSettings({
-    reasoningEffort: 'ultra',
+    reasoningEffort: 'max',
     reasoningProvider: 'llama.cpp',
     showRawReasoning: true,
   });
@@ -30,4 +30,9 @@ test('createModelKwargs does not send provider-specific fields for standard prov
   });
 
   assert.deepEqual(createModelKwargs(settings), {});
+});
+
+test('resolveChatModelSettings keeps provider type explicit', () => {
+  assert.equal(resolveChatModelSettings().type, 'openai-compatible');
+  assert.equal(resolveChatModelSettings({ type: 'openai-responses' }).type, 'openai-responses');
 });

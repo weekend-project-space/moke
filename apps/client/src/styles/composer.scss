@@ -156,9 +156,7 @@
 
 .composer-input-row:focus-within {
   border-color: var(--border-neutral-focus);
-  box-shadow:
-    0 0 0 3px var(--focus-neutral-ring),
-    inset 0 0 0 0.5px var(--panel-raised);
+  box-shadow: 0 0 0 3px var(--focus-neutral-ring);
 }
 
 .composer-panel.dragging .composer-input-row {
@@ -509,7 +507,6 @@
     padding: 10px 0 16px;
   }
 }
-
 
 
 
