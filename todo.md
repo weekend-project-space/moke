@@ -17,11 +17,12 @@
 
 ## 客户端拆分
 
-- [ ] 完成 `useAgentSession` 职责拆分：
+- [x] 完成 `useAgentSession` 职责拆分：
   - [x] 提取类型化 Session/Run API。
   - [x] 提取 SSE transport 与重连生命周期。
   - [x] 引入判别联合 RunState。
-  - [ ] 提取 optimistic message 与流式文本缓冲。
+  - [x] 提取 optimistic message 与流式文本缓冲。
+  - [x] 将运行事件归并为纯 reducer，副作用留在会话协调层。
 - [x] 将 `App.vue` 降为页面编排层，把消息队列、输入提交和会话导航拆成独立 composable。
 - [x] 使用协议包中的判别联合事件类型，移除客户端 `Record<string, any>` 和重复消息类型。
 - [x] 分离聊天领域模型与展示模型，将展示派生逻辑集中到 `features/chat/presentation`。

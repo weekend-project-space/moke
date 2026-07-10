@@ -1,8 +1,10 @@
 import { computed, nextTick, reactive, ref } from 'vue'
 import { createLatestRequestGuard } from '../services/latestRequest'
-import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 import { createAgentApi } from '../api/agentApi'
+import { appendOptimisticUserMessage } from '../model/optimisticMessages'
+import { reduceRunEvent } from '../model/runEventReducer'
 import {
   awaitRunApproval,
   awaitRunUser,
@@ -20,6 +22,7 @@ import {
   type SessionRunState,
 } from '../model/runState'
 import { createRunEventStream } from '../services/runEventStream'
+import { createStreamingTextBuffer } from '../services/streamingTextBuffer'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -28,8 +31,6 @@ type UseAgentSessionOptions = {
   onMessagesLoaded?: () => void | Promise<void>
   onRunFinished?: (sessionId: string) => void | Promise<void>
 }
-
-const STREAM_FLUSH_INTERVAL_MS = 50
 
 export type SendMessageInput = {
   content: string
@@ -45,12 +46,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const sessions = ref<SessionSummary[]>([])
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
-  const streamBuffers = new Map<string, string>()
-  const streamFlushFrames = new Map<string, number>()
-  const streamFlushTimers = new Map<string, number>()
-  const streamLastFlushAt = new Map<string, number>()
   const sessionLoadGuard = createLatestRequestGuard()
   const api = createAgentApi(options.apiBase)
+  const streamingTextBuffer = createStreamingTextBuffer({
+    onFlush: (targetSessionId, text) => {
+      ensureRunState(targetSessionId).streamingText = text
+    },
+  })
   const runEventStream = createRunEventStream({
     apiBase: options.apiBase,
     onConnected: (targetSessionId) => {
@@ -93,74 +95,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return sessionRunStates[targetSessionId]
   }
 
-  function eventKey(event: AgentEvent) {
-    return event.id || `${event.seq || ''}:${event.type}:${event.ts || ''}`
-  }
-
-  function appendEvent(targetSessionId: string, event: AgentEvent, optionsOverride: { store?: boolean } = {}) {
-    const state = ensureRunState(targetSessionId)
-    const key = eventKey(event)
-    if (state.seenEventKeys.has(key)) return false
-
-    state.seenEventKeys.add(key)
-    if (optionsOverride.store !== false) state.events.push(event)
-    return true
-  }
-
-  function cancelStreamingFlush(targetSessionId: string) {
-    const timer = streamFlushTimers.get(targetSessionId)
-    if (timer !== undefined) window.clearTimeout(timer)
-    streamFlushTimers.delete(targetSessionId)
-
-    const frame = streamFlushFrames.get(targetSessionId)
-    if (frame !== undefined) window.cancelAnimationFrame(frame)
-    streamFlushFrames.delete(targetSessionId)
-  }
-
-  function flushStreamingBuffer(targetSessionId: string) {
-    cancelStreamingFlush(targetSessionId)
-    const state = sessionRunStates[targetSessionId]
-    if (!state) return
-
-    state.streamingText = streamBuffers.get(targetSessionId) || ''
-    streamLastFlushAt.set(targetSessionId, performance.now())
-  }
-
-  function clearStreamingBuffer(targetSessionId: string) {
-    cancelStreamingFlush(targetSessionId)
-    streamBuffers.delete(targetSessionId)
-    streamLastFlushAt.delete(targetSessionId)
-    ensureRunState(targetSessionId).streamingText = ''
-  }
-
-  function scheduleStreamingFlush(targetSessionId: string, immediate = false) {
-    if (streamFlushTimers.has(targetSessionId) || streamFlushFrames.has(targetSessionId)) return
-
-    const elapsed = performance.now() - (streamLastFlushAt.get(targetSessionId) || 0)
-    const delay = immediate ? 0 : Math.max(0, STREAM_FLUSH_INTERVAL_MS - elapsed)
-
-    const scheduleFrame = () => {
-      streamFlushTimers.delete(targetSessionId)
-      streamFlushFrames.set(targetSessionId, window.requestAnimationFrame(() => flushStreamingBuffer(targetSessionId)))
-    }
-
-    if (delay <= 0) {
-      scheduleFrame()
-      return
-    }
-
-    streamFlushTimers.set(targetSessionId, window.setTimeout(scheduleFrame, delay))
-  }
-
-  function appendStreamingDelta(targetSessionId: string, content: string) {
-    if (!content) return
-    streamBuffers.set(targetSessionId, `${streamBuffers.get(targetSessionId) || ''}${content}`)
-    scheduleStreamingFlush(targetSessionId)
-  }
-
   function resetRunState(targetSessionId: string) {
     runEventStream.close(targetSessionId)
-    clearStreamingBuffer(targetSessionId)
+    streamingTextBuffer.clear(targetSessionId)
     delete sessionRunStates[targetSessionId]
   }
 
@@ -231,7 +168,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         runEventStream.close(run.session_id)
         state.runId = run.run_id
         state.events = []
-        clearStreamingBuffer(run.session_id)
+        streamingTextBuffer.clear(run.session_id)
         state.seenEventKeys.clear()
       }
 
@@ -354,15 +291,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const state = ensureRunState(targetSessionId)
     state.events = []
     state.seenEventKeys.clear()
-    clearStreamingBuffer(targetSessionId)
+    streamingTextBuffer.clear(targetSessionId)
     startRun(state)
-    const optimisticMessage: Message = {
-      role: 'user',
+    const optimisticMessage = appendOptimisticUserMessage(messages.value, {
       content: trimmedContent,
-      created_at: new Date().toISOString(),
-      ...(attachments.length ? { attachments } : {}),
-    }
-    messages.value.push(optimisticMessage)
+      attachments,
+    })
 
     try {
       const run = await api.sendMessage(targetSessionId, {
@@ -377,10 +311,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       return true
     } catch {
       finishRunState(state, uiText.app.sendFailed)
-      if (sessionId.value === targetSessionId) {
-        const index = messages.value.lastIndexOf(optimisticMessage)
-        if (index >= 0) messages.value.splice(index, 1)
-      }
+      optimisticMessage.rollback()
       void checkServer()
       return false
     }
@@ -391,9 +322,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     else runEventStream.closeAll()
   }
 
-  function finishRun(targetSessionId: string) {
-    const state = ensureRunState(targetSessionId)
-    finishRunState(state)
+  function finishRunEffects(targetSessionId: string) {
     runEventStream.close(targetSessionId)
     void (async () => {
       await loadSessions()
@@ -403,27 +332,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   function handleRunEvent(targetSessionId: string, event: AgentEvent) {
-    const state = ensureRunState(targetSessionId)
+    const reduction = reduceRunEvent(ensureRunState(targetSessionId), event)
+    if (!reduction.accepted) return
+    sessionRunStates[targetSessionId] = reduction.state
 
-    if (event.type === 'agent.message.delta') {
-      const channel = event.payload.channel || 'answer'
-      const isAnswerDelta = channel !== 'reasoning'
-      if (!appendEvent(targetSessionId, event, { store: !isAnswerDelta })) return
-      if (isAnswerDelta) {
-        appendStreamingDelta(targetSessionId, event.payload.content || '')
-        return
-      }
-    } else if (!appendEvent(targetSessionId, event)) {
-      return
+    if (reduction.effects.answerDelta) {
+      streamingTextBuffer.append(targetSessionId, reduction.effects.answerDelta)
     }
 
-    if (event.type === 'approval.required') {
-      awaitRunApproval(state, event.payload as PendingApproval)
-    }
-
-    if (event.type === 'ask_user.required') {
-      const ask = event.payload as PendingAsk
-      awaitRunUser(state, ask)
+    if (reduction.effects.ask) {
+      const ask = reduction.effects.ask
       if (sessionId.value === targetSessionId) {
         options.onAskUserRequired?.()
         messages.value.push({
@@ -434,13 +352,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
     }
 
-    if (event.type === 'agent.message.done') {
-      const doneMessage = event.payload.message as Message | undefined
+    if (reduction.effects.message) {
+      const doneMessage = reduction.effects.message
       if (doneMessage && sessionId.value === targetSessionId) messages.value.push(doneMessage)
-      if (options.isFinalAssistantMessage(doneMessage)) clearStreamingBuffer(targetSessionId)
+      if (options.isFinalAssistantMessage(doneMessage)) streamingTextBuffer.clear(targetSessionId)
     }
 
-    if (event.type === 'agent.done' || event.type === 'agent.error') finishRun(targetSessionId)
+    if (reduction.effects.finish) finishRunEffects(targetSessionId)
   }
 
   async function selectAskOption(option: AskOption) {
@@ -449,50 +367,58 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const ask = state ? pendingAskFrom(state) : null
     if (!ask || !state.runId) return
 
-    const optimisticMessage: Message = { role: 'user', content: option.label, created_at: new Date().toISOString() }
-    messages.value.push(optimisticMessage)
+    const targetRunId = state.runId
+    const optimisticMessage = appendOptimisticUserMessage(messages.value, { content: option.label })
     const previousAsk = ask
     resumeRun(state)
 
     try {
-      await api.choose(state.runId, ask.ask_id, option.id)
+      await api.choose(targetRunId, ask.ask_id, option.id)
       return
     } catch {
       // Restore the pending question below.
     }
 
-    if (state.runId && state.lifecycle.status === 'running') {
-      awaitRunUser(state, previousAsk, uiText.app.responseFailed)
-      if (sessionId.value === targetSessionId) {
-        const index = messages.value.lastIndexOf(optimisticMessage)
-        if (index >= 0) messages.value.splice(index, 1)
-      }
+    const currentState = sessionRunStates[targetSessionId]
+    if (currentState?.runId === targetRunId && currentState.lifecycle.status === 'running') {
+      awaitRunUser(currentState, previousAsk, uiText.app.responseFailed)
+      optimisticMessage.rollback()
     }
   }
 
   async function decideApproval(decision: 'approved' | 'rejected', scope: 'once' | 'session' | 'persistent' = 'session') {
-    const state = sessionRunStates[sessionId.value]
+    const targetSessionId = sessionId.value
+    const state = sessionRunStates[targetSessionId]
     const approval = state ? pendingApprovalFrom(state) : null
     if (!state || !approval || !state.runId) return
+    const targetRunId = state.runId
     resumeRun(state)
 
     try {
-      await api.approve(state.runId, approval.approval_id, decision, scope)
+      await api.approve(targetRunId, approval.approval_id, decision, scope)
       return
     } catch {
       // Restore the approval below.
     }
 
-    awaitRunApproval(state, approval, uiText.app.responseFailed)
+    const currentState = sessionRunStates[targetSessionId]
+    if (currentState?.runId === targetRunId && isRunActive(currentState)) {
+      awaitRunApproval(currentState, approval, uiText.app.responseFailed)
+    }
   }
 
   async function cancelRun() {
-    const state = sessionRunStates[sessionId.value]
+    const targetSessionId = sessionId.value
+    const state = sessionRunStates[targetSessionId]
     if (!state?.runId || !isRunActive(state)) return
+    const targetRunId = state.runId
     try {
-      await api.cancel(state.runId)
+      await api.cancel(targetRunId)
     } catch {
-      setRunError(state, uiText.app.responseFailed)
+      const currentState = sessionRunStates[targetSessionId]
+      if (currentState?.runId === targetRunId && isRunActive(currentState)) {
+        setRunError(currentState, uiText.app.responseFailed)
+      }
     }
   }
 
