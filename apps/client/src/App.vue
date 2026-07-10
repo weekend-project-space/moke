@@ -12,29 +12,16 @@ import SidebarPanel from './components/SidebarPanel.vue'
 import { useAgentSession } from './composables/useAgentSession'
 import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
 import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
+import { useComposerReasoning } from './composables/useComposerReasoning'
+import { useQueuedMessages, type QueuedMessage } from './composables/useQueuedMessages'
 import { useResizablePanels } from './composables/useResizablePanels'
+import { readSessionIdFromHash, writeSessionIdToHash } from './composables/sessionRoute'
 import { uiText } from './text/uiText'
-import type { ImageAttachment, Message, ReasoningEffort, SessionSummary, TaskTemplate } from './types/conversation'
+import type { ImageAttachment, Message, SessionSummary, TaskTemplate } from './types/conversation'
 
 const input = ref('')
 const attachments = ref<ImageAttachment[]>([])
 const MAX_QUEUED_MESSAGES = 3
-type DraftMessage = {
-  content: string
-  attachments: ImageAttachment[]
-  options?: {
-    reasoningEffort?: ReasoningEffort
-  }
-}
-type ComposerReasoningEffort = 'default' | ReasoningEffort
-type ReasoningCapability = {
-  efforts: ReasoningEffort[]
-  rawSupported: boolean
-  supported: boolean
-}
-const queuedMessages = ref<DraftMessage[]>([])
-const queuedSessionId = ref('')
-const queuedStopRequested = ref(false)
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
@@ -43,12 +30,6 @@ const showJumpToBottom = ref(false)
 const showSettings = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
-const composerReasoningEffort = ref<ComposerReasoningEffort>('default')
-const reasoningCapability = ref<ReasoningCapability>({
-  efforts: [],
-  rawSupported: false,
-  supported: false,
-})
 let runtimeTimer: number | undefined
 const {
   closeSidebar,
@@ -75,8 +56,6 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
-const COMPOSER_REASONING_KEY = 'moke.composer.reasoning-effort.v1'
-const SESSION_HASH_KEY = 'session'
 const {
   cancelRun,
   archiveSession,
@@ -121,16 +100,33 @@ const {
   },
 })
 const {
+  composerReasoningEffort,
+  composerReasoningOptions,
+  currentRunOptions,
+  loadCapability: loadReasoningCapability,
+  loadStoredSelection: loadComposerReasoningEffort,
+} = useComposerReasoning({ apiBase, serverStatus })
+const {
+  clear: clearQueuedMessages,
+  count: queuedMessageCount,
+  enqueue: enqueueMessage,
+  messages: queuedMessages,
+  remove: removeQueuedMessage,
+  requestStop: requestQueuedStop,
+  stopRequested: queuedStopRequested,
+  takeNext: takeNextQueuedMessage,
+} = useQueuedMessages(MAX_QUEUED_MESSAGES)
+const {
   disposeBrowserWorkspace,
   initBrowserWorkspace,
   openLinkInBrowser,
 } = useBrowserWorkspace({
   apiBase,
   getBrowserBounds: () => browserPanel.value?.getBounds() || null,
-  openUrl: async (url) => {
+  openUrl: async (url, mode) => {
     await nextTick()
     if (!browserPanel.value) throw new Error('Browser panel is not mounted')
-    await browserPanel.value.openUrl(url)
+    await browserPanel.value.openUrl(url, mode)
   },
   openWorkspace,
 })
@@ -209,21 +205,19 @@ const showEmptyState = computed(
 const primaryDisabled = computed(() => {
   if (isRunning.value) {
     if (pendingAsk.value) return true
-    if (hasDraftContent.value) return queuedMessages.value.length >= MAX_QUEUED_MESSAGES
+    if (hasDraftContent.value) return queuedMessageCount.value >= MAX_QUEUED_MESSAGES
     return !runId.value
   }
   return serverStatus.value !== 'online' || !hasDraftContent.value
 })
 const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !hasDraftContent.value)
 const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0)
-const queuedMessageCount = computed(() => queuedMessages.value.length)
 const queuedMessageLabel = computed(() => queuedStopRequested.value ? uiText.composer.sendAfterStopping : uiText.composer.queued(queuedMessageCount.value))
 const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${draftPreview(message)}`).join('\n'))
 const queuedMessageItems = computed(() => queuedMessages.value.map((message) => ({
   content: draftPreview(message),
   preview: draftPreview(message),
 })))
-const composerReasoningOptions = computed(() => reasoningCapability.value.supported ? reasoningCapability.value.efforts : [])
 
 function isFinalAssistantMessage(message: Message | undefined) {
   return message?.role === 'assistant' && isVisibleMessage(message)
@@ -286,25 +280,6 @@ function formatTimelineTime(time: number) {
   return `${date.getFullYear()} ${dateLabel} ${timeLabel}`
 }
 
-function readSessionIdFromHash() {
-  const params = new URLSearchParams(window.location.hash.slice(1))
-  return params.get(SESSION_HASH_KEY) || ''
-}
-
-function writeSessionIdToHash(id: string) {
-  const params = new URLSearchParams(window.location.hash.slice(1))
-  if (id) {
-    params.set(SESSION_HASH_KEY, id)
-  } else {
-    params.delete(SESSION_HASH_KEY)
-  }
-
-  const nextHash = params.toString()
-  const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`
-  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  if (nextUrl !== currentUrl) window.history.replaceState(null, '', nextUrl)
-}
-
 function initialSessionFromHash() {
   const hashSessionId = readSessionIdFromHash()
   if (!hashSessionId) return sortedSessions.value[0]
@@ -315,79 +290,10 @@ function resizeComposer() {
   composerBox.value?.resize()
 }
 
-async function loadReasoningCapability() {
-  if (serverStatus.value !== 'online') return
-
-  try {
-    const response = await fetch(`${apiBase}/api/settings`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
-    const capability = data.reasoningCapability || {}
-    const efforts = Array.isArray(capability.efforts)
-      ? capability.efforts.filter(isReasoningEffort)
-      : []
-    reasoningCapability.value = {
-      efforts,
-      rawSupported: capability.rawSupported === true,
-      supported: capability.supported === true && efforts.length > 0,
-    }
-    normalizeComposerReasoningEffort()
-  } catch {
-    reasoningCapability.value = {
-      efforts: [],
-      rawSupported: false,
-      supported: false,
-    }
-    composerReasoningEffort.value = 'default'
-  }
-}
-
-function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' || value === 'max'
-}
-
-function isComposerReasoningEffort(value: unknown): value is ComposerReasoningEffort {
-  if (value === 'ultra') return false
-  return value === 'default' || isReasoningEffort(value)
-}
-
-function loadComposerReasoningEffort() {
-  try {
-    const stored = window.localStorage.getItem(COMPOSER_REASONING_KEY)
-    if (isComposerReasoningEffort(stored)) composerReasoningEffort.value = stored
-  } catch {
-    composerReasoningEffort.value = 'default'
-  }
-}
-
-function persistComposerReasoningEffort(value: ComposerReasoningEffort) {
-  try {
-    window.localStorage.setItem(COMPOSER_REASONING_KEY, value)
-  } catch {
-    // Keep the current in-memory selection when localStorage is unavailable.
-  }
-}
-
-function normalizeComposerReasoningEffort() {
-  if (composerReasoningEffort.value === 'default') return
-  if (
-    !reasoningCapability.value.supported ||
-    !reasoningCapability.value.efforts.includes(composerReasoningEffort.value)
-  ) {
-    composerReasoningEffort.value = 'default'
-  }
-}
-
-function currentRunOptions() {
-  return composerReasoningEffort.value === 'default'
-    ? undefined
-    : { reasoningEffort: composerReasoningEffort.value }
-}
-
 async function selectSession(id: string) {
   conversationView.value?.resetAutoScroll()
   if (await selectAgentSession(id)) {
-    clearQueuedMessage()
+    clearQueuedMessages()
     showSettings.value = false
     writeSessionIdToHash(id)
     closeTransientPanels()
@@ -396,7 +302,7 @@ async function selectSession(id: string) {
 
 async function startNewSession() {
   if (await createSession()) {
-    clearQueuedMessage()
+    clearQueuedMessages()
     showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
@@ -406,7 +312,7 @@ async function startNewSession() {
 async function forkMessage(messageId: string) {
   conversationView.value?.resetAutoScroll()
   if (await forkSession(messageId)) {
-    clearQueuedMessage()
+    clearQueuedMessages()
     showSettings.value = false
     writeSessionIdToHash(sessionId.value)
     closeTransientPanels()
@@ -492,7 +398,7 @@ async function submitMessage() {
   await sendContent({ content, attachments: [...attachments.value], options: currentRunOptions() }, true)
 }
 
-async function sendContent(draft: DraftMessage, restoreOnFail: boolean) {
+async function sendContent(draft: QueuedMessage, restoreOnFail: boolean) {
   const previousInput = input.value
   const previousAttachments = [...attachments.value]
   input.value = ''
@@ -513,11 +419,7 @@ async function sendContent(draft: DraftMessage, restoreOnFail: boolean) {
 function queueCurrentInput() {
   const content = input.value.trim()
   if ((!content && !attachments.value.length) || !sessionId.value) return
-  if (queuedMessages.value.length >= MAX_QUEUED_MESSAGES) return
-
-  queuedMessages.value = [...queuedMessages.value, { content, attachments: [...attachments.value], options: currentRunOptions() }]
-  queuedSessionId.value = sessionId.value
-  queuedStopRequested.value = false
+  if (!enqueueMessage(sessionId.value, { content, attachments: [...attachments.value], options: currentRunOptions() })) return
   input.value = ''
   attachments.value = []
   void nextTick(() => {
@@ -526,41 +428,28 @@ function queueCurrentInput() {
   })
 }
 
-function clearQueuedMessage() {
-  queuedMessages.value = []
-  queuedSessionId.value = ''
-  queuedStopRequested.value = false
-}
-
 function cancelQueuedMessage() {
-  clearQueuedMessage()
+  clearQueuedMessages()
 }
 
 function cancelQueuedMessageAt(index: number) {
-  queuedMessages.value = queuedMessages.value.filter((_, itemIndex) => itemIndex !== index)
-  if (!queuedMessages.value.length) clearQueuedMessage()
+  removeQueuedMessage(index)
 }
 
 function stopAndSendQueuedMessage() {
   if (!queuedMessages.value.length || !isRunning.value || pendingAsk.value) return
-  queuedStopRequested.value = true
+  if (!requestQueuedStop()) return
   void cancelRun()
 }
 
 async function sendQueuedMessageIfReady() {
   if (!queuedMessages.value.length || isRunning.value) return
-  if (queuedSessionId.value && queuedSessionId.value !== sessionId.value) return
-
-  const [content, ...rest] = queuedMessages.value
-  queuedMessages.value = rest
-  if (!rest.length) {
-    queuedSessionId.value = ''
-    queuedStopRequested.value = false
-  }
-  await sendContent(content, true)
+  const nextMessage = takeNextQueuedMessage(sessionId.value)
+  if (!nextMessage) return
+  await sendContent(nextMessage, true)
 }
 
-function draftPreview(message: DraftMessage) {
+function draftPreview(message: QueuedMessage) {
   const imageLabel = message.attachments.length ? ` - ${message.attachments.length} image${message.attachments.length > 1 ? 's' : ''}` : ''
   const text = message.content || 'Image'
   const preview = text.length > 48 ? `${text.slice(0, 48)}...` : text
@@ -586,10 +475,6 @@ watch(isRunning, (running) => {
   runtimeTimer = window.setInterval(() => {
     runtimeNow.value = Date.now()
   }, 1000)
-})
-
-watch(composerReasoningEffort, (value) => {
-  persistComposerReasoningEffort(value)
 })
 
 onMounted(async () => {
@@ -659,7 +544,7 @@ onUnmounted(() => {
         v-if="showSettings"
         :api-base="apiBase"
         @close="closeSettings"
-        @open-browser-url="openLinkInBrowser"
+        @open-browser-url="openLinkInBrowser($event.url, $event.mode)"
       />
       <ConversationView
         v-else

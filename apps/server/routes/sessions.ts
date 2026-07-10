@@ -19,7 +19,9 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       created_at: now(),
       updated_at: now(),
       messages: [],
-      metadata: typeof requestBody.metadata === 'object' && requestBody.metadata !== null ? requestBody.metadata : {},
+      metadata: typeof requestBody.metadata === 'object' && requestBody.metadata !== null
+        ? requestBody.metadata as Record<string, unknown>
+        : {},
     };
     context.sessions.set(session.id, session);
     context.onChange();
@@ -76,7 +78,9 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions/:id/messages', async ({ body, context, json, params }) => {
     const session = getSession(context, params.id);
     const requestBody = await body();
-    const message = requestBody.message && typeof requestBody.message === 'object' ? requestBody.message : {};
+    const message = requestBody.message && typeof requestBody.message === 'object'
+      ? requestBody.message as Record<string, unknown>
+      : {};
     const content = typeof message.content === 'string' ? message.content.trim() : '';
     const attachments = normalizeImageAttachments(message.attachments);
     if (!content && attachments.length === 0) {

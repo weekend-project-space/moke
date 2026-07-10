@@ -15,7 +15,9 @@ export function registerBrowserRoutes(router: Router<RoutesContext>) {
 
     const accepted = context.browserBridge.respond(id, {
       ok: requestBody.ok !== false,
-      result: typeof requestBody.result === 'object' && requestBody.result !== null ? requestBody.result : {},
+      result: typeof requestBody.result === 'object' && requestBody.result !== null
+        ? requestBody.result as Record<string, unknown>
+        : {},
       error: typeof requestBody.error === 'string' ? requestBody.error : undefined,
     });
 

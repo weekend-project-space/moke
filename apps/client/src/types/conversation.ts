@@ -1,20 +1,18 @@
-export type AgentEvent = {
-  id: string
-  seq: number
-  type: string
-  ts: string
-  step?: AgentStep
-  payload: Record<string, any>
-}
+import type {
+  AgentEvent as ProtocolAgentEvent,
+  AgentStep as ProtocolAgentStep,
+  AgentStepPhase as ProtocolAgentStepPhase,
+  ImageAttachment as ProtocolImageAttachment,
+  PendingApproval as ProtocolPendingApproval,
+  PendingAsk as ProtocolPendingAsk,
+  ReasoningEffort as ProtocolReasoningEffort,
+  SessionSummary as ProtocolSessionSummary,
+} from '../../../../packages/protocol/src/index'
 
-export type AgentStepPhase = 'reason' | 'act' | 'respond'
-
-export type AgentStep = {
-  index: number
-  phase: AgentStepPhase
-}
-
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max'
+export type AgentEvent = ProtocolAgentEvent
+export type AgentStepPhase = ProtocolAgentStepPhase
+export type AgentStep = ProtocolAgentStep
+export type ReasoningEffort = ProtocolReasoningEffort
 
 type BaseMessage = {
   id?: string
@@ -61,51 +59,11 @@ export type ToolMessage = BaseMessage & {
 
 export type Message = UserMessage | AssistantMessage | ToolMessage
 
-export type ImageAttachment = {
-  id: string
-  kind: 'image'
-  name?: string
-  mime_type: string
-  data_url: string
-}
-
-export type SessionSummary = {
-  id: string
-  title: string
-  created_at: string
-  updated_at: string
-  archived?: boolean
-  pinned?: boolean
-  preview?: string
-  message_count?: number
-}
-
-export type AskOption = {
-  id: string
-  label: string
-}
-
-export type PendingAsk = {
-  ask_id: string
-  call_id: string
-  question: string
-  options: AskOption[]
-  created_at?: string
-}
-
-export type PendingApproval = {
-  approval_id: string
-  kind?: 'workspace_path' | 'tool'
-  reason: string
-  risk?: 'safe' | 'write' | 'dangerous'
-  action?: {
-    tool: string
-    input: Record<string, unknown>
-  }
-  path?: string
-  suggested_root?: string
-  created_at?: string
-}
+export type ImageAttachment = ProtocolImageAttachment
+export type SessionSummary = ProtocolSessionSummary
+export type PendingAsk = ProtocolPendingAsk
+export type PendingApproval = ProtocolPendingApproval
+export type AskOption = PendingAsk['options'][number]
 
 export type TraceStep = {
   id: string

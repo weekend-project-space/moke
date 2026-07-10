@@ -161,8 +161,15 @@ export class McpManager {
       roots,
     }));
 
-    await withTimeout(client.connect(transport), config.timeout_ms, `MCP server ${config.id} connect timed out`);
-    const toolList = await withTimeout(client.listTools(), config.timeout_ms, `MCP server ${config.id} listTools timed out`);
+    let toolList;
+    try {
+      await client.connect(transport, { timeout: config.timeout_ms });
+      toolList = await client.listTools(undefined, { timeout: config.timeout_ms });
+    } catch (error) {
+      await client.close().catch(() => undefined);
+      throw error;
+    }
+
     const disabledTools = new Set(config.disabled_tools);
     const tools = (toolList.tools || [])
       .filter((tool) => !disabledTools.has(tool.name))
@@ -204,13 +211,13 @@ export class McpManager {
     const connection = this.connections.get(tool.serverId);
     if (!connection) throw new Error(`MCP server is not connected: ${tool.serverId}`);
 
-    return withTimeout(
-      connection.client.callTool({
+    return connection.client.callTool(
+      {
         name: tool.originalName,
         arguments: input,
-      }),
-      connection.config.timeout_ms,
-      `MCP tool ${namespacedName} timed out`,
+      },
+      undefined,
+      { timeout: connection.config.timeout_ms },
     );
   }
 
@@ -242,17 +249,4 @@ function createRoots(config: McpServerConfig, workspace = process.cwd()): McpRoo
       ...(name ? { name } : {}),
     };
   });
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }

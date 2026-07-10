@@ -1,18 +1,8 @@
 <script setup lang="ts">
 import { Archive, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import type { SessionSummary } from '../types/conversation'
 import { uiText } from '../text/uiText'
-
-type SessionSummary = {
-  id: string
-  title: string
-  created_at: string
-  updated_at: string
-  archived?: boolean
-  pinned?: boolean
-  preview?: string
-  message_count?: number
-}
 
 const props = defineProps<{
   sessions: SessionSummary[]

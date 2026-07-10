@@ -91,6 +91,13 @@
   padding: 10px 12px 0;
 }
 
+.composer-attachment-error {
+  margin: 6px 2px 0;
+  color: var(--danger);
+  font-size: var(--font-size-caption);
+  line-height: 1.35;
+}
+
 .composer-attachment {
   position: relative;
   width: 58px;
@@ -510,5 +517,4 @@
     padding: 10px 0 16px;
   }
 }
-
 

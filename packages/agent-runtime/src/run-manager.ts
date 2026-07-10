@@ -40,6 +40,31 @@ type RunMessageInput = {
   attachments?: ImageAttachment[];
 };
 
+const MAX_RETAINED_TERMINAL_RUNS = 50;
+
+export function selectRecentHistory(messages: Message[], maxMessages = 12) {
+  if (messages.length <= maxMessages) return messages.slice();
+
+  const cutoff = Math.max(0, messages.length - maxMessages);
+  let start = cutoff;
+  const cutoffMessage = messages[start];
+  if (cutoffMessage?.role !== 'tool') return messages.slice(start);
+
+  const firstToolCallId = cutoffMessage.tool_call_id;
+  while (start > 0) {
+    start--;
+    const candidate = messages[start];
+    if (candidate.role === 'assistant' && candidate.tool_calls?.some((call) => call.id === firstToolCallId)) {
+      return messages.slice(start);
+    }
+    if (candidate.role === 'user') break;
+  }
+
+  start = cutoff;
+  while (start < messages.length && messages[start]?.role === 'tool') start++;
+  return messages.slice(start);
+}
+
 function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
   if (!message || typeof message !== 'object') return null;
@@ -108,7 +133,6 @@ export class RunManager {
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
       if (event.type !== 'agent.message.done') {
-        this.config.onChange?.();
         return;
       }
 
@@ -128,7 +152,7 @@ export class RunManager {
       max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
-    const history = session.messages.slice(0, -1).slice(-12);
+    const history = selectRecentHistory(session.messages.slice(0, -1));
     const contentManager = this.config.createSkillContentManager?.();
 
     try {
@@ -188,6 +212,7 @@ export class RunManager {
       });
     } finally {
       this.abortControllers.delete(run.id);
+      this.pruneTerminalRuns();
     }
   }
 
@@ -390,7 +415,18 @@ export class RunManager {
       },
     });
     this.config.onChange?.();
+    this.pruneTerminalRuns();
 
     return run;
+  }
+
+  private pruneTerminalRuns() {
+    const terminalRuns = [...this.config.runs.values()]
+      .filter((run) => run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled' || run.status === 'timeout')
+      .sort((left, right) => right.started_at - left.started_at);
+
+    for (const run of terminalRuns.slice(MAX_RETAINED_TERMINAL_RUNS)) {
+      this.config.runs.delete(run.id);
+    }
   }
 }

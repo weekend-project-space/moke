@@ -48,7 +48,7 @@ export class BrowserBridge {
   private readonly pending = new Map<string, PendingRequest>();
 
   connect(res: ServerResponse) {
-    this.closeClient();
+    this.closeClient(new Error('Browser bridge client was replaced'));
     this.client = res;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -60,11 +60,16 @@ export class BrowserBridge {
   }
 
   disconnect(res: ServerResponse) {
-    if (this.client === res) this.client = null;
+    if (this.client !== res) return;
+    this.client = null;
+    this.rejectPending(new Error('Browser bridge disconnected'));
   }
 
   close(error = new Error('Browser bridge closed')) {
-    this.closeClient();
+    this.closeClient(error);
+  }
+
+  private rejectPending(error: Error) {
     for (const [id, pending] of this.pending.entries()) {
       clearTimeout(pending.timer);
       pending.reject(error);
@@ -86,7 +91,16 @@ export class BrowserBridge {
       this.pending.set(id, { resolve, reject, timer });
     });
 
-    this.client.write(`event: browser_request\ndata: ${JSON.stringify(request)}\n\n`);
+    try {
+      this.client.write(`event: browser_request\ndata: ${JSON.stringify(request)}\n\n`);
+    } catch (error) {
+      const pending = this.pending.get(id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pending.delete(id);
+        pending.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
     return result;
   }
 
@@ -106,12 +120,14 @@ export class BrowserBridge {
     return true;
   }
 
-  private closeClient() {
-    if (!this.client) return;
+  private closeClient(error: Error) {
+    if (this.client) {
+      // End the SSE stream explicitly so the desktop client can reconnect cleanly.
+      this.client.end();
+      this.client = null;
+    }
 
-    // End the SSE stream explicitly so the desktop client can reconnect cleanly.
-    this.client.end();
-    this.client = null;
+    this.rejectPending(error);
   }
 }
 

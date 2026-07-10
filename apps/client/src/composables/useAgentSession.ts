@@ -1,6 +1,19 @@
 import { computed, nextTick, reactive, ref } from 'vue'
+import { createLatestRequestGuard } from './latestRequest'
 import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../types/conversation'
 import { uiText } from '../text/uiText'
+import { createAgentApi } from '../features/chat/api/agentApi'
+import {
+  connectRun,
+  createSessionRunState,
+  finishRunState,
+  isRunActive,
+  pendingApprovalFrom,
+  pendingAskFrom,
+  startRun,
+  type SessionRunState,
+} from '../features/chat/model/runState'
+import { createRunEventStream } from '../features/chat/services/runEventStream'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -10,27 +23,6 @@ type UseAgentSessionOptions = {
   onRunFinished?: (sessionId: string) => void | Promise<void>
 }
 
-type SessionRunState = {
-  runId: string
-  events: AgentEvent[]
-  streamingText: string
-  pendingApproval: PendingApproval | null
-  pendingAsk: PendingAsk | null
-  isRunning: boolean
-  runError: string
-  eventSource: EventSource | null
-  seenEventKeys: Set<string>
-}
-
-type ActiveRunSummary = {
-  session_id: string
-  run_id: string
-  status: string
-  events_url: string
-  pending_ask?: PendingAsk
-  pending_approval?: PendingApproval
-}
-
 const STREAM_FLUSH_INTERVAL_MS = 50
 
 export type SendMessageInput = {
@@ -38,20 +30,6 @@ export type SendMessageInput = {
   attachments?: ImageAttachment[]
   options?: {
     reasoningEffort?: ReasoningEffort
-  }
-}
-
-function createRunState(runId = ''): SessionRunState {
-  return {
-    runId,
-    events: [],
-    streamingText: '',
-    pendingApproval: null,
-    pendingAsk: null,
-    isRunning: false,
-    runError: '',
-    eventSource: null,
-    seenEventKeys: new Set<string>(),
   }
 }
 
@@ -65,19 +43,37 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const streamFlushFrames = new Map<string, number>()
   const streamFlushTimers = new Map<string, number>()
   const streamLastFlushAt = new Map<string, number>()
+  const sessionLoadGuard = createLatestRequestGuard()
+  const api = createAgentApi(options.apiBase)
+  const runEventStream = createRunEventStream({
+    apiBase: options.apiBase,
+    onConnected: (targetSessionId) => {
+      const state = sessionRunStates[targetSessionId]
+      if (!state) return
+      state.connection = 'connected'
+      state.error = ''
+    },
+    onEvent: handleRunEvent,
+    onReconnecting: (targetSessionId) => {
+      const state = sessionRunStates[targetSessionId]
+      if (!state || !isRunActive(state)) return
+      state.connection = 'reconnecting'
+      state.error = uiText.app.reconnecting
+    },
+  })
 
-  const emptyRunState = createRunState()
+  const emptyRunState = createSessionRunState()
   const currentRunState = computed(() => (sessionId.value ? sessionRunStates[sessionId.value] : undefined) || emptyRunState)
   const runId = computed(() => currentRunState.value.runId)
   const events = computed(() => currentRunState.value.events)
   const streamingText = computed(() => currentRunState.value.streamingText)
-  const pendingApproval = computed(() => currentRunState.value.pendingApproval)
-  const pendingAsk = computed(() => currentRunState.value.pendingAsk)
-  const isRunning = computed(() => currentRunState.value.isRunning)
-  const runError = computed(() => currentRunState.value.runError)
+  const pendingApproval = computed(() => pendingApprovalFrom(currentRunState.value))
+  const pendingAsk = computed(() => pendingAskFrom(currentRunState.value))
+  const isRunning = computed(() => isRunActive(currentRunState.value))
+  const runError = computed(() => currentRunState.value.error)
   const runningSessionIds = computed(() =>
     Object.entries(sessionRunStates)
-      .filter(([, state]) => state.isRunning || state.pendingAsk || state.pendingApproval)
+      .filter(([, state]) => isRunActive(state))
       .map(([id]) => id),
   )
 
@@ -89,7 +85,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   )
 
   function ensureRunState(targetSessionId: string) {
-    if (!sessionRunStates[targetSessionId]) sessionRunStates[targetSessionId] = createRunState()
+    if (!sessionRunStates[targetSessionId]) sessionRunStates[targetSessionId] = createSessionRunState()
     return sessionRunStates[targetSessionId]
   }
 
@@ -159,7 +155,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   function resetRunState(targetSessionId: string) {
-    closeEventSource(targetSessionId)
+    runEventStream.close(targetSessionId)
     clearStreamingBuffer(targetSessionId)
     delete sessionRunStates[targetSessionId]
   }
@@ -169,8 +165,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     for (let attempt = 0; attempt < 20; attempt++) {
       try {
-        const response = await fetch(`${options.apiBase}/api/health`)
-        if (response.ok) {
+        if (await api.checkHealth()) {
           serverStatus.value = 'online'
           return true
         }
@@ -188,81 +183,77 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   async function createSession() {
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
 
-    const response = await fetch(`${options.apiBase}/api/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: uiText.app.newChat }),
-    })
-    const data = await response.json()
-    sessionId.value = data.session.id
-    messages.value = []
-    resetRunState(sessionId.value)
-    await loadSessions()
-    return true
+    try {
+      const nextSessionId = await api.createSession(uiText.app.newChat)
+
+      sessionId.value = nextSessionId
+      messages.value = []
+      resetRunState(nextSessionId)
+      await loadSessions()
+      return true
+    } catch {
+      return false
+    }
   }
 
   async function loadSessions() {
     if (serverStatus.value !== 'online') return
 
-    const response = await fetch(`${options.apiBase}/api/sessions`)
-    if (!response.ok) return
-
-    const data = await response.json()
-    sessions.value = data.sessions || []
+    try {
+      sessions.value = await api.listSessions()
+    } catch {
+      // Keep the last successful session list during transient failures.
+    }
   }
 
   async function loadActiveRuns() {
     if (serverStatus.value !== 'online') return
 
-    const response = await fetch(`${options.apiBase}/api/runs/active`)
-    if (!response.ok) return
-
-    const data = await response.json()
+    let activeRuns
+    try {
+      activeRuns = await api.listActiveRuns()
+    } catch {
+      return
+    }
     const restoredSessionIds = new Set<string>()
 
-    for (const run of (data.runs || []) as ActiveRunSummary[]) {
+    for (const run of activeRuns) {
       if (!run.session_id || !run.run_id || !run.events_url) continue
 
       restoredSessionIds.add(run.session_id)
       const state = ensureRunState(run.session_id)
 
       if (state.runId !== run.run_id) {
-        state.eventSource?.close()
+        runEventStream.close(run.session_id)
         state.runId = run.run_id
         state.events = []
         clearStreamingBuffer(run.session_id)
         state.seenEventKeys.clear()
       }
 
-      state.pendingAsk = run.pending_ask || null
-      state.pendingApproval = run.pending_approval || null
-      state.runError = ''
-      state.isRunning = true
+      connectRun(state, run.run_id, run.pending_ask, run.pending_approval)
 
-      subscribe(run.events_url, run.session_id)
+      runEventStream.subscribe(run.session_id, run.events_url)
     }
 
     for (const [targetSessionId, state] of Object.entries(sessionRunStates)) {
-      if (!state.isRunning && !state.pendingAsk && !state.pendingApproval) continue
+      if (!isRunActive(state)) continue
       if (restoredSessionIds.has(targetSessionId)) continue
 
-      state.isRunning = false
-      state.pendingAsk = null
-      state.pendingApproval = null
-      closeEventSource(targetSessionId)
+      finishRunState(state)
+      runEventStream.close(targetSessionId)
     }
   }
 
   async function updateSession(id: string, payload: Record<string, unknown>, optionsOverride: { allowWhileRunning?: boolean } = {}) {
-    if (!id || (!optionsOverride.allowWhileRunning && sessionRunStates[id]?.isRunning)) return false
+    if (!id || (!optionsOverride.allowWhileRunning && sessionRunStates[id] && isRunActive(sessionRunStates[id]))) return false
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
 
-    const response = await fetch(`${options.apiBase}/api/sessions/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!response.ok) return false
+    try {
+      await api.updateSession(id, payload)
+    } catch {
+      return false
+    }
 
     await loadSessions()
     return true
@@ -293,18 +284,26 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   async function loadSessionMessages(id: string, optionsOverride: { notify?: boolean } = {}) {
-    const response = await fetch(`${options.apiBase}/api/sessions/${id}`)
-    if (!response.ok) return false
+    const request = sessionLoadGuard.start()
 
-    const data = await response.json()
-    sessionId.value = id
-    messages.value = data.messages || []
+    try {
+      const loadedMessages = await api.loadSessionMessages(id, request.signal)
+      if (!request.isCurrent()) return false
 
-    if (optionsOverride.notify !== false) {
-      await nextTick()
-      await options.onMessagesLoaded?.()
+      sessionId.value = id
+      messages.value = loadedMessages
+
+      if (optionsOverride.notify !== false) {
+        await nextTick()
+        await options.onMessagesLoaded?.()
+      }
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return false
+      return false
+    } finally {
+      request.release()
     }
-    return true
   }
 
   async function refreshSessionMessagesIfActive(targetSessionId: string) {
@@ -321,24 +320,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     if (!sessionId.value || !messageId || isRunning.value) return false
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
 
-    const response = await fetch(`${options.apiBase}/api/sessions/${sessionId.value}/fork`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message_id: messageId,
-        mode: 'after',
-      }),
-    })
-    if (!response.ok) return false
-
-    const data = await response.json()
-    const nextSessionId = data.session?.id
-    if (typeof nextSessionId !== 'string') return false
+    let forked
+    try {
+      forked = await api.forkSession(sessionId.value, messageId)
+    } catch {
+      return false
+    }
 
     await loadSessions()
-    sessionId.value = nextSessionId
-    messages.value = data.messages || []
-    resetRunState(nextSessionId)
+    sessionId.value = forked.sessionId
+    messages.value = forked.messages
+    resetRunState(forked.sessionId)
     await nextTick()
     await options.onMessagesLoaded?.()
     return true
@@ -348,10 +340,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const draft = typeof input === 'string' ? { content: input } : input
     const trimmedContent = draft.content.trim()
     const attachments = draft.attachments || []
-    const runOptions = {
-      stream: true,
-      ...(draft.options?.reasoningEffort ? { reasoningEffort: draft.options.reasoningEffort } : {}),
-    }
     if ((!trimmedContent && !attachments.length) || isRunning.value) return false
 
     if (serverStatus.value !== 'online' && !(await checkServer())) return false
@@ -363,69 +351,46 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     state.events = []
     state.seenEventKeys.clear()
     clearStreamingBuffer(targetSessionId)
-    state.pendingApproval = null
-    state.pendingAsk = null
-    state.runError = ''
-    state.isRunning = true
-    messages.value.push({
+    startRun(state)
+    const optimisticMessage: Message = {
       role: 'user',
       content: trimmedContent,
       created_at: new Date().toISOString(),
       ...(attachments.length ? { attachments } : {}),
-    })
+    }
+    messages.value.push(optimisticMessage)
 
     try {
-      const response = await fetch(`${options.apiBase}/api/sessions/${targetSessionId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: {
-            role: 'user',
-            content: trimmedContent,
-            ...(attachments.length ? { attachments } : {}),
-          },
-          options: runOptions,
-        }),
+      const run = await api.sendMessage(targetSessionId, {
+        content: trimmedContent,
+        attachments,
+        reasoningEffort: draft.options?.reasoningEffort,
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      const data = await response.json()
-      if (!data.run_id || !data.events_url) throw new Error('Invalid run response')
-
-      state.runId = data.run_id
+      connectRun(state, run.runId)
       void loadSessions()
-      subscribe(data.events_url, targetSessionId)
+      runEventStream.subscribe(targetSessionId, run.eventsUrl)
       return true
     } catch {
-      state.isRunning = false
-      state.runError = uiText.app.sendFailed
-      if (sessionId.value === targetSessionId) messages.value.pop()
+      finishRunState(state, uiText.app.sendFailed)
+      if (sessionId.value === targetSessionId) {
+        const index = messages.value.lastIndexOf(optimisticMessage)
+        if (index >= 0) messages.value.splice(index, 1)
+      }
       void checkServer()
       return false
     }
   }
 
   function closeEventSource(targetSessionId?: string) {
-    if (targetSessionId) {
-      const state = sessionRunStates[targetSessionId]
-      state?.eventSource?.close()
-      if (state) state.eventSource = null
-      return
-    }
-
-    for (const state of Object.values(sessionRunStates)) {
-      state.eventSource?.close()
-      state.eventSource = null
-    }
+    if (targetSessionId) runEventStream.close(targetSessionId)
+    else runEventStream.closeAll()
   }
 
   function finishRun(targetSessionId: string) {
     const state = ensureRunState(targetSessionId)
-    state.isRunning = false
-    state.pendingAsk = null
-    state.pendingApproval = null
-    state.eventSource?.close()
-    state.eventSource = null
+    finishRunState(state)
+    runEventStream.close(targetSessionId)
     void (async () => {
       await loadSessions()
       await refreshSessionMessagesIfActive(targetSessionId)
@@ -433,139 +398,100 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     })()
   }
 
-  function subscribe(eventsUrl: string, targetSessionId: string) {
-    closeEventSource(targetSessionId)
+  function handleRunEvent(targetSessionId: string, event: AgentEvent) {
     const state = ensureRunState(targetSessionId)
-    const source = new EventSource(`${options.apiBase}${eventsUrl}`)
-    state.eventSource = source
-    const eventTypes = [
-      'agent.started',
-      'agent.plan',
-      'agent.state',
-      'agent.message.delta',
-      'agent.message.done',
-      'tool.call',
-      'tool.result',
-      'ask_user.required',
-      'approval.required',
-      'agent.done',
-      'agent.error',
-    ]
 
-    for (const type of eventTypes) {
-      source.addEventListener(type, (message) => {
-        const event = JSON.parse((message as MessageEvent).data) as AgentEvent
-
-        if (event.type === 'agent.message.delta') {
-          const channel = event.payload.channel || 'answer'
-          const isAnswerDelta = channel !== 'reasoning'
-          if (!appendEvent(targetSessionId, event, { store: !isAnswerDelta })) return
-          if (isAnswerDelta) {
-            appendStreamingDelta(targetSessionId, event.payload.content || '')
-            return
-          }
-        } else if (!appendEvent(targetSessionId, event)) {
-          return
-        }
-
-        const nextState = ensureRunState(targetSessionId)
-
-        if (event.type === 'approval.required') {
-          nextState.pendingApproval = event.payload as PendingApproval
-        }
-
-        if (event.type === 'ask_user.required') {
-          nextState.pendingAsk = event.payload as PendingAsk
-          if (sessionId.value === targetSessionId) {
-            options.onAskUserRequired?.()
-            messages.value.push({
-              role: 'assistant',
-              content: nextState.pendingAsk.question,
-              created_at: nextState.pendingAsk.created_at || event.ts,
-            })
-          }
-        }
-
-        if (event.type === 'agent.message.done') {
-          const doneMessage = event.payload.message as Message | undefined
-          if (doneMessage && sessionId.value === targetSessionId) {
-            messages.value.push(doneMessage)
-          }
-          if (options.isFinalAssistantMessage(doneMessage)) clearStreamingBuffer(targetSessionId)
-        }
-
-        if (event.type === 'agent.done' || event.type === 'agent.error') {
-          finishRun(targetSessionId)
-        }
-      })
-    }
-
-    source.onerror = () => {
-      const nextState = sessionRunStates[targetSessionId]
-      if (!nextState || nextState.eventSource !== source || !nextState.isRunning) {
-        source.close()
+    if (event.type === 'agent.message.delta') {
+      const channel = event.payload.channel || 'answer'
+      const isAnswerDelta = channel !== 'reasoning'
+      if (!appendEvent(targetSessionId, event, { store: !isAnswerDelta })) return
+      if (isAnswerDelta) {
+        appendStreamingDelta(targetSessionId, event.payload.content || '')
         return
       }
-
-      nextState.runError = uiText.app.connectionInterrupted
-      finishRun(targetSessionId)
-      void checkServer()
+    } else if (!appendEvent(targetSessionId, event)) {
+      return
     }
+
+    if (event.type === 'approval.required') {
+      state.lifecycle = { status: 'awaiting-approval', approval: event.payload as PendingApproval }
+    }
+
+    if (event.type === 'ask_user.required') {
+      const ask = event.payload as PendingAsk
+      state.lifecycle = { status: 'awaiting-user', ask }
+      if (sessionId.value === targetSessionId) {
+        options.onAskUserRequired?.()
+        messages.value.push({
+          role: 'assistant',
+          content: ask.question,
+          created_at: ask.created_at || event.ts,
+        })
+      }
+    }
+
+    if (event.type === 'agent.message.done') {
+      const doneMessage = event.payload.message as Message | undefined
+      if (doneMessage && sessionId.value === targetSessionId) messages.value.push(doneMessage)
+      if (options.isFinalAssistantMessage(doneMessage)) clearStreamingBuffer(targetSessionId)
+    }
+
+    if (event.type === 'agent.done' || event.type === 'agent.error') finishRun(targetSessionId)
   }
 
   async function selectAskOption(option: AskOption) {
     const targetSessionId = sessionId.value
     const state = sessionRunStates[targetSessionId]
-    const ask = state?.pendingAsk
+    const ask = state ? pendingAskFrom(state) : null
     if (!ask || !state.runId) return
 
-    messages.value.push({ role: 'user', content: option.label, created_at: new Date().toISOString() })
+    const optimisticMessage: Message = { role: 'user', content: option.label, created_at: new Date().toISOString() }
+    messages.value.push(optimisticMessage)
     const previousAsk = ask
-    state.pendingAsk = null
+    state.lifecycle = { status: 'running' }
 
-    const response = await fetch(`${options.apiBase}/api/runs/${state.runId}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'choose',
-        request_id: ask.ask_id,
-        option_id: option.id,
-      }),
-    })
+    try {
+      await api.choose(state.runId, ask.ask_id, option.id)
+      return
+    } catch {
+      // Restore the pending question below.
+    }
 
-    if (!response.ok) {
-      state.pendingAsk = previousAsk
-      messages.value.pop()
+    if (state.runId && state.lifecycle.status === 'running') {
+      state.lifecycle = { status: 'awaiting-user', ask: previousAsk }
+      state.error = uiText.app.responseFailed
+      if (sessionId.value === targetSessionId) {
+        const index = messages.value.lastIndexOf(optimisticMessage)
+        if (index >= 0) messages.value.splice(index, 1)
+      }
     }
   }
 
   async function decideApproval(decision: 'approved' | 'rejected', scope: 'once' | 'session' | 'persistent' = 'session') {
     const state = sessionRunStates[sessionId.value]
-    if (!state?.pendingApproval || !state.runId) return
-    const approval = state.pendingApproval
-    state.pendingApproval = null
+    const approval = state ? pendingApprovalFrom(state) : null
+    if (!state || !approval || !state.runId) return
+    state.lifecycle = { status: 'running' }
 
-    await fetch(`${options.apiBase}/api/runs/${state.runId}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'approve',
-        request_id: approval.approval_id,
-        decision,
-        scope,
-        message: decision === 'rejected' ? 'User rejected the action' : undefined,
-      }),
-    })
+    try {
+      await api.approve(state.runId, approval.approval_id, decision, scope)
+      return
+    } catch {
+      // Restore the approval below.
+    }
+
+    state.lifecycle = { status: 'awaiting-approval', approval }
+    state.error = uiText.app.responseFailed
   }
 
   async function cancelRun() {
     const state = sessionRunStates[sessionId.value]
-    if (!state?.runId || !state.isRunning) return
-    await fetch(`${options.apiBase}/api/runs/${state.runId}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'cancel', reason: 'User cancelled' }),
-    })
+    if (!state?.runId || !isRunActive(state)) return
+    try {
+      await api.cancel(state.runId)
+    } catch {
+      state.error = uiText.app.responseFailed
+    }
   }
 
   return {

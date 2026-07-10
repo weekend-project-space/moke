@@ -26,12 +26,16 @@ const emit = defineEmits<{
 }>()
 
 const addMenuOpen = ref(false)
+const attachmentError = ref('')
 const composerEl = ref<HTMLFormElement | null>(null)
 const dragDepth = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const thinkingMenuOpen = ref(false)
 const isDraggingImage = ref(false)
+const MAX_IMAGE_ATTACHMENTS = 4
+const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
+const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
 
 function resize() {
   const input = textarea.value
@@ -105,8 +109,49 @@ async function addImageFiles(files: File[]) {
   const imageFiles = files.filter((file) => file.type.startsWith('image/'))
   if (!imageFiles.length) return
 
-  const attachments = await Promise.all(imageFiles.map(readImageFile))
-  emit('addAttachments', attachments)
+  attachmentError.value = ''
+  const availableSlots = Math.max(0, MAX_IMAGE_ATTACHMENTS - props.attachments.length)
+  if (availableSlots === 0) {
+    attachmentError.value = uiText.composer.imageLimitReached
+    return
+  }
+
+  let totalBytes = props.attachments.reduce((total, attachment) => total + approximateDataUrlBytes(attachment.data_url), 0)
+  const acceptedFiles: File[] = []
+  let rejectedForSize = false
+  let rejectedForCount = false
+
+  for (const file of imageFiles) {
+    if (acceptedFiles.length >= availableSlots) {
+      rejectedForCount = true
+      continue
+    }
+    if (file.size > MAX_IMAGE_FILE_BYTES || totalBytes + file.size > MAX_IMAGE_TOTAL_BYTES) {
+      rejectedForSize = true
+      continue
+    }
+
+    totalBytes += file.size
+    acceptedFiles.push(file)
+  }
+
+  const results = await Promise.allSettled(acceptedFiles.map(readImageFile))
+  const attachments = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+  if (attachments.length) emit('addAttachments', attachments)
+
+  if (results.some((result) => result.status === 'rejected')) {
+    attachmentError.value = uiText.composer.imageReadFailed
+  } else if (rejectedForSize) {
+    attachmentError.value = uiText.composer.imageTooLarge
+  } else if (rejectedForCount) {
+    attachmentError.value = uiText.composer.imageLimitReached
+  }
+}
+
+function approximateDataUrlBytes(dataUrl: string) {
+  const commaIndex = dataUrl.indexOf(',')
+  const base64Length = commaIndex >= 0 ? dataUrl.length - commaIndex - 1 : dataUrl.length
+  return Math.floor(base64Length * 0.75)
 }
 
 function imageFilesFromDataTransfer(dataTransfer: DataTransfer | null) {
@@ -295,6 +340,7 @@ defineExpose({ focus, resize })
           </button>
         </div>
       </div>
+      <p v-if="attachmentError" class="composer-attachment-error" role="status">{{ attachmentError }}</p>
     </div>
   </form>
 </template>

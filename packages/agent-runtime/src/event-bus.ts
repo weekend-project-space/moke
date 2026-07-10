@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, AgentEventPayloadMap, AgentEventType, AgentStep } from '../../protocol/src/index.js';
 import type { RuntimeRun } from './run-state.js';
 
+export const MAX_RETAINED_RUN_EVENTS = 2000;
+
 function id(prefix: string) {
   return `${prefix}_${randomUUID().slice(0, 8)}`;
 }
@@ -30,6 +32,9 @@ export class EventBus {
     } as AgentEvent;
 
     this.run.events.push(event);
+    if (this.run.events.length > MAX_RETAINED_RUN_EVENTS) {
+      this.run.events.splice(0, this.run.events.length - MAX_RETAINED_RUN_EVENTS);
+    }
     this.onEvent?.(event);
     const sse = `event: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
     for (const res of this.run.clients) res.write(sse);

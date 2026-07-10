@@ -20,6 +20,9 @@ import {
 
 const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
 
+type ToolCallEvent = Extract<AgentEvent, { type: 'tool.call' }>
+type ToolResultEvent = Extract<AgentEvent, { type: 'tool.result' }>
+
 type UseConversationDisplayOptions = {
   messages: Ref<Message[]>
   events: Ref<AgentEvent[]>
@@ -41,7 +44,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
   const activeEventProcessItems = computed<ProcessItem[]>(() => {
     const items: ProcessItem[] = []
-    const callsById = new Map<string, AgentEvent>()
+    const callsById = new Map<string, ToolCallEvent>()
     let reasoningText = ''
     let reasoningTime = 0
     let reasoningId = ''
@@ -375,7 +378,7 @@ function normalizeComparableText(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function createToolCallEventProcessItem(event: AgentEvent, toolLabels: Record<string, string>): ProcessItem {
+function createToolCallEventProcessItem(event: ToolCallEvent, toolLabels: Record<string, string>): ProcessItem {
   const name = String(event.payload.tool || '')
   const input = toRecord(event.payload.input)
   const description = describeToolCall(name, input)
@@ -425,7 +428,7 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
   }
 }
 
-function createToolResultEventProcessItem(event: AgentEvent, callEvent?: AgentEvent): ProcessItem {
+function createToolResultEventProcessItem(event: ToolResultEvent, callEvent?: ToolCallEvent): ProcessItem {
   const output = event.payload.output
   const toolName = String(callEvent?.payload.tool || 'tool')
   const parsedOutput = typeof output === 'string' ? parseToolContent(output) : output

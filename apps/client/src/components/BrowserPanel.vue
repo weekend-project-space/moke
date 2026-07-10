@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
+import type { BrowserLinkOpenMode } from '../composables/browserPreferences'
 import { uiText } from '../text/uiText'
 
 const props = defineProps<{
@@ -17,7 +18,6 @@ const props = defineProps<{
 
 const MAX_TABS = 8
 
-const page = ref<BrowserPage | null>(null)
 const tabs = ref<BrowserPage[]>([])
 const activeTabKey = ref<string | null>(null)
 const address = ref('')
@@ -58,7 +58,6 @@ function syncAddressFromPage(targetPage = activePage.value) {
 }
 
 function applyState(result: { page: BrowserPage | null; pages?: BrowserPage[]; activePageId?: number | null }) {
-  page.value = result.page
   tabs.value = result.pages || []
   activeTabKey.value = result.activePageId ? `page-${result.activePageId}` : activeTabKey.value
   if (!isEditingAddress.value && result.page && activeTabKey.value === `page-${result.page.pageId}`) {
@@ -154,10 +153,20 @@ async function createTab() {
   })
 }
 
-async function openUrl(url: string) {
+async function openUrl(url: string, mode: BrowserLinkOpenMode = 'new-tab') {
   await withBusy(async () => {
     await nextTick()
     await waitForLayoutFrame()
+
+    if (mode === 'current' && activePage.value) {
+      applyState(await browserApi.navigate({
+        pageId: activePage.value.pageId,
+        type: 'url',
+        url,
+      }))
+      return
+    }
+
     applyState(await browserApi.open({
       url,
       visible: true,

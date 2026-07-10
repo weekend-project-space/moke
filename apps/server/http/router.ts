@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { json, readJson } from './response.js';
+import { json, readJson, RequestBodyError } from './response.js';
 
 type Method = 'GET' | 'POST' | 'PATCH';
 type RouteHandler<TContext> = (ctx: RequestContext<TContext>) => unknown | Promise<unknown>;
@@ -13,7 +13,7 @@ type Route<TContext> = {
 };
 
 export type RequestContext<TContext> = {
-  body: () => Promise<Record<string, any>>;
+  body: () => Promise<Record<string, unknown>>;
   context: TContext;
   json: (status: number, body: unknown) => void;
   params: Record<string, string>;
@@ -76,7 +76,7 @@ export function createRouter<TContext>() {
 
           if (result === RAW_RESPONSE || res.writableEnded) return;
         } catch (error) {
-          if (error instanceof HttpError) {
+          if (error instanceof HttpError || error instanceof RequestBodyError) {
             return json(res, error.status, {
               error: { code: error.code, message: error.message },
             });
@@ -97,7 +97,7 @@ export function createRouter<TContext>() {
 export type Router<TContext> = ReturnType<typeof createRouter<TContext>>;
 
 function memoizeBody(req: IncomingMessage) {
-  let parsed: Promise<Record<string, any>> | undefined;
+  let parsed: Promise<Record<string, unknown>> | undefined;
   return () => {
     parsed ||= readJson(req);
     return parsed;

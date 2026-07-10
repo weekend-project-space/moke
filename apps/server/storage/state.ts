@@ -1,26 +1,18 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
-import type { RunSnapshot, Session } from '../../../packages/protocol/src/index.js';
-
-type StoredRun = RunSnapshot & {
-  started_at?: number;
-  abort?: boolean;
-};
+import type { Session } from '../../../packages/protocol/src/index.js';
 
 type StoredState = {
   sessions: Session[];
-  runs: StoredRun[];
 };
 
 type StateStoreInput = {
   statePath: string;
   sessions: Map<string, Session>;
-  runs: Map<string, RuntimeRun>;
 };
 
-export function loadState({ statePath, sessions, runs }: StateStoreInput) {
+export function loadState({ statePath, sessions }: StateStoreInput) {
   if (!existsSync(statePath)) return;
 
   try {
@@ -29,28 +21,12 @@ export function loadState({ statePath, sessions, runs }: StateStoreInput) {
       if (!session.id) continue;
       sessions.set(session.id, session);
     }
-
-    for (const storedRun of parsed.runs || []) {
-      if (!storedRun.id) continue;
-      const status = ['queued', 'running', 'awaiting_user', 'awaiting_approval'].includes(storedRun.status)
-        ? 'failed'
-        : storedRun.status;
-      runs.set(storedRun.id, {
-        ...storedRun,
-        status,
-        abort: status === 'failed' ? true : storedRun.abort === true,
-        pending_ask: undefined,
-        pending_approval: undefined,
-        clients: new Set(),
-        started_at: storedRun.started_at || Date.now(),
-      });
-    }
   } catch (error) {
     console.warn(`Failed to load state from ${statePath}:`, error);
   }
 }
 
-export function createStateSaver({ statePath, sessions, runs }: StateStoreInput) {
+export function createStateSaver({ statePath, sessions }: StateStoreInput) {
   let saveTimer: NodeJS.Timeout | undefined;
 
   function saveStateSoon() {
@@ -62,13 +38,15 @@ export function createStateSaver({ statePath, sessions, runs }: StateStoreInput)
     saveTimer = undefined;
     const state: StoredState = {
       sessions: [...sessions.values()],
-      runs: [...runs.values()].map(({ clients, pending_ask, pending_approval, ...run }) => run),
     };
+    const temporaryPath = `${statePath}.tmp`;
 
     try {
       mkdirSync(dirname(statePath), { recursive: true });
-      writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+      writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`);
+      renameSync(temporaryPath, statePath);
     } catch (error) {
+      rmSync(temporaryPath, { force: true });
       console.warn(`Failed to save state to ${statePath}:`, error);
     }
   }

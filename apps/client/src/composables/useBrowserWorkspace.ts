@@ -1,11 +1,12 @@
 import { isNativeBrowserAvailable } from '../api/browser'
 import { connectBrowserBridge } from '../api/browserBridge'
 import type { BrowserBounds } from '../api/browser'
+import { loadBrowserPreferences, type BrowserLinkOpenMode } from './browserPreferences'
 
 type UseBrowserWorkspaceOptions = {
   apiBase: string
   getBrowserBounds?: () => BrowserBounds | null
-  openUrl?: (url: string) => Promise<void>
+  openUrl?: (url: string, mode: BrowserLinkOpenMode) => Promise<void>
   openWorkspace: () => void
 }
 
@@ -25,7 +26,7 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     }
   }
 
-  async function openLinkInBrowser(rawUrl: string) {
+  async function openLinkInBrowser(rawUrl: string, mode = loadBrowserPreferences().linkOpenMode) {
     const url = normalizeHttpUrl(rawUrl)
     if (!url) return
 
@@ -37,7 +38,7 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     options.openWorkspace()
     try {
       if (options.openUrl) {
-        await options.openUrl(url)
+        await options.openUrl(url, mode)
       } else {
         window.open(url, '_blank', 'noreferrer')
       }

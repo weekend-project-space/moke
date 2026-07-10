@@ -57,7 +57,7 @@ export async function createApp(): Promise<ServerApp> {
   const browserBridge = new BrowserBridge();
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
-  const stateSaver = createStateSaver({ statePath, sessions, runs });
+  const stateSaver = createStateSaver({ statePath, sessions });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
@@ -66,7 +66,7 @@ export async function createApp(): Promise<ServerApp> {
     system.approveWorkspaceRoot(permission.path);
   }
 
-  loadState({ statePath, sessions, runs });
+  loadState({ statePath, sessions });
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
   const runManager = createRunManager({

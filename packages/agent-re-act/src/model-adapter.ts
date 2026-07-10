@@ -1,4 +1,4 @@
-import { AIMessage, AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
 import type { AgentStep, ImageAttachment, Message, ToolCall } from '../../protocol/src/index.js';
@@ -147,6 +147,7 @@ function createResponsesUserContent(content: string, attachments: ImageAttachmen
 
 function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[] {
   const messages: ResponsesInputItem[] = [];
+  const knownToolCallIds = new Set<string>();
 
   for (const message of history) {
     if (message.role === 'user') {
@@ -165,6 +166,7 @@ function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[
         });
       }
       for (const call of message.tool_calls || []) {
+        knownToolCallIds.add(call.id);
         messages.push({
           type: 'function_call',
           call_id: call.id,
@@ -176,11 +178,13 @@ function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[
     }
 
     if (message.role === 'tool') {
+      if (!knownToolCallIds.has(message.tool_call_id)) continue;
       messages.push({
         type: 'function_call_output',
         call_id: message.tool_call_id,
         output: message.content,
       });
+      knownToolCallIds.delete(message.tool_call_id);
     }
   }
 

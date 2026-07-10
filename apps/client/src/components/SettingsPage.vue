@@ -2,6 +2,12 @@
 import { FolderX, Plus, RotateCw, Save, SendHorizontal, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
 import McpSettingsPanel from './McpSettingsPanel.vue'
+import {
+  DEFAULT_BROWSER_PREFERENCES,
+  loadBrowserPreferences,
+  saveBrowserPreferences as persistBrowserPreferences,
+  type BrowserLinkOpenMode,
+} from '../composables/browserPreferences'
 import { uiText } from '../text/uiText'
 
 type WorkspaceRootPermission = {
@@ -25,7 +31,7 @@ type ModelProviderProfile = {
 
 type BrowserSettings = {
   browserHomeUrl: string
-  linkOpenMode: 'current' | 'new-tab'
+  linkOpenMode: BrowserLinkOpenMode
 }
 
 type SettingsTab = 'model' | 'mcp' | 'permissions' | 'browser'
@@ -36,10 +42,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  openBrowserUrl: [url: string]
+  openBrowserUrl: [request: { url: string; mode: BrowserLinkOpenMode }]
 }>()
 
-const BROWSER_SETTINGS_KEY = 'moke.browser-settings.v1'
 const MODEL_PROVIDER_MAX_RETRIES_MAX = 6
 const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
 const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
@@ -53,10 +58,7 @@ const activeProviderId = ref('')
 const selectedProviderId = ref('')
 const providers = ref<ModelProviderProfile[]>([])
 const editingProvider = reactive<ModelProviderProfile>(createProvider())
-const browserSettings = reactive<BrowserSettings>({
-  browserHomeUrl: 'https://www.baidu.com/',
-  linkOpenMode: 'current',
-})
+const browserSettings = reactive<BrowserSettings>({ ...DEFAULT_BROWSER_PREFERENCES })
 const permissions = ref<WorkspaceRootPermission[]>([])
 const modelOptions = ref<string[]>([])
 const loadingPermissions = ref(false)
@@ -126,20 +128,11 @@ function syncEditingProvider() {
 }
 
 function loadBrowserSettings() {
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(BROWSER_SETTINGS_KEY) || '{}') as Partial<BrowserSettings>
-    Object.assign(browserSettings, {
-      ...browserSettings,
-      ...stored,
-      linkOpenMode: stored.linkOpenMode === 'new-tab' ? 'new-tab' : 'current',
-    })
-  } catch {
-    // Keep defaults.
-  }
+  Object.assign(browserSettings, loadBrowserPreferences())
 }
 
 function saveBrowserSettings() {
-  window.localStorage.setItem(BROWSER_SETTINGS_KEY, JSON.stringify(browserSettings))
+  persistBrowserPreferences(browserSettings)
   markSaved()
 }
 
@@ -297,7 +290,7 @@ async function revokePermission(path: string) {
 
 function openHomeUrl() {
   const url = browserSettings.browserHomeUrl.trim()
-  if (url) emit('openBrowserUrl', url)
+  if (url) emit('openBrowserUrl', { url, mode: browserSettings.linkOpenMode })
 }
 
 onMounted(() => {
