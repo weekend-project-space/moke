@@ -34,14 +34,37 @@ const statusText = computed(() => {
   return valid.value ? uiText.mcp.serverCount(servers.value.length) : uiText.mcp.invalidConfig
 })
 
-function applyResult(data: any) {
-  configPath.value = typeof data.path === 'string' ? data.path : configPath.value
-  rawConfig.value = typeof data.raw === 'string' ? data.raw : rawConfig.value
-  exists.value = Boolean(data.exists)
-  valid.value = Boolean(data.valid)
-  servers.value = Array.isArray(data.servers) ? data.servers : []
-  restartRequired.value = Boolean(data.restart_required)
-  error.value = typeof data.error === 'string' ? data.error : ''
+function toRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function readApiError(data: unknown, status: number) {
+  const errorValue = toRecord(toRecord(data).error).message
+  return typeof errorValue === 'string' ? errorValue : `HTTP ${status}`
+}
+
+function isServerSummary(value: unknown): value is McpServerSummary {
+  const server = toRecord(value)
+  return typeof server.id === 'string'
+    && typeof server.enabled === 'boolean'
+    && typeof server.command === 'string'
+    && Array.isArray(server.args)
+    && server.args.every((item) => typeof item === 'string')
+    && typeof server.timeout_ms === 'number'
+}
+
+function applyResult(data: unknown) {
+  const result = toRecord(data)
+  configPath.value = typeof result.path === 'string' ? result.path : configPath.value
+  rawConfig.value = typeof result.raw === 'string' ? result.raw : rawConfig.value
+  exists.value = Boolean(result.exists)
+  valid.value = Boolean(result.valid)
+  servers.value = Array.isArray(result.servers) ? result.servers.filter(isServerSummary) : []
+  restartRequired.value = Boolean(result.restart_required)
+  error.value = typeof result.error === 'string' ? result.error : ''
+  return result
 }
 
 async function loadMcpSettings() {
@@ -50,8 +73,8 @@ async function loadMcpSettings() {
   message.value = ''
   try {
     const response = await fetch(`${props.apiBase}/api/settings/mcp`)
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
+    const data = await response.json() as unknown
+    if (!response.ok) throw new Error(readApiError(data, response.status))
     applyResult(data)
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.loadFailed
@@ -70,10 +93,10 @@ async function validateMcpSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: rawConfig.value }),
     })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
-    applyResult(data)
-    message.value = data.valid ? uiText.mcp.validConfig : ''
+    const data = await response.json() as unknown
+    if (!response.ok) throw new Error(readApiError(data, response.status))
+    const result = applyResult(data)
+    message.value = result.valid ? uiText.mcp.validConfig : ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.validateFailed
   } finally {
@@ -91,10 +114,10 @@ async function saveMcpSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: rawConfig.value }),
     })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`)
-    applyResult(data)
-    if (!data.valid) return
+    const data = await response.json() as unknown
+    if (!response.ok) throw new Error(readApiError(data, response.status))
+    const result = applyResult(data)
+    if (!result.valid) return
     message.value = uiText.mcp.savedRestart
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.saveFailed

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AskOption, PendingAsk } from '../types/conversation'
+import type { AskOption, PendingAsk } from '../model/conversation'
 
 defineProps<{
   ask: PendingAsk

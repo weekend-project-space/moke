@@ -1,19 +1,25 @@
 import { computed, nextTick, reactive, ref } from 'vue'
-import { createLatestRequestGuard } from './latestRequest'
-import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../types/conversation'
-import { uiText } from '../text/uiText'
-import { createAgentApi } from '../features/chat/api/agentApi'
+import { createLatestRequestGuard } from '../services/latestRequest'
+import type { AgentEvent, AskOption, ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../model/conversation'
+import { uiText } from '../../../text/uiText'
+import { createAgentApi } from '../api/agentApi'
 import {
+  awaitRunApproval,
+  awaitRunUser,
   connectRun,
   createSessionRunState,
   finishRunState,
   isRunActive,
+  markRunConnected,
+  markRunReconnecting,
   pendingApprovalFrom,
   pendingAskFrom,
+  resumeRun,
+  setRunError,
   startRun,
   type SessionRunState,
-} from '../features/chat/model/runState'
-import { createRunEventStream } from '../features/chat/services/runEventStream'
+} from '../model/runState'
+import { createRunEventStream } from '../services/runEventStream'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -50,15 +56,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     onConnected: (targetSessionId) => {
       const state = sessionRunStates[targetSessionId]
       if (!state) return
-      state.connection = 'connected'
-      state.error = ''
+      markRunConnected(state)
     },
     onEvent: handleRunEvent,
     onReconnecting: (targetSessionId) => {
       const state = sessionRunStates[targetSessionId]
       if (!state || !isRunActive(state)) return
-      state.connection = 'reconnecting'
-      state.error = uiText.app.reconnecting
+      markRunReconnecting(state, uiText.app.reconnecting)
     },
   })
 
@@ -414,12 +418,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
 
     if (event.type === 'approval.required') {
-      state.lifecycle = { status: 'awaiting-approval', approval: event.payload as PendingApproval }
+      awaitRunApproval(state, event.payload as PendingApproval)
     }
 
     if (event.type === 'ask_user.required') {
       const ask = event.payload as PendingAsk
-      state.lifecycle = { status: 'awaiting-user', ask }
+      awaitRunUser(state, ask)
       if (sessionId.value === targetSessionId) {
         options.onAskUserRequired?.()
         messages.value.push({
@@ -448,7 +452,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const optimisticMessage: Message = { role: 'user', content: option.label, created_at: new Date().toISOString() }
     messages.value.push(optimisticMessage)
     const previousAsk = ask
-    state.lifecycle = { status: 'running' }
+    resumeRun(state)
 
     try {
       await api.choose(state.runId, ask.ask_id, option.id)
@@ -458,8 +462,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
 
     if (state.runId && state.lifecycle.status === 'running') {
-      state.lifecycle = { status: 'awaiting-user', ask: previousAsk }
-      state.error = uiText.app.responseFailed
+      awaitRunUser(state, previousAsk, uiText.app.responseFailed)
       if (sessionId.value === targetSessionId) {
         const index = messages.value.lastIndexOf(optimisticMessage)
         if (index >= 0) messages.value.splice(index, 1)
@@ -471,7 +474,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const state = sessionRunStates[sessionId.value]
     const approval = state ? pendingApprovalFrom(state) : null
     if (!state || !approval || !state.runId) return
-    state.lifecycle = { status: 'running' }
+    resumeRun(state)
 
     try {
       await api.approve(state.runId, approval.approval_id, decision, scope)
@@ -480,8 +483,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       // Restore the approval below.
     }
 
-    state.lifecycle = { status: 'awaiting-approval', approval }
-    state.error = uiText.app.responseFailed
+    awaitRunApproval(state, approval, uiText.app.responseFailed)
   }
 
   async function cancelRun() {
@@ -490,7 +492,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     try {
       await api.cancel(state.runId)
     } catch {
-      state.error = uiText.app.responseFailed
+      setRunError(state, uiText.app.responseFailed)
     }
   }
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ArrowUp, Brain, Check, ChevronDown, Image, Plus, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { uiText } from '../text/uiText'
-import type { ImageAttachment, ReasoningEffort } from '../types/conversation'
+import { uiText } from '../../../text/uiText'
+import type { ImageAttachment, ReasoningEffort } from '../model/conversation'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
 

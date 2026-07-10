@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { ImageAttachment, ReasoningEffort } from '../types/conversation'
+import type { ImageAttachment, ReasoningEffort } from '../model/conversation'
 
 export type QueuedMessage = {
   content: string

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { PendingApproval } from '../types/conversation'
-import { uiText } from '../text/uiText'
+import type { PendingApproval } from '../model/conversation'
+import { uiText } from '../../../text/uiText'
 
 defineProps<{
   approval: PendingApproval

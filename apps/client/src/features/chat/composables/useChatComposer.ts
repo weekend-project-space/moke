@@ -1,0 +1,197 @@
+import { computed, nextTick, ref, type Ref } from 'vue'
+
+import { uiText } from '../../../text/uiText'
+import type { ImageAttachment, PendingAsk, ReasoningEffort } from '../model/conversation'
+import { useQueuedMessages, type QueuedMessage } from './useQueuedMessages'
+
+type UseChatComposerOptions = {
+  cancelRun: () => void | Promise<void>
+  currentRunOptions: () => { reasoningEffort?: ReasoningEffort } | undefined
+  isRunning: Readonly<Ref<boolean>>
+  maxQueuedMessages?: number
+  onFocus: () => void
+  onResize: () => void
+  pendingAsk: Readonly<Ref<PendingAsk | null>>
+  runId: Readonly<Ref<string>>
+  sendMessage: (message: QueuedMessage) => Promise<boolean>
+  serverStatus: Readonly<Ref<'checking' | 'online' | 'offline'>>
+  sessionId: Readonly<Ref<string>>
+}
+
+export function useChatComposer(options: UseChatComposerOptions) {
+  const maxQueuedMessages = options.maxQueuedMessages ?? 3
+  const input = ref('')
+  const attachments = ref<ImageAttachment[]>([])
+  const queue = useQueuedMessages(maxQueuedMessages)
+
+  const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0)
+  const primaryDisabled = computed(() => {
+    if (options.isRunning.value) {
+      if (options.pendingAsk.value) return true
+      if (hasDraftContent.value) return queue.count.value >= maxQueuedMessages
+      return !options.runId.value
+    }
+    return options.serverStatus.value !== 'online' || !hasDraftContent.value
+  })
+  const primaryIsStop = computed(
+    () => options.isRunning.value && !options.pendingAsk.value && !hasDraftContent.value,
+  )
+  const queuedMessageLabel = computed(() =>
+    queue.stopRequested.value
+      ? uiText.composer.sendAfterStopping
+      : uiText.composer.queued(queue.count.value),
+  )
+  const queuedMessagePreview = computed(() =>
+    queue.messages.value.map((message, index) => `${index + 1}. ${draftPreview(message)}`).join('\n'),
+  )
+  const queuedMessageItems = computed(() =>
+    queue.messages.value.map((message) => ({
+      content: draftPreview(message),
+      preview: draftPreview(message),
+    })),
+  )
+
+  async function resize() {
+    await nextTick()
+    options.onResize()
+  }
+
+  function clearDraft() {
+    input.value = ''
+    attachments.value = []
+    void resize()
+  }
+
+  async function submitMessage() {
+    const content = input.value.trim()
+    if ((!content && !attachments.value.length) || options.isRunning.value) return false
+    return sendCurrentDraft({
+      content,
+      attachments: [...attachments.value],
+      options: options.currentRunOptions(),
+    })
+  }
+
+  async function sendCurrentDraft(draft: QueuedMessage) {
+    const previousInput = input.value
+    const previousAttachments = [...attachments.value]
+    input.value = ''
+    attachments.value = []
+    await resize()
+
+    if (await options.sendMessage(draft)) return true
+
+    input.value = previousInput || draft.content
+    attachments.value = previousAttachments.length ? previousAttachments : draft.attachments
+    await resize()
+    return false
+  }
+
+  function queueCurrentInput() {
+    const content = input.value.trim()
+    if ((!content && !attachments.value.length) || !options.sessionId.value) return false
+    const queued = queue.enqueue(options.sessionId.value, {
+      content,
+      attachments: [...attachments.value],
+      options: options.currentRunOptions(),
+    })
+    if (!queued) return false
+
+    input.value = ''
+    attachments.value = []
+    void nextTick(() => {
+      options.onResize()
+      options.onFocus()
+    })
+    return true
+  }
+
+  function handlePrimaryAction() {
+    if (options.isRunning.value) {
+      if (hasDraftContent.value) {
+        queueCurrentInput()
+      } else if (!options.pendingAsk.value) {
+        void options.cancelRun()
+      }
+      return
+    }
+    void submitMessage()
+  }
+
+  function sendOnEnter(event: KeyboardEvent) {
+    if (event.shiftKey) return
+    if (options.isRunning.value && !hasDraftContent.value) return
+    event.preventDefault()
+    handlePrimaryAction()
+  }
+
+  function stopAndSendQueuedMessage() {
+    if (!queue.messages.value.length || !options.isRunning.value || options.pendingAsk.value) return
+    if (!queue.requestStop()) return
+    void options.cancelRun()
+  }
+
+  async function sendQueuedMessageIfReady() {
+    if (!queue.messages.value.length || options.isRunning.value) return
+    const nextMessage = queue.takeNext(options.sessionId.value)
+    if (!nextMessage || await options.sendMessage(nextMessage)) return
+
+    if (!hasDraftContent.value) {
+      input.value = nextMessage.content
+      attachments.value = nextMessage.attachments
+      await resize()
+    } else {
+      queue.enqueue(options.sessionId.value, nextMessage)
+    }
+  }
+
+  function applySuggestion(prompt: string) {
+    input.value = prompt
+    void nextTick(() => {
+      options.onResize()
+      options.onFocus()
+    })
+  }
+
+  function addAttachments(nextAttachments: ImageAttachment[]) {
+    attachments.value = [...attachments.value, ...nextAttachments].slice(0, 4)
+  }
+
+  function removeAttachment(id: string) {
+    attachments.value = attachments.value.filter((attachment) => attachment.id !== id)
+  }
+
+  function draftPreview(message: QueuedMessage) {
+    const count = message.attachments.length
+    const imageLabel = count ? ` - ${count} image${count > 1 ? 's' : ''}` : ''
+    const text = message.content || 'Image'
+    const preview = text.length > 48 ? `${text.slice(0, 48)}...` : text
+    return `${preview}${imageLabel}`
+  }
+
+  return {
+    addAttachments,
+    applySuggestion,
+    attachments,
+    cancelQueuedMessage: queue.clear,
+    cancelQueuedMessageAt: queue.remove,
+    clearDraft,
+    clearQueuedMessages: queue.clear,
+    handleInput: options.onResize,
+    handlePrimaryAction,
+    input,
+    primaryDisabled,
+    primaryIsStop,
+    queuedMessageCount: queue.count,
+    queuedMessageItems,
+    queuedMessageLabel,
+    queuedMessagePreview,
+    queuedStopRequested: queue.stopRequested,
+    removeAttachment,
+    sendOnEnter,
+    sendQueuedMessageIfReady,
+    submitMessage,
+    queueCurrentInput,
+    stopAndSendQueuedMessage,
+  }
+}

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { computed } from 'vue'
-import type { ToolStepViewItem } from '../types/conversation'
-import { formatBytes, guardToolContent } from '../composables/toolContentGuard'
-import { createCliTextResultView, createFileChangeResultView } from '../composables/toolResultView'
-import { uiText } from '../text/uiText'
+import type { ToolStepViewItem } from '../presentation/types'
+import { formatBytes, guardToolContent } from '../presentation/toolContentGuard'
+import { createCliTextResultView, createFileChangeResultView } from '../presentation/toolResultView'
+import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   step: ToolStepViewItem

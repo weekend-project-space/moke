@@ -1,4 +1,4 @@
-import type { ToolStepViewItem } from '../types/conversation'
+import type { ToolStepViewItem } from './types'
 import { formatBytes } from './toolContentGuard'
 
 export type FileChangeResultView = {

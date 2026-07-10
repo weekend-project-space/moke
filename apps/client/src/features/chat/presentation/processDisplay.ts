@@ -5,9 +5,9 @@ import type {
   ToolRendererKind,
   ToolStepSummary,
   ToolStepViewItem,
-} from '../types/conversation'
+} from './types'
 import { summarizeOutput } from './toolDisplay'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 
 const DONE = uiText.process.done
 
@@ -127,7 +127,7 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
       return { preview: String(parsed ?? '') }
     }
 
-    const output = parsed as Record<string, any>
+    const output = parsed as Record<string, unknown>
 
     if (renderer === 'search') {
       const matches = Array.isArray(output.matches) ? output.matches : []
@@ -210,7 +210,7 @@ function extractDirectoryEntries(entries: unknown[]) {
     .filter(Boolean)
 }
 
-function previewFromOutput(output: Record<string, any>) {
+function previewFromOutput(output: Record<string, unknown>) {
   for (const key of ['content', 'text', 'stdout', 'data']) {
     const value = output[key]
     if (typeof value === 'string' && value.trim()) return value
@@ -219,7 +219,7 @@ function previewFromOutput(output: Record<string, any>) {
   return summarizeOutput(output)
 }
 
-function browserResultPreview(output: Record<string, any>) {
+function browserResultPreview(output: Record<string, unknown>) {
   const title = typeof output.title === 'string' ? output.title.trim() : ''
   const url = typeof output.url === 'string' ? output.url.trim() : ''
   const text = typeof output.text === 'string' ? output.text.trim() : ''

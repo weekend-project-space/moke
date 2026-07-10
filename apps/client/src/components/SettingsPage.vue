@@ -7,7 +7,7 @@ import {
   loadBrowserPreferences,
   saveBrowserPreferences as persistBrowserPreferences,
   type BrowserLinkOpenMode,
-} from '../composables/browserPreferences'
+} from '../features/browser'
 import { uiText } from '../text/uiText'
 
 type WorkspaceRootPermission = {

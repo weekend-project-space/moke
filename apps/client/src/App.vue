@@ -1,27 +1,30 @@
 ﻿<script setup lang="ts">
 import { ArrowDown, Clock3, SkipForward, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import ApprovalInlineBar from './components/ApprovalInlineBar.vue'
-import AskInlineBar from './components/AskInlineBar.vue'
-import BrowserPanel from './components/BrowserPanel.vue'
 import ChatHeader from './components/ChatHeader.vue'
-import ComposerBox from './components/ComposerBox.vue'
-import ConversationView from './components/ConversationView.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import SidebarPanel from './components/SidebarPanel.vue'
-import { useAgentSession } from './composables/useAgentSession'
-import { useBrowserWorkspace } from './composables/useBrowserWorkspace'
-import { isVisibleMessage, useConversationDisplay } from './composables/useConversationDisplay'
-import { useComposerReasoning } from './composables/useComposerReasoning'
-import { useQueuedMessages, type QueuedMessage } from './composables/useQueuedMessages'
+import { BrowserPanel, useBrowserWorkspace } from './features/browser'
+import {
+  ApprovalInlineBar,
+  AskInlineBar,
+  ComposerBox,
+  ConversationView,
+  formatSessionTime,
+  formatTimelineTime,
+  isVisibleMessage,
+  useAgentSession,
+  useChatComposer,
+  useComposerReasoning,
+  useConversationDisplay,
+  useSessionNavigation,
+  type Message,
+  type SessionSummary,
+  type TaskTemplate,
+} from './features/chat'
 import { useResizablePanels } from './composables/useResizablePanels'
-import { readSessionIdFromHash, writeSessionIdToHash } from './composables/sessionRoute'
 import { uiText } from './text/uiText'
-import type { ImageAttachment, Message, SessionSummary, TaskTemplate } from './types/conversation'
 
-const input = ref('')
-const attachments = ref<ImageAttachment[]>([])
-const MAX_QUEUED_MESSAGES = 3
 const browserPanel = ref<InstanceType<typeof BrowserPanel> | null>(null)
 const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
@@ -56,6 +59,8 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+let clearComposerDraft: () => void = () => undefined
+let sendNextQueuedMessage: () => Promise<void> = async () => undefined
 const {
   cancelRun,
   archiveSession,
@@ -88,15 +93,14 @@ const {
   apiBase,
   isFinalAssistantMessage,
   onAskUserRequired: () => {
-    input.value = ''
-    void nextTick(resizeComposer)
+    clearComposerDraft()
   },
   onMessagesLoaded: async () => {
     resizeComposer()
     conversationView.value?.scrollToBottom(true)
   },
   onRunFinished: async () => {
-    await sendQueuedMessageIfReady()
+    await sendNextQueuedMessage()
   },
 })
 const {
@@ -107,15 +111,41 @@ const {
   loadStoredSelection: loadComposerReasoningEffort,
 } = useComposerReasoning({ apiBase, serverStatus })
 const {
-  clear: clearQueuedMessages,
-  count: queuedMessageCount,
-  enqueue: enqueueMessage,
-  messages: queuedMessages,
-  remove: removeQueuedMessage,
-  requestStop: requestQueuedStop,
-  stopRequested: queuedStopRequested,
-  takeNext: takeNextQueuedMessage,
-} = useQueuedMessages(MAX_QUEUED_MESSAGES)
+  addAttachments,
+  applySuggestion,
+  attachments,
+  cancelQueuedMessage,
+  cancelQueuedMessageAt,
+  clearDraft,
+  clearQueuedMessages,
+  handleInput,
+  handlePrimaryAction,
+  input,
+  primaryDisabled,
+  primaryIsStop,
+  queuedMessageCount,
+  queuedMessageItems,
+  queuedMessageLabel,
+  queuedMessagePreview,
+  queuedStopRequested,
+  removeAttachment,
+  sendOnEnter,
+  sendQueuedMessageIfReady,
+  stopAndSendQueuedMessage,
+} = useChatComposer({
+  cancelRun,
+  currentRunOptions,
+  isRunning,
+  onFocus: () => composerBox.value?.focus(),
+  onResize: resizeComposer,
+  pendingAsk,
+  runId,
+  sendMessage,
+  serverStatus,
+  sessionId,
+})
+clearComposerDraft = clearDraft
+sendNextQueuedMessage = sendQueuedMessageIfReady
 const {
   disposeBrowserWorkspace,
   initBrowserWorkspace,
@@ -129,6 +159,27 @@ const {
     await browserPanel.value.openUrl(url, mode)
   },
   openWorkspace,
+})
+const {
+  archiveSelectedSession,
+  closeSettings,
+  forkMessage,
+  initialSessionFromHash,
+  openSettings,
+  selectSession,
+  startNewSession,
+} = useSessionNavigation({
+  archiveSession,
+  clearQueuedMessages,
+  closeTransientPanels,
+  createSession,
+  forkSession,
+  onCloseSettings: () => void loadReasoningCapability(),
+  resetConversationScroll: () => conversationView.value?.resetAutoScroll(),
+  selectAgentSession,
+  sessionId,
+  showSettings,
+  sortedSessions,
 })
 const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
   title: prompt,
@@ -202,22 +253,6 @@ const showThinking = computed(
 const showEmptyState = computed(
   () => serverStatus.value === 'online' && visibleMessages.value.length === 0 && !isRunning.value,
 )
-const primaryDisabled = computed(() => {
-  if (isRunning.value) {
-    if (pendingAsk.value) return true
-    if (hasDraftContent.value) return queuedMessageCount.value >= MAX_QUEUED_MESSAGES
-    return !runId.value
-  }
-  return serverStatus.value !== 'online' || !hasDraftContent.value
-})
-const primaryIsStop = computed(() => isRunning.value && !pendingAsk.value && !hasDraftContent.value)
-const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0)
-const queuedMessageLabel = computed(() => queuedStopRequested.value ? uiText.composer.sendAfterStopping : uiText.composer.queued(queuedMessageCount.value))
-const queuedMessagePreview = computed(() => queuedMessages.value.map((message, index) => `${index + 1}. ${draftPreview(message)}`).join('\n'))
-const queuedMessageItems = computed(() => queuedMessages.value.map((message) => ({
-  content: draftPreview(message),
-  preview: draftPreview(message),
-})))
 
 function isFinalAssistantMessage(message: Message | undefined) {
   return message?.role === 'assistant' && isVisibleMessage(message)
@@ -231,132 +266,13 @@ function sessionMeta(session: SessionSummary) {
   return formatSessionTime(session.updated_at)
 }
 
-function formatSessionTime(value: string) {
-  const time = Date.parse(value)
-  if (Number.isNaN(time)) return 'Just now'
-
-  const date = new Date(time)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-
-  if (targetDay === today) {
-    return new Intl.DateTimeFormat('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date)
-  }
-
-  const dateLabel = new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  }).format(date)
-
-  if (date.getFullYear() === now.getFullYear()) return dateLabel
-
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
-}
-
-function formatTimelineTime(time: number) {
-  const date = new Date(time)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-  const timeLabel = new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-
-  if (targetDay === today) return timeLabel
-  if (targetDay === today - 24 * 60 * 60 * 1000) return `Yesterday ${timeLabel}`
-
-  const dateLabel = new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  }).format(date)
-
-  if (date.getFullYear() === now.getFullYear()) return `${dateLabel} ${timeLabel}`
-
-  return `${date.getFullYear()} ${dateLabel} ${timeLabel}`
-}
-
-function initialSessionFromHash() {
-  const hashSessionId = readSessionIdFromHash()
-  if (!hashSessionId) return sortedSessions.value[0]
-  return sortedSessions.value.find((session) => session.id === hashSessionId) || sortedSessions.value[0]
-}
-
 function resizeComposer() {
   composerBox.value?.resize()
-}
-
-async function selectSession(id: string) {
-  conversationView.value?.resetAutoScroll()
-  if (await selectAgentSession(id)) {
-    clearQueuedMessages()
-    showSettings.value = false
-    writeSessionIdToHash(id)
-    closeTransientPanels()
-  }
-}
-
-async function startNewSession() {
-  if (await createSession()) {
-    clearQueuedMessages()
-    showSettings.value = false
-    writeSessionIdToHash(sessionId.value)
-    closeTransientPanels()
-  }
-}
-
-async function forkMessage(messageId: string) {
-  conversationView.value?.resetAutoScroll()
-  if (await forkSession(messageId)) {
-    clearQueuedMessages()
-    showSettings.value = false
-    writeSessionIdToHash(sessionId.value)
-    closeTransientPanels()
-  }
-}
-
-async function archiveSelectedSession(id: string) {
-  if (await archiveSession(id)) {
-    writeSessionIdToHash(sessionId.value)
-  }
-}
-
-function openSettings() {
-  showSettings.value = true
-  closeTransientPanels()
-}
-
-function closeSettings() {
-  showSettings.value = false
-  void loadReasoningCapability()
-}
-
-function sendOnEnter(event: KeyboardEvent) {
-  if (event.shiftKey) return
-  if (isRunning.value && !input.value.trim()) return
-  event.preventDefault()
-  void handlePrimaryAction()
-}
-
-function handleInput() {
-  resizeComposer()
 }
 
 function jumpToConversationBottom() {
   conversationView.value?.jumpToBottom()
   showJumpToBottom.value = false
-}
-
-function applySuggestion(prompt: string) {
-  input.value = prompt
-  void nextTick(() => {
-    resizeComposer()
-    composerBox.value?.focus()
-  })
 }
 
 async function copyMessage(key: string, content: string) {
@@ -375,94 +291,6 @@ async function copyMessage(key: string, content: string) {
   window.setTimeout(() => {
     if (copiedKey.value === key) copiedKey.value = ''
   }, 1500)
-}
-
-function handlePrimaryAction() {
-  if (isRunning.value) {
-    if (hasDraftContent.value) {
-      queueCurrentInput()
-      return
-    }
-
-    if (!pendingAsk.value) void cancelRun()
-    return
-  }
-
-  void submitMessage()
-}
-
-async function submitMessage() {
-  const content = input.value.trim()
-  if ((!content && !attachments.value.length) || isRunning.value) return
-
-  await sendContent({ content, attachments: [...attachments.value], options: currentRunOptions() }, true)
-}
-
-async function sendContent(draft: QueuedMessage, restoreOnFail: boolean) {
-  const previousInput = input.value
-  const previousAttachments = [...attachments.value]
-  input.value = ''
-  attachments.value = []
-  await nextTick()
-  resizeComposer()
-
-  if (await sendMessage(draft)) return
-
-  if (restoreOnFail) {
-    input.value = previousInput || draft.content
-    attachments.value = previousAttachments.length ? previousAttachments : draft.attachments
-  }
-  await nextTick()
-  resizeComposer()
-}
-
-function queueCurrentInput() {
-  const content = input.value.trim()
-  if ((!content && !attachments.value.length) || !sessionId.value) return
-  if (!enqueueMessage(sessionId.value, { content, attachments: [...attachments.value], options: currentRunOptions() })) return
-  input.value = ''
-  attachments.value = []
-  void nextTick(() => {
-    resizeComposer()
-    composerBox.value?.focus()
-  })
-}
-
-function cancelQueuedMessage() {
-  clearQueuedMessages()
-}
-
-function cancelQueuedMessageAt(index: number) {
-  removeQueuedMessage(index)
-}
-
-function stopAndSendQueuedMessage() {
-  if (!queuedMessages.value.length || !isRunning.value || pendingAsk.value) return
-  if (!requestQueuedStop()) return
-  void cancelRun()
-}
-
-async function sendQueuedMessageIfReady() {
-  if (!queuedMessages.value.length || isRunning.value) return
-  const nextMessage = takeNextQueuedMessage(sessionId.value)
-  if (!nextMessage) return
-  await sendContent(nextMessage, true)
-}
-
-function draftPreview(message: QueuedMessage) {
-  const imageLabel = message.attachments.length ? ` - ${message.attachments.length} image${message.attachments.length > 1 ? 's' : ''}` : ''
-  const text = message.content || 'Image'
-  const preview = text.length > 48 ? `${text.slice(0, 48)}...` : text
-  return `${preview}${imageLabel}`
-}
-
-function addAttachments(nextAttachments: ImageAttachment[]) {
-  const merged = [...attachments.value, ...nextAttachments]
-  attachments.value = merged.slice(0, 4)
-}
-
-function removeAttachment(id: string) {
-  attachments.value = attachments.value.filter((attachment) => attachment.id !== id)
 }
 
 watch(isRunning, (running) => {

@@ -1,4 +1,4 @@
-import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserResult } from './browser'
+import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserResult } from '../api/browser'
 
 type BrowserBridgeRequest = {
   id: string

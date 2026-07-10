@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
-import type { Message } from '../types/conversation'
-import { uiText } from '../text/uiText'
+import type { Message } from '../model/conversation'
+import { uiText } from '../../../text/uiText'
 
 defineProps<{
   copiedKey: string

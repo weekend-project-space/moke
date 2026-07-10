@@ -1,7 +1,6 @@
-import { isNativeBrowserAvailable } from '../api/browser'
-import { connectBrowserBridge } from '../api/browserBridge'
-import type { BrowserBounds } from '../api/browser'
-import { loadBrowserPreferences, type BrowserLinkOpenMode } from './browserPreferences'
+import { isNativeBrowserAvailable, type BrowserBounds } from '../api/browser'
+import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
+import { connectBrowserBridge } from '../services/browserBridge'
 
 type UseBrowserWorkspaceOptions = {
   apiBase: string

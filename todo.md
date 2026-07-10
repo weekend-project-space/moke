@@ -22,8 +22,10 @@
   - [x] 提取 SSE transport 与重连生命周期。
   - [x] 引入判别联合 RunState。
   - [ ] 提取 optimistic message 与流式文本缓冲。
-- [ ] 将 `App.vue` 中的消息队列、会话导航和页面布局编排拆成独立 composable。
-- [ ] 使用协议包中的判别联合事件类型，移除客户端 `Record<string, any>` 和重复消息类型。
+- [x] 将 `App.vue` 降为页面编排层，把消息队列、输入提交和会话导航拆成独立 composable。
+- [x] 使用协议包中的判别联合事件类型，移除客户端 `Record<string, any>` 和重复消息类型。
+- [x] 分离聊天领域模型与展示模型，将展示派生逻辑集中到 `features/chat/presentation`。
+- [x] 将浏览器相关 API、桥接服务、状态和组件收口到 `features/browser`，通过公共入口导出。
 - [ ] 为多会话并行、SSE 重连、乐观消息回滚和排队发送增加组件级集成测试。
 
 ## 服务端与运行时

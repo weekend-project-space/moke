@@ -1,5 +1,5 @@
-import type { ToolCategory, ToolRendererKind, ToolStepSummary } from '../types/conversation'
-import { uiText } from '../text/uiText'
+import type { ToolCategory, ToolRendererKind, ToolStepSummary } from './types'
+import { uiText } from '../../../text/uiText'
 
 export type ToolDescription = {
   actionLabel: string
@@ -32,12 +32,12 @@ const CHANGE_TOOLS = new Set([
   'write_file',
 ])
 
-export function summarizeOutput(output: Record<string, any> | undefined) {
+export function summarizeOutput(output: Record<string, unknown> | undefined) {
   if (!output) return DONE
   if (output.error) return String(output.error)
 
   if (Array.isArray(output.matches)) {
-    const count = output.count ?? output.matches.length
+    const count = typeof output.count === 'number' ? output.count : output.matches.length
     return count > 0 ? `Found ${count} matching item${count === 1 ? '' : 's'}` : NOT_FOUND
   }
 

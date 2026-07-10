@@ -4,8 +4,8 @@ import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessGroup from './ProcessGroup.vue'
-import type { DisplayItem, TaskTemplate } from '../types/conversation'
-import { uiText } from '../text/uiText'
+import type { DisplayItem, TaskTemplate } from '../presentation/types'
+import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   copiedKey: string

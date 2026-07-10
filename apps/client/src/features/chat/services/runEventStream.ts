@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../../../types/conversation'
+import type { AgentEvent } from '../model/conversation'
 
 const RUN_EVENT_TYPES = [
   'agent.started',

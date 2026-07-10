@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { normalizeBrowserPreferences } from './browserPreferences.js'
+import { normalizeBrowserPreferences } from './preferences.js'
 
 test('normalizeBrowserPreferences keeps supported browser link modes', () => {
   assert.deepEqual(normalizeBrowserPreferences({ linkOpenMode: 'new-tab' }), {

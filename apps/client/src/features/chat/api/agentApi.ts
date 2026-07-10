@@ -5,7 +5,7 @@ import type {
   PendingAsk,
   ReasoningEffort,
   SessionSummary,
-} from '../../../types/conversation'
+} from '../model/conversation'
 
 export type ActiveRunSummary = {
   session_id: string

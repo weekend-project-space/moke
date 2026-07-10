@@ -1,5 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
-import type { ReasoningEffort } from '../types/conversation'
+import type { ReasoningEffort } from '../model/conversation'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
 

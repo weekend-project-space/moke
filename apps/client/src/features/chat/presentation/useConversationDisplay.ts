@@ -1,14 +1,8 @@
 ﻿import { computed, type Ref } from 'vue'
-import type {
-  AgentEvent,
-  DisplayItem,
-  Message,
-  PendingAsk,
-  ProcessItem,
-  ProcessNote,
-} from '../types/conversation'
+import type { AgentEvent, Message, PendingAsk } from '../model/conversation'
+import type { DisplayItem, ProcessItem, ProcessNote } from './types'
 import { createProcessGroupView, formatProcessGroupLabel } from './processDisplay'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 import {
   describeToolCall,
   formatJson,
@@ -477,17 +471,18 @@ function createReasoningProcessItem(message: Message, id: string): ProcessItem {
   }
 }
 
-function toRecord(value: unknown): Record<string, any> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : {}
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 function summarizeToolFailure(parsed: unknown, fallbackName?: string) {
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const error = (parsed as Record<string, any>).error
-    if (error && typeof error === 'object') {
-      const tool = typeof error.tool === 'string' ? error.tool : fallbackName
-      const path = typeof error.path === 'string' ? error.path : ''
-      const message = typeof error.message === 'string' ? error.message : ''
+    const error = (parsed as Record<string, unknown>).error
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      const errorRecord = error as Record<string, unknown>
+      const tool = typeof errorRecord.tool === 'string' ? errorRecord.tool : fallbackName
+      const path = typeof errorRecord.path === 'string' ? errorRecord.path : ''
+      const message = typeof errorRecord.message === 'string' ? errorRecord.message : ''
       const target = path || extractPathFromErrorMessage(message)
       return target ? `${tool || uiText.process.tool} · ${target}` : `${tool || uiText.process.tool} failed`
     }

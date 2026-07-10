@@ -1,8 +1,8 @@
 ﻿<script setup lang="ts">
 import { BrainCircuit, ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, Terminal } from 'lucide-vue-next'
-import type { ToolCategory, ProcessViewItem } from '../types/conversation'
+import type { ToolCategory, ProcessViewItem } from '../presentation/types'
 import ToolStepDetails from './ToolStepDetails.vue'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 
 defineProps<{
   label: string

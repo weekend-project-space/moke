@@ -9,8 +9,8 @@ import {
 } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
-import type { BrowserLinkOpenMode } from '../composables/browserPreferences'
-import { uiText } from '../text/uiText'
+import type { BrowserLinkOpenMode } from '../model/preferences'
+import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   active: boolean

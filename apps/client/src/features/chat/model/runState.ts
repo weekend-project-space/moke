@@ -1,4 +1,4 @@
-import type { AgentEvent, PendingApproval, PendingAsk } from '../../../types/conversation'
+import type { AgentEvent, PendingApproval, PendingAsk } from './conversation'
 
 export type RunLifecycle =
   | { status: 'idle' }
@@ -47,6 +47,34 @@ export function startRun(state: SessionRunState) {
   state.error = ''
 }
 
+export function markRunConnected(state: SessionRunState) {
+  state.connection = 'connected'
+  state.error = ''
+}
+
+export function markRunReconnecting(state: SessionRunState, message: string) {
+  state.connection = 'reconnecting'
+  state.error = message
+}
+
+export function resumeRun(state: SessionRunState) {
+  state.lifecycle = { status: 'running' }
+}
+
+export function awaitRunUser(state: SessionRunState, ask: PendingAsk, error = '') {
+  state.lifecycle = { status: 'awaiting-user', ask }
+  state.error = error
+}
+
+export function awaitRunApproval(state: SessionRunState, approval: PendingApproval, error = '') {
+  state.lifecycle = { status: 'awaiting-approval', approval }
+  state.error = error
+}
+
+export function setRunError(state: SessionRunState, error: string) {
+  state.error = error
+}
+
 export function connectRun(
   state: SessionRunState,
   runId: string,
@@ -54,14 +82,13 @@ export function connectRun(
   pendingApproval?: PendingApproval,
 ) {
   state.runId = runId
-  state.connection = 'connected'
-  state.error = ''
+  markRunConnected(state)
   if (pendingAsk) {
-    state.lifecycle = { status: 'awaiting-user', ask: pendingAsk }
+    awaitRunUser(state, pendingAsk)
   } else if (pendingApproval) {
-    state.lifecycle = { status: 'awaiting-approval', approval: pendingApproval }
+    awaitRunApproval(state, pendingApproval)
   } else {
-    state.lifecycle = { status: 'running' }
+    resumeRun(state)
   }
 }
 

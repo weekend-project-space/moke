@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { AgentEvent } from '../../../types/conversation'
+import type { AgentEvent } from '../model/conversation'
 import { createRunEventStream, type EventSourceConnection } from './runEventStream'
 
 class FakeEventSource implements EventSourceConnection {

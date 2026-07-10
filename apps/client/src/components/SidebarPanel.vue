@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Archive, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import type { SessionSummary } from '../types/conversation'
+import type { SessionSummary } from '../features/chat'
 import { uiText } from '../text/uiText'
 
 const props = defineProps<{
