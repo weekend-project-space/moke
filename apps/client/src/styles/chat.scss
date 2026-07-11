@@ -136,12 +136,18 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 9px;
   min-height: 0;
   padding: 16px 0 18px;
   overflow-y: auto;
   scroll-padding-bottom: 18px;
   background: var(--surface-chat);
+}
+
+.conversation-content {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .conversation::-webkit-scrollbar,

@@ -20,12 +20,12 @@
 .composer-overlay-stack {
   position: absolute;
   right: 0;
-  bottom: calc(100% - 4px);
+  bottom: calc(100% + 10px);
   left: 0;
   z-index: 20;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 8px;
   pointer-events: none;
 
   > * {
@@ -34,7 +34,7 @@
 }
 
 .jump-inline {
-  @include icon-control(28px, var(--radius-pill), var(--panel-strong));
+  @include icon-control(32px, var(--radius-pill), var(--panel-strong));
   align-self: center;
   margin: 0 auto;
   border: 1px solid var(--line-soft);
@@ -516,5 +516,13 @@
   .composer {
     padding: 10px 0 16px;
   }
-}
 
+  .composer-overlay-stack {
+    bottom: calc(100% + 8px);
+  }
+
+  .jump-inline {
+    width: 36px;
+    height: 36px;
+  }
+}

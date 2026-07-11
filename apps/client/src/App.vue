@@ -97,7 +97,6 @@ const {
   },
   onMessagesLoaded: async () => {
     resizeComposer()
-    conversationView.value?.scrollToBottom(true)
   },
   onRunFinished: async () => {
     await sendNextQueuedMessage()
@@ -175,7 +174,6 @@ const {
   createSession,
   forkSession,
   onCloseSettings: () => void loadReasoningCapability(),
-  resetConversationScroll: () => conversationView.value?.resetAutoScroll(),
   selectAgentSession,
   sessionId,
   showSettings,
@@ -237,7 +235,6 @@ const {
   toolLabels,
   formatTimelineTime,
 })
-const conversationScrollKey = computed(() => `${messages.value.length}:${events.value.length}:${streamingText.value.length}`)
 const timelineNote = computed(() => {
   if (serverStatus.value === 'checking') return uiText.app.connectingToMoke
   if (serverStatus.value === 'offline') return uiText.app.disconnectedFromMoke
@@ -272,7 +269,6 @@ function resizeComposer() {
 
 function jumpToConversationBottom() {
   conversationView.value?.jumpToBottom()
-  showJumpToBottom.value = false
 }
 
 async function copyMessage(key: string, content: string) {
@@ -379,7 +375,7 @@ onUnmounted(() => {
         ref="conversationView"
         :copied-key="copiedKey"
         :display-items="displayItems"
-        :scroll-key="conversationScrollKey"
+        :session-key="sessionId"
         :is-running="isRunning"
         :show-empty-state="showEmptyState"
         :show-last-message-continue="Boolean(lastAssistantMessage) && !isRunning && !pendingAsk && !pendingApproval"
@@ -407,7 +403,7 @@ onUnmounted(() => {
             :title="uiText.app.jumpToBottom"
             @click="jumpToConversationBottom"
           >
-            <ArrowDown :size="15" stroke-width="2.2" />
+            <ArrowDown :size="16" stroke-width="2.2" />
           </button>
           <ApprovalInlineBar
             v-if="pendingApproval"

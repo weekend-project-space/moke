@@ -10,7 +10,6 @@ type UseSessionNavigationOptions = {
   createSession: () => Promise<boolean>
   forkSession: (messageId: string) => Promise<boolean>
   onCloseSettings: () => void
-  resetConversationScroll: () => void
   selectAgentSession: (id: string) => Promise<boolean>
   sessionId: Ref<string>
   showSettings: Ref<boolean>
@@ -26,7 +25,6 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
   }
 
   async function selectSession(id: string) {
-    options.resetConversationScroll()
     if (!(await options.selectAgentSession(id))) return false
 
     options.clearQueuedMessages()
@@ -47,7 +45,6 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
   }
 
   async function forkMessage(messageId: string) {
-    options.resetConversationScroll()
     if (!(await options.forkSession(messageId))) return false
 
     options.clearQueuedMessages()

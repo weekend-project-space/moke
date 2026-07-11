@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessGroup from './ProcessGroup.vue'
+import { conversationScrollState } from '../presentation/conversationScroll'
 import type { DisplayItem, TaskTemplate } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   copiedKey: string
   displayItems: DisplayItem[]
-  scrollKey: string
+  sessionKey: string
   showEmptyState: boolean
   isRunning: boolean
   showLastMessageContinue: boolean
@@ -30,10 +31,13 @@ const emit = defineEmits<{
 }>()
 
 const conversationEl = ref<HTMLElement | null>(null)
-const autoScroll = ref(true)
-const showJumpToBottom = ref(false)
+const contentEl = ref<HTMLElement | null>(null)
+const isAtBottom = ref(true)
+let isJumpingToBottom = false
 let pendingScrollForce = false
 let disposed = false
+let lastJumpVisibility: boolean | undefined
+let resizeObserver: ResizeObserver | undefined
 let scrollFrame: number | undefined
 let scrollScheduled = false
 const lastAssistantDisplayItemId = computed(() => {
@@ -100,10 +104,11 @@ async function copyCodeBlock(encoded: string) {
 
 function scrollToBottom(force = false) {
   const el = conversationEl.value
-  if (!el || (!force && !autoScroll.value)) return
+  if (!el || (!force && !isAtBottom.value)) return
 
   el.scrollTop = el.scrollHeight
-  setJumpToBottomVisible(false)
+  isAtBottom.value = true
+  emitJumpVisibility(false)
 }
 
 function scheduleScrollToBottom(force = false) {
@@ -124,17 +129,45 @@ function scheduleScrollToBottom(force = false) {
   })
 }
 
-function resetAutoScroll() {
-  autoScroll.value = true
-  setJumpToBottomVisible(false)
+function resetScrollState() {
+  isJumpingToBottom = false
+  isAtBottom.value = true
+  emitJumpVisibility(false)
 }
 
-function handleConversationScroll() {
+function updateScrollState() {
   const el = conversationEl.value
   if (!el) return
 
-  autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-  if (autoScroll.value) setJumpToBottomVisible(false)
+  const state = conversationScrollState(el)
+  isAtBottom.value = state.isAtBottom
+  emitJumpVisibility(state.showJumpToBottom)
+}
+
+function handleConversationScroll() {
+  updateScrollState()
+  if (isAtBottom.value) isJumpingToBottom = false
+}
+
+function cancelJumpToBottom() {
+  if (!isJumpingToBottom) return
+  isJumpingToBottom = false
+  const el = conversationEl.value
+  if (el) el.scrollTo({ top: el.scrollTop, behavior: 'auto' })
+}
+
+function handleConversationScrollEnd() {
+  if (!isJumpingToBottom) return
+  updateScrollState()
+  if (isAtBottom.value) {
+    isJumpingToBottom = false
+    return
+  }
+
+  conversationEl.value?.scrollTo({
+    top: conversationEl.value.scrollHeight,
+    behavior: 'smooth',
+  })
 }
 
 function handleConversationClick(event: MouseEvent) {
@@ -159,14 +192,28 @@ function handleConversationClick(event: MouseEvent) {
 }
 
 function jumpToBottom() {
-  resetAutoScroll()
-  scheduleScrollToBottom(true)
+  const el = conversationEl.value
+  if (!el) return
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    resetScrollState()
+    scrollToBottom(true)
+    return
+  }
+
+  isJumpingToBottom = true
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
 }
 
-function setJumpToBottomVisible(visible: boolean) {
-  if (showJumpToBottom.value === visible) return
-  showJumpToBottom.value = visible
+function emitJumpVisibility(visible: boolean) {
+  if (lastJumpVisibility === visible) return
+  lastJumpVisibility = visible
   emit('jumpVisibilityChange', visible)
+}
+
+function handleContentResize() {
+  if (isAtBottom.value) scheduleScrollToBottom()
+  else updateScrollState()
 }
 
 function shouldShowProcessDivider(item: DisplayItem, index: number) {
@@ -179,27 +226,44 @@ function shouldShowProcessDivider(item: DisplayItem, index: number) {
 }
 
 watch(
-  () => props.scrollKey,
+  () => props.sessionKey,
   () => {
-    if (!autoScroll.value) setJumpToBottomVisible(true)
-    scheduleScrollToBottom()
+    resetScrollState()
+    scheduleScrollToBottom(true)
   },
 )
 
+onMounted(() => {
+  emitJumpVisibility(false)
+  resizeObserver = new ResizeObserver(handleContentResize)
+  if (contentEl.value) resizeObserver.observe(contentEl.value)
+  scheduleScrollToBottom(true)
+})
+
 onUnmounted(() => {
   disposed = true
+  resizeObserver?.disconnect()
   if (scrollFrame !== undefined) window.cancelAnimationFrame(scrollFrame)
+  emit('jumpVisibilityChange', false)
 })
 
 defineExpose({
   jumpToBottom,
-  resetAutoScroll,
-  scrollToBottom,
 })
 </script>
 
 <template>
-  <div class="conversation" ref="conversationEl" @scroll.passive="handleConversationScroll" @click="handleConversationClick">
+  <div
+    ref="conversationEl"
+    class="conversation"
+    @click="handleConversationClick"
+    @pointerdown.passive="cancelJumpToBottom"
+    @scroll.passive="handleConversationScroll"
+    @scrollend="handleConversationScrollEnd"
+    @touchstart.passive="cancelJumpToBottom"
+    @wheel.passive="cancelJumpToBottom"
+  >
+    <div ref="contentEl" class="conversation-content">
     <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
     <div v-if="showEmptyState" class="empty-state">
@@ -249,6 +313,7 @@ defineExpose({
         <span class="dot"></span>
         <span class="dot"></span>
       </article>
+    </div>
     </div>
   </div>
 </template>

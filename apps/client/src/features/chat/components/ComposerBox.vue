@@ -158,6 +158,13 @@ function imageFilesFromDataTransfer(dataTransfer: DataTransfer | null) {
   return Array.from(dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'))
 }
 
+function hasFileDataTransfer(dataTransfer: DataTransfer | null) {
+  if (!dataTransfer) return false
+  if (Array.from(dataTransfer.items).some((item) => item.kind === 'file')) return true
+  if (Array.from(dataTransfer.types).some((type) => type.toLowerCase() === 'files')) return true
+  return dataTransfer.files.length > 0
+}
+
 function chooseImages() {
   addMenuOpen.value = false
   fileInput.value?.click()
@@ -204,8 +211,7 @@ function handlePaste(event: ClipboardEvent) {
 }
 
 function handleDragEnter(event: DragEvent) {
-  const files = imageFilesFromDataTransfer(event.dataTransfer)
-  if (!files.length) return
+  if (!hasFileDataTransfer(event.dataTransfer)) return
 
   event.preventDefault()
   dragDepth.value += 1
@@ -215,8 +221,12 @@ function handleDragEnter(event: DragEvent) {
 }
 
 function handleDragOver(event: DragEvent) {
-  if (!isDraggingImage.value) return
+  if (!hasFileDataTransfer(event.dataTransfer)) return
   event.preventDefault()
+  if (!isDraggingImage.value) {
+    dragDepth.value = Math.max(1, dragDepth.value)
+    isDraggingImage.value = true
+  }
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
 
@@ -228,12 +238,13 @@ function handleDragLeave(event: DragEvent) {
 }
 
 function handleDrop(event: DragEvent) {
-  const files = imageFilesFromDataTransfer(event.dataTransfer)
-  if (!files.length) return
+  if (!hasFileDataTransfer(event.dataTransfer)) return
 
   event.preventDefault()
+  const files = imageFilesFromDataTransfer(event.dataTransfer)
   dragDepth.value = 0
   isDraggingImage.value = false
+  if (!files.length) return
   void addImageFiles(files)
 }
 
