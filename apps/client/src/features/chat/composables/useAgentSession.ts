@@ -55,7 +55,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   })
   const runEventStream = createRunEventStream({
     apiBase: options.apiBase,
-    onConnected: (targetSessionId) => {
+    onActivity: (targetSessionId) => {
       const state = sessionRunStates[targetSessionId]
       if (!state) return
       markRunConnected(state)

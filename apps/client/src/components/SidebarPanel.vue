@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
+import { Archive, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { SessionSummary } from '../features/chat'
 import { uiText } from '../text/uiText'
@@ -23,11 +23,17 @@ const emit = defineEmits<{
 }>()
 
 const searchQuery = ref('')
-const contextMenu = ref<{ session: SessionSummary; x: number; y: number } | null>(null)
+const contextMenu = ref<{
+  session: SessionSummary
+  trigger: HTMLElement | null
+  x: number
+  y: number
+} | null>(null)
 const editingSessionId = ref('')
 const editingTitle = ref('')
 const editingInput = ref<HTMLInputElement | null>(null)
 const editingSession = ref<SessionSummary | null>(null)
+const menuEl = ref<HTMLElement | null>(null)
 const runningSessionIdSet = computed(() => new Set(props.runningSessionIds))
 
 const filteredSessions = computed(() => {
@@ -48,15 +54,67 @@ function clearSearch() {
 function openContextMenu(event: MouseEvent, session: SessionSummary) {
   if (props.disabled) return
   event.preventDefault()
-  contextMenu.value = {
-    session,
-    x: Math.min(event.clientX, window.innerWidth - 168),
-    y: Math.min(event.clientY, window.innerHeight - 138),
-  }
+  const target = event.currentTarget
+  const trigger = target instanceof HTMLElement
+    ? target.querySelector<HTMLElement>('.session-main') || target
+    : null
+  showContextMenu(session, event.clientX, event.clientY, trigger)
 }
 
-function closeContextMenu() {
+function openSessionMenu(event: MouseEvent, session: SessionSummary) {
+  const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const rect = trigger?.getBoundingClientRect()
+  showContextMenu(
+    session,
+    rect ? rect.right - 168 : event.clientX,
+    rect ? rect.bottom + 4 : event.clientY,
+    trigger,
+  )
+}
+
+function showContextMenu(session: SessionSummary, x: number, y: number, trigger: HTMLElement | null) {
+  contextMenu.value = {
+    session,
+    trigger,
+    x: Math.max(8, Math.min(x, window.innerWidth - 176)),
+    y: Math.max(8, Math.min(y, window.innerHeight - 146)),
+  }
+  void nextTick(() => enabledMenuItems()[0]?.focus())
+}
+
+function closeContextMenu(restoreFocus = false) {
+  const trigger = contextMenu.value?.trigger
   contextMenu.value = null
+  if (restoreFocus && trigger) void nextTick(() => trigger.focus())
+}
+
+function enabledMenuItems() {
+  return Array.from(menuEl.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') || [])
+}
+
+function handleContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeContextMenu(true)
+    return
+  }
+  if (event.key === 'Tab') {
+    closeContextMenu()
+    return
+  }
+
+  const items = enabledMenuItems()
+  if (!items.length) return
+  const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
+  let nextIndex: number | undefined
+  if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length
+  if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = items.length - 1
+  if (nextIndex === undefined) return
+
+  event.preventDefault()
+  items[nextIndex]?.focus()
 }
 
 function startRename(session: SessionSummary) {
@@ -78,7 +136,7 @@ function archiveSession(session: SessionSummary) {
 }
 
 function togglePinned(session: SessionSummary) {
-  closeContextMenu()
+  closeContextMenu(true)
   emit('pinSession', session.id, !session.pinned)
 }
 
@@ -126,7 +184,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="sidebar" @click="closeContextMenu">
+  <aside class="sidebar" @click="closeContextMenu()">
     <section class="brand">
       <div class="brand-header">
         <span class="brand-title">{{ uiText.sidebar.title }}</span>
@@ -154,7 +212,7 @@ onUnmounted(() => {
         :class="{
           active: session.id === activeSessionId,
           running: isSessionRunning(session.id),
-          archivable: !disabled && editingSessionId !== session.id && !isSessionRunning(session.id),
+          manageable: !disabled && editingSessionId !== session.id,
         }"
         @contextmenu="openContextMenu($event, session)"
       >
@@ -187,15 +245,16 @@ onUnmounted(() => {
           </span>
         </form>
         <button
-          v-if="!disabled && editingSessionId !== session.id && !isSessionRunning(session.id)"
-          class="session-archive-hover"
+          v-if="!disabled && editingSessionId !== session.id"
+          class="session-menu-trigger"
           type="button"
-          :disabled="disabled"
-          :aria-label="uiText.sidebar.archive"
-          :title="uiText.sidebar.archive"
-          @click.stop="archiveSession(session)"
+          aria-haspopup="menu"
+          :aria-expanded="contextMenu?.session.id === session.id"
+          :aria-label="uiText.sidebar.chatActions"
+          :title="uiText.sidebar.chatActions"
+          @click.stop="openSessionMenu($event, session)"
         >
-          <Archive :size="13" stroke-width="2.1" />
+          <MoreHorizontal :size="15" stroke-width="2.1" />
         </button>
       </article>
     </section>
@@ -216,14 +275,15 @@ onUnmounted(() => {
   </aside>
 
   <Teleport to="body">
-    <div v-if="contextMenu" class="session-menu-backdrop" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu"></div>
+    <div v-if="contextMenu" class="session-menu-backdrop" @click="closeContextMenu()" @contextmenu.prevent="closeContextMenu()"></div>
     <div
       v-if="contextMenu"
+      ref="menuEl"
       class="session-context-menu"
       :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
       role="menu"
       @click.stop
-      @keydown.esc.prevent="closeContextMenu"
+      @keydown="handleContextMenuKeydown"
     >
       <button type="button" role="menuitem" @click="togglePinned(contextMenu.session)">
         <PinOff v-if="contextMenu.session.pinned" :size="14" stroke-width="2.1" />

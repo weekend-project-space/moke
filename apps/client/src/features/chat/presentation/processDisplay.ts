@@ -24,11 +24,16 @@ export function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
   }
 }
 
-export function formatProcessGroupLabel(group: ProcessGroupView, isActive = false, runtimeNow = Date.now()) {
-  if (!group.startedAt) return uiText.process.details
+export function formatProcessGroupStatus(group: ProcessGroupView, isActive = false, runtimeNow = Date.now()) {
+  if (!group.startedAt) return { durationLabel: '', label: uiText.process.details }
 
   const end = isActive ? runtimeNow : group.endedAt || group.startedAt
-  return `Processed ${formatDuration(end - group.startedAt)}`
+  const durationLabel = formatDuration(end - group.startedAt)
+  const statusLabel = isActive ? uiText.process.working : uiText.process.processed
+  return {
+    durationLabel,
+    label: `${statusLabel} · ${durationLabel}`,
+  }
 }
 
 function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {

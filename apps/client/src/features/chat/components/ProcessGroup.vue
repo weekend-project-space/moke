@@ -4,8 +4,9 @@ import type { ToolCategory, ProcessViewItem } from '../presentation/types'
 import ToolStepDetails from './ToolStepDetails.vue'
 import { uiText } from '../../../text/uiText'
 
-defineProps<{
+const props = defineProps<{
   label: string
+  durationLabel: string
   items: ProcessViewItem[]
   collapsed: boolean
   hasError: boolean
@@ -24,9 +25,16 @@ function iconKind(step: { toolCategory: ToolCategory }) {
 </script>
 
 <template>
-  <div class="process-group" :class="{ error: hasError }">
+  <div class="process-group" :class="{ active: isActive, error: hasError }">
     <button class="process-toggle" type="button" :aria-expanded="!collapsed" @click="emit('toggle')">
-      <span class="process-toggle-label">{{ label }}</span>
+      <span v-if="isActive" class="process-active-indicator" aria-hidden="true"></span>
+      <span class="process-toggle-label">
+        <template v-if="isActive">
+          <span class="process-active-label">{{ uiText.process.working }}</span>
+          <span>{{ durationLabel }}</span>
+        </template>
+        <template v-else>{{ label }}</template>
+      </span>
       <span class="process-caret" aria-hidden="true">
         <ChevronRight v-if="collapsed" :size="15" stroke-width="2" />
         <ChevronDown v-else :size="15" stroke-width="2" />

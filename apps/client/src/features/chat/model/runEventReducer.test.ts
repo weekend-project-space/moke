@@ -63,7 +63,9 @@ test('run event reducer stores reasoning deltas and enters pending states', () =
   assert.equal(afterReasoning.state.events.length, 1)
   assert.deepEqual(afterAsk.state.lifecycle, { status: 'awaiting-user', ask })
   assert.equal(afterAsk.effects.ask, ask)
+  assert.equal(afterAsk.state.events.length, 1)
   assert.deepEqual(afterApproval.state.lifecycle, { status: 'awaiting-approval', approval })
+  assert.equal(afterApproval.state.events.length, 1)
 })
 
 test('run event reducer exposes completed messages and finishes terminal runs', () => {
@@ -80,7 +82,9 @@ test('run event reducer exposes completed messages and finishes terminal runs', 
   const afterDone = reduceRunEvent(afterMessage.state, event('agent.done', { status: 'completed' }))
 
   assert.equal(afterMessage.effects.message, message)
+  assert.deepEqual(afterMessage.state.events, [])
   assert.equal(afterDone.effects.finish, true)
+  assert.deepEqual(afterDone.state.events, [])
   assert.deepEqual(afterDone.state.lifecycle, { status: 'idle' })
   assert.equal(afterDone.state.connection, 'disconnected')
 })

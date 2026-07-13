@@ -84,10 +84,9 @@ export type DisplayItem =
       type: 'process-group'
       id: string
       label: string
+      durationLabel: string
       items: ProcessViewItem[]
       collapsed: boolean
       hasError: boolean
-      startedAt?: number
-      endedAt?: number
       isActive?: boolean
     }

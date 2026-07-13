@@ -32,8 +32,10 @@ const emit = defineEmits<{
 
 const conversationEl = ref<HTMLElement | null>(null)
 const contentEl = ref<HTMLElement | null>(null)
-const isAtBottom = ref(true)
+let followLatest = true
 let isJumpingToBottom = false
+let lastScrollHeight = 0
+let lastScrollTop = 0
 let pendingScrollForce = false
 let disposed = false
 let lastJumpVisibility: boolean | undefined
@@ -44,6 +46,14 @@ const lastAssistantDisplayItemId = computed(() => {
   for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
     const item = props.displayItems[index]
     if (item.type === 'message' && item.message.role === 'assistant') return item.id
+  }
+
+  return ''
+})
+const lastUserDisplayItemId = computed(() => {
+  for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
+    const item = props.displayItems[index]
+    if (item.type === 'message' && item.message.role === 'user') return item.id
   }
 
   return ''
@@ -104,10 +114,12 @@ async function copyCodeBlock(encoded: string) {
 
 function scrollToBottom(force = false) {
   const el = conversationEl.value
-  if (!el || (!force && !isAtBottom.value)) return
+  if (!el || (!force && !followLatest)) return
 
+  if (force) followLatest = true
   el.scrollTop = el.scrollHeight
-  isAtBottom.value = true
+  lastScrollTop = el.scrollTop
+  lastScrollHeight = el.scrollHeight
   emitJumpVisibility(false)
 }
 
@@ -130,23 +142,36 @@ function scheduleScrollToBottom(force = false) {
 }
 
 function resetScrollState() {
+  followLatest = true
   isJumpingToBottom = false
-  isAtBottom.value = true
+  lastScrollTop = 0
+  lastScrollHeight = 0
   emitJumpVisibility(false)
 }
 
 function updateScrollState() {
   const el = conversationEl.value
-  if (!el) return
+  if (!el) return null
 
   const state = conversationScrollState(el)
-  isAtBottom.value = state.isAtBottom
   emitJumpVisibility(state.showJumpToBottom)
+  return state
 }
 
 function handleConversationScroll() {
-  updateScrollState()
-  if (isAtBottom.value) isJumpingToBottom = false
+  const el = conversationEl.value
+  if (!el) return
+
+  if (el.scrollHeight === lastScrollHeight && el.scrollTop < lastScrollTop) {
+    followLatest = false
+  }
+  const state = updateScrollState()
+  if (state?.isAtBottom) {
+    followLatest = true
+    isJumpingToBottom = false
+  }
+  lastScrollTop = el.scrollTop
+  lastScrollHeight = el.scrollHeight
 }
 
 function cancelJumpToBottom() {
@@ -158,8 +183,8 @@ function cancelJumpToBottom() {
 
 function handleConversationScrollEnd() {
   if (!isJumpingToBottom) return
-  updateScrollState()
-  if (isAtBottom.value) {
+  const state = updateScrollState()
+  if (state?.isAtBottom) {
     isJumpingToBottom = false
     return
   }
@@ -201,6 +226,7 @@ function jumpToBottom() {
     return
   }
 
+  followLatest = true
   isJumpingToBottom = true
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
 }
@@ -212,7 +238,7 @@ function emitJumpVisibility(visible: boolean) {
 }
 
 function handleContentResize() {
-  if (isAtBottom.value) scheduleScrollToBottom()
+  if (followLatest) scheduleScrollToBottom()
   else updateScrollState()
 }
 
@@ -233,10 +259,18 @@ watch(
   },
 )
 
+watch(lastUserDisplayItemId, (current) => {
+  if (current) scheduleScrollToBottom(true)
+})
+
 onMounted(() => {
   emitJumpVisibility(false)
   resizeObserver = new ResizeObserver(handleContentResize)
   if (contentEl.value) resizeObserver.observe(contentEl.value)
+  if (conversationEl.value) {
+    lastScrollTop = conversationEl.value.scrollTop
+    lastScrollHeight = conversationEl.value.scrollHeight
+  }
   scheduleScrollToBottom(true)
 })
 
@@ -281,6 +315,7 @@ defineExpose({
       <ProcessGroup
         v-else-if="item.type === 'process-group'"
         :label="item.label"
+        :duration-label="item.durationLabel"
         :items="item.items"
         :collapsed="item.collapsed"
         :has-error="item.hasError"
@@ -304,14 +339,12 @@ defineExpose({
 
     <div v-if="streamingText" class="message-row assistant">
       <article class="bubble assistant">
-        <div class="markdown streaming" v-html="renderMarkdown(streamingText)"></div>
+        <div class="markdown streaming" :class="{ active: props.isRunning }" v-html="renderMarkdown(streamingText)"></div>
       </article>
     </div>
     <div v-else-if="showThinking" class="message-row assistant">
       <article class="bubble assistant thinking" :aria-label="uiText.chat.thinking">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
+        <span class="thinking-label">{{ uiText.chat.thinkingLabel }}</span>
       </article>
     </div>
     </div>

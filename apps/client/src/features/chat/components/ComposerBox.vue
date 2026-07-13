@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Brain, Check, ChevronDown, Image, Plus, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Brain, Check, ChevronDown, Image, Plus, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
 import type { ImageAttachment, ReasoningEffort } from '../model/conversation'
@@ -9,6 +9,8 @@ type ComposerReasoningEffort = 'default' | ReasoningEffort
 const props = defineProps<{
   attachments: ImageAttachment[]
   inputValue: string
+  modelName: string
+  modelProvider: string
   primaryDisabled: boolean
   primaryIsStop: boolean
   reasoningEffort: ComposerReasoningEffort
@@ -317,6 +319,14 @@ defineExpose({ focus, resize })
           >
             <Plus :size="17" stroke-width="2.2" />
           </button>
+          <div
+            v-if="props.modelName"
+            class="composer-model"
+            :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
+          >
+            <Box :size="14" stroke-width="1.9" />
+            <span>{{ props.modelName }}</span>
+          </div>
           <button
             v-if="props.reasoningOptions.length"
             class="composer-thinking-action"

@@ -35,6 +35,52 @@
   }
 }
 
+.process-group.active .process-toggle {
+  grid-template-columns: auto minmax(0, auto) auto;
+}
+
+.process-active-indicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: process-active-breathe 1.6s ease-in-out infinite;
+}
+
+.process-group.active .process-toggle-label {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.process-active-label {
+  color: var(--ink-soft);
+  animation: process-active-label-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes process-active-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+}
+
+@keyframes process-active-label-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .process-toggle-label {
   min-width: 0;
   overflow: hidden;

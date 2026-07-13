@@ -14,6 +14,8 @@ const RUN_EVENT_TYPES = [
   'agent.error',
 ] as const
 
+const TRANSPORT_ONLY_EVENT_TYPES = new Set<string>(['agent.started', 'agent.plan', 'agent.state'])
+
 type EventListener = (event: { data: string }) => void
 
 export type EventSourceConnection = {
@@ -34,7 +36,7 @@ type RunEventStreamOptions = {
   createEventSource?: (url: string) => EventSourceConnection
   setTimer?: (callback: () => void, delay: number) => number
   clearTimer?: (timer: number) => void
-  onConnected?: (sessionId: string) => void
+  onActivity?: (sessionId: string) => void
   onEvent: (sessionId: string, event: AgentEvent) => void
   onReconnecting?: (sessionId: string) => void
 }
@@ -69,7 +71,8 @@ export function createRunEventStream(options: RunEventStreamOptions) {
 
         if (subscriptions.get(sessionId) !== subscription || subscription.source !== source) return
         subscription.reconnectAttempts = 0
-        options.onConnected?.(sessionId)
+        options.onActivity?.(sessionId)
+        if (TRANSPORT_ONLY_EVENT_TYPES.has(type)) return
         options.onEvent(sessionId, event)
       })
     }

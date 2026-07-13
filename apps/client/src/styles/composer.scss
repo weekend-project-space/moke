@@ -34,7 +34,7 @@
 }
 
 .jump-inline {
-  @include icon-control(32px, var(--radius-pill), var(--panel-strong));
+  @include icon-control(32px, var(--radius-pill), var(--surface-solid));
   align-self: center;
   margin: 0 auto;
   border: 1px solid var(--line-soft);
@@ -71,7 +71,7 @@
   padding: 0;
   border: 1px solid var(--border-control);
   border-radius: var(--radius-composer);
-  background: var(--panel-strong);
+  background: var(--surface-solid);
   box-shadow: var(--shadow-input);
   cursor: default;
   overflow: visible;
@@ -171,9 +171,9 @@
 
 .composer-panel.dragging .composer-input-row {
   border-color: var(--border-focus);
-  background: color-mix(in srgb, var(--accent-faint) 45%, var(--panel-strong));
+  background: color-mix(in srgb, var(--accent-faint) 45%, var(--surface-solid));
   box-shadow:
-    0 0 0 3px var(--focus-ring),
+    0 0 0 3px var(--focus-control-ring),
     var(--shadow-input);
 }
 
@@ -194,6 +194,29 @@
 .composer-secondary-action.active {
   color: var(--ink);
   background: var(--surface-panel-muted);
+}
+
+.composer-model {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(180px, 34%);
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    font-weight: 430;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .composer button.composer-thinking-action {
@@ -233,7 +256,7 @@
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
   padding: 3px;
-  background: color-mix(in srgb, var(--panel-strong) 94%, var(--surface-chat-panel));
+  background: color-mix(in srgb, var(--surface-solid) 94%, var(--surface-chat-panel));
   box-shadow: var(--shadow-control);
 
   button {
@@ -286,7 +309,7 @@
   overflow: hidden;
   border: 1px solid var(--border-control);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-chat-panel));
+  background: color-mix(in srgb, var(--surface-solid) 92%, var(--surface-chat-panel));
   box-shadow: var(--shadow-menu);
   position: relative;
   z-index: 1;

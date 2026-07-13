@@ -136,9 +136,9 @@
     transform: translateY(-50%);
   }
 
-  &.archivable:hover,
-  &.archivable:focus-within {
-    .session-archive-hover {
+  &.manageable:hover,
+  &.manageable:focus-within {
+    .session-menu-trigger {
       opacity: 1;
       pointer-events: auto;
     }
@@ -226,13 +226,13 @@
   opacity: 0.72;
 }
 
-.session-archive-hover {
+.session-menu-trigger {
   position: absolute;
   top: 50%;
   right: 8px;
-  @include icon-control(24px, $background: var(--panel-raised), $color: var(--ink-muted));
+  @include icon-control(24px, $background: transparent, $color: var(--ink-muted));
   border: 0;
-  box-shadow: 0 0 0 1px var(--line-hairline);
+  box-shadow: none;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
@@ -243,7 +243,7 @@
 
   &:hover {
     color: var(--ink);
-    background: white;
+    background: var(--surface-control-hover);
   }
 }
 
@@ -322,6 +322,17 @@
 
   svg {
     color: var(--ink-muted);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .session.manageable .session-menu-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .session.manageable time {
+    opacity: 0;
   }
 }
 

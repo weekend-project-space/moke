@@ -1,7 +1,7 @@
 ﻿import { computed, type Ref } from 'vue'
-import type { AgentEvent, Message, PendingAsk } from '../model/conversation'
+import type { AgentEvent, Message } from '../model/conversation'
 import type { DisplayItem, ProcessItem, ProcessNote } from './types'
-import { createProcessGroupView, formatProcessGroupLabel } from './processDisplay'
+import { createProcessGroupView, formatProcessGroupStatus } from './processDisplay'
 import { uiText } from '../../../text/uiText'
 import {
   describeToolCall,
@@ -22,8 +22,6 @@ type UseConversationDisplayOptions = {
   events: Ref<AgentEvent[]>
   isRunning: Ref<boolean>
   runtimeNow: Ref<number>
-  pendingAsk: Ref<PendingAsk | null>
-  pendingApproval: Ref<unknown | null>
   runError: Ref<string>
   processCollapsed: Ref<Record<string, boolean>>
   toolLabels: Record<string, string>
@@ -88,15 +86,6 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         continue
       }
 
-      if (event.type === 'approval.required') {
-        items.push(createEventProcessItem({
-          id: `process-${event.id}`,
-          label: uiText.process.waitingApproval(shortText(String(event.payload.reason || 'Approval is required to continue'), 72)),
-          tone: 'ask',
-          time: parseEventTime(event),
-        }))
-      }
-
       if (event.type === 'agent.error') {
         items.push(createEventProcessItem({
           id: `process-${event.id}`,
@@ -147,16 +136,20 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         const processGroup = createProcessGroupView(nextProcessItems)
         const startedAt = turnStartedAt || processGroup.startedAt
         const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
+        const status = formatProcessGroupStatus(
+          { ...processGroup, startedAt, endedAt },
+          isCurrentTurn,
+          options.runtimeNow.value,
+        )
         if (isCurrentTurn) hasActiveMessageProcessGroup = true
         items.push({
           type: 'process-group',
           id: groupId,
-          label: formatProcessGroupLabel({ ...processGroup, startedAt, endedAt }, isCurrentTurn, options.runtimeNow.value),
+          label: status.label,
+          durationLabel: status.durationLabel,
           items: processGroup.items,
           collapsed: options.processCollapsed.value[groupId] ?? !isCurrentTurn,
           hasError: processGroup.hasError,
-          startedAt,
-          endedAt,
           isActive: isCurrentTurn,
         })
       }
@@ -232,7 +225,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     flushAssistantTurn()
 
     if (
-      (options.isRunning.value || options.pendingAsk.value || options.pendingApproval.value || options.runError.value) &&
+      (options.isRunning.value || options.runError.value) &&
       activeEventProcessItems.value.length &&
       !hasActiveMessageProcessGroup
     ) {
@@ -240,15 +233,19 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       const processGroup = createProcessGroupView(activeEventProcessItems.value)
       const startedAt = latestUserMessageTime(sourceMessages) || processGroup.startedAt
       const endedAt = options.isRunning.value ? options.runtimeNow.value : processGroup.endedAt || startedAt
+      const status = formatProcessGroupStatus(
+        { ...processGroup, startedAt, endedAt },
+        options.isRunning.value,
+        options.runtimeNow.value,
+      )
       items.push({
         type: 'process-group',
         id: groupId,
-        label: formatProcessGroupLabel({ ...processGroup, startedAt, endedAt }, options.isRunning.value, options.runtimeNow.value),
+        label: status.label,
+        durationLabel: status.durationLabel,
         items: processGroup.items,
         collapsed: options.processCollapsed.value[groupId] ?? !options.isRunning.value,
         hasError: processGroup.hasError,
-        startedAt,
-        endedAt,
         isActive: options.isRunning.value,
       })
     }

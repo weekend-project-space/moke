@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { activeModelFromSettings, type ActiveModelInfo } from '../model/activeModel'
 import type { ReasoningEffort } from '../model/conversation'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
@@ -20,6 +21,7 @@ function isReasoningEffort(value: unknown): value is ReasoningEffort {
 }
 
 export function useComposerReasoning(options: UseComposerReasoningOptions) {
+  const activeModel = ref<ActiveModelInfo | null>(null)
   const composerReasoningEffort = ref<ComposerReasoningEffort>('default')
   const reasoningCapability = ref<ReasoningCapability>({ efforts: [], supported: false })
   const composerReasoningOptions = computed(() =>
@@ -51,17 +53,26 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
     try {
       const response = await fetch(`${options.apiBase}/api/settings`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = await response.json()
-      const capability = data.reasoningCapability || {}
+      const data: unknown = await response.json()
+      const settings = data !== null && typeof data === 'object' && !Array.isArray(data)
+        ? data as Record<string, unknown>
+        : {}
+      const capability = settings.reasoningCapability !== null
+        && typeof settings.reasoningCapability === 'object'
+        && !Array.isArray(settings.reasoningCapability)
+        ? settings.reasoningCapability as Record<string, unknown>
+        : {}
       const efforts = Array.isArray(capability.efforts)
         ? capability.efforts.filter(isReasoningEffort)
         : []
+      activeModel.value = activeModelFromSettings(settings)
       reasoningCapability.value = {
         efforts,
         supported: capability.supported === true && efforts.length > 0,
       }
       normalizeSelection()
     } catch {
+      activeModel.value = null
       reasoningCapability.value = { efforts: [], supported: false }
       composerReasoningEffort.value = 'default'
     }
@@ -82,6 +93,7 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
   })
 
   return {
+    activeModel,
     composerReasoningEffort,
     composerReasoningOptions,
     currentRunOptions,

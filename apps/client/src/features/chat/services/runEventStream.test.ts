@@ -33,6 +33,7 @@ test('runEventStream reconnects with backoff and stops cleanly', () => {
   const timers = new Map<number, () => void>()
   const delays: number[] = []
   const events: AgentEvent[] = []
+  let activityCount = 0
   let reconnecting = 0
   let nextTimer = 0
   const stream = createRunEventStream({
@@ -52,22 +53,36 @@ test('runEventStream reconnects with backoff and stops cleanly', () => {
       timers.delete(id)
     },
     onEvent: (_sessionId, event) => events.push(event),
+    onActivity: () => activityCount++,
     onReconnecting: () => reconnecting++,
   })
 
   stream.subscribe('session_1', '/api/runs/run_1/events')
   assert.equal(sources[0]?.url, 'http://localhost:4010/api/runs/run_1/events')
 
-  const event: AgentEvent = {
-    id: 'event_1',
+  sources[0]?.emit({
+    id: 'event_state',
     seq: 1,
     type: 'agent.state',
     run_id: 'run_1',
     session_id: 'session_1',
     ts: '2026-01-01T00:00:00.000Z',
     payload: { state: 'reason' },
+  })
+  assert.equal(activityCount, 1)
+  assert.deepEqual(events, [])
+
+  const event: AgentEvent = {
+    id: 'event_1',
+    seq: 2,
+    type: 'agent.message.delta',
+    run_id: 'run_1',
+    session_id: 'session_1',
+    ts: '2026-01-01T00:00:00.000Z',
+    payload: { channel: 'answer', content: 'hello' },
   }
   sources[0]?.emit(event)
+  assert.equal(activityCount, 2)
   assert.deepEqual(events, [event])
 
   sources[0]?.onerror?.()

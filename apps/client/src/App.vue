@@ -103,6 +103,7 @@ const {
   },
 })
 const {
+  activeModel,
   composerReasoningEffort,
   composerReasoningOptions,
   currentRunOptions,
@@ -191,8 +192,7 @@ const currentTitle = computed(() => {
 })
 const sessionSubtitle = computed(() => {
   if (showSettings.value) return uiText.app.settingsSubtitle
-  if (pendingAsk.value) return uiText.app.waitingForResponse
-  if (pendingApproval.value) return uiText.app.waitingForApproval
+  if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
   return ''
 })
@@ -228,8 +228,6 @@ const {
   events,
   isRunning,
   runtimeNow,
-  pendingAsk,
-  pendingApproval,
   runError,
   processCollapsed,
   toolLabels,
@@ -239,14 +237,18 @@ const timelineNote = computed(() => {
   if (serverStatus.value === 'checking') return uiText.app.connectingToMoke
   if (serverStatus.value === 'offline') return uiText.app.disconnectedFromMoke
   if (runError.value) return runError.value
-  if (pendingAsk.value) return uiText.app.waitingForResponseNote
-  if (pendingApproval.value) return uiText.app.approvalRequiredNote
   if (isRunning.value) return ''
   return ''
 })
-const showThinking = computed(
-  () => isRunning.value && !streamingText.value && !pendingAsk.value && !pendingApproval.value,
-)
+const showThinking = computed(() => {
+  const latestMessage = messages.value.at(-1)
+  return isRunning.value
+    && events.value.length === 0
+    && !streamingText.value
+    && !pendingAsk.value
+    && !pendingApproval.value
+    && latestMessage?.role === 'user'
+})
 const showEmptyState = computed(
   () => serverStatus.value === 'online' && visibleMessages.value.length === 0 && !isRunning.value,
 )
@@ -450,6 +452,7 @@ onUnmounted(() => {
         </div>
         <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
           :primary-is-stop="primaryIsStop" :attachments="attachments"
+          :model-name="activeModel?.model || ''" :model-provider="activeModel?.providerName || ''"
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
           @update:input-value="input = $event"

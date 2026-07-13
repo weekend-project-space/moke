@@ -11,10 +11,6 @@ const app = {
   newChat: 'New chat',
   settings: 'Settings',
   settingsSubtitle: 'Models, permissions, and browser',
-  waitingForApproval: 'Waiting for approval',
-  waitingForResponse: 'Waiting for your response',
-  waitingForResponseNote: 'Moke is waiting for your response',
-  approvalRequiredNote: 'Approve the request to continue',
   working: 'Working',
 } as const
 
@@ -43,6 +39,7 @@ const chat = {
     'Search the web for recent news about local LLM browsers',
   ],
   thinking: 'Moke is thinking',
+  thinkingLabel: 'Thinking',
 } as const
 
 const composer = {
@@ -50,6 +47,7 @@ const composer = {
   addImage: 'Add image',
   chooseImage: 'Choose image',
   clearQueued: 'Clear queued messages',
+  currentModel: (model: string, provider: string) => provider ? `${provider} · ${model}` : model,
   imageAttachment: 'Image attachment',
   imageReadFailed: 'Some images could not be read.',
   imageTooLarge: 'Images are limited to 4 MB each and 5 MB in total.',
@@ -119,7 +117,8 @@ const process = {
   unknownError: 'Unknown error',
   validationResult: 'Validation result',
   toolFailedFallback: 'Tool failed',
-  waitingApproval: (reason: string) => `Waiting for approval: ${reason}`,
+  working: 'Working',
+  processed: 'Processed',
 } as const
 
 const settings = {
@@ -203,6 +202,7 @@ const mcp = {
 } as const
 
 const sidebar = {
+  chatActions: 'Chat actions',
   archive: 'Archive',
   chatName: 'Chat name',
   emptyDescription: 'Use the new chat button at the top to start.',
