@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { RiskLevel } from '../../protocol/src/index.js';
 import type { ToolContext } from './tool-context.js';
+import { isPathRequiresApprovalError } from './workspace-approval.js';
 
 export type RuntimeTool<TInput extends z.ZodType = z.ZodType> = {
   name: string;
@@ -56,8 +57,55 @@ export class ToolRegistry {
     }
 
     const parsedInput = parseToolInput(tool, input);
-    return tool.handler(parsedInput, context);
+    const normalizedInput = toRecord(parsedInput);
+    const nextContext = {
+      ...context,
+      currentToolCall: {
+        callId: context.currentToolCall?.callId || '',
+        tool: name,
+        input: normalizedInput,
+        risk: tool.risk,
+      },
+    };
+
+    try {
+      return await tool.handler(parsedInput, nextContext);
+    } catch (error) {
+      if (!isPathRequiresApprovalError(error) || !context.approveWorkspacePath) throw error;
+
+      const decision = await context.approveWorkspacePath({
+        tool: name,
+        input: normalizedInput,
+        risk: tool.risk,
+        source: tool.source,
+        callId: context.currentToolCall?.callId,
+        path: error.details.path,
+        suggestedRoot: error.details.suggestedRoot,
+        reason: error.details.reason,
+      });
+      if (!decision.approved) {
+        throw new ToolExecutionError(decision.message || `Workspace path access rejected: ${error.details.path}`, {
+          error: {
+            code: 'PATH_ACCESS_REJECTED',
+            message: decision.message || 'User rejected workspace path access',
+            tool: name,
+            path: error.details.path,
+            suggested_root: error.details.suggestedRoot,
+          },
+        });
+      }
+
+      try {
+        return await tool.handler(parsedInput, nextContext);
+      } finally {
+        decision.cleanup?.();
+      }
+    }
   }
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function parseToolInput(tool: RuntimeTool, input: unknown) {

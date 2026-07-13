@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process';
+import { lstat, mkdir, writeFile as writeLocalFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -24,6 +26,8 @@ import type {
   SystemReadResult,
   SystemWriteResult,
 } from '../../agent-runtime/src/index.js';
+import { PathRequiresApprovalError } from '../../agent-runtime/src/index.js';
+import { analyzeCommandSafety, isInsideRoot, suggestApprovalRoot } from './command-safety.js';
 
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {
   backend?: SandboxBackendProtocolV2;
@@ -35,11 +39,15 @@ const DEFAULT_RESULT_LIMIT = 20;
 const DEFAULT_ROOT = '/';
 
 export class LocalSystemBackend implements ExecutableSystemBackend {
-  readonly root: string;
+  readonly rootDir: string;
   private readonly backend: SandboxBackendProtocolV2;
+  private readonly approvedRoots: string[];
+  private readonly useLocalFsWrites: boolean;
 
   constructor(root = DEFAULT_ROOT, options: LocalSystemBackendOptions = {}) {
-    this.root = path.resolve(root);
+    this.rootDir = path.resolve(root);
+    this.approvedRoots = [this.rootDir];
+    this.useLocalFsWrites = !options.backend;
 
     if (options.backend) {
       this.backend = options.backend;
@@ -49,9 +57,22 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     this.backend = new LocalShellBackend({
       ...options,
       inheritEnv: options.inheritEnv ?? true,
-      rootDir: options.rootDir ?? this.root,
-      virtualMode: true,
+      rootDir: options.rootDir ?? this.rootDir,
+      virtualMode: false,
     });
+  }
+
+  approveWorkspaceRoot(root: string) {
+    const fullPath = path.resolve(root);
+    const added = !this.isInsideApprovedRoot(fullPath);
+    if (added) this.approvedRoots.push(fullPath);
+    return { path: fullPath, added };
+  }
+
+  revokeWorkspaceRoot(root: string) {
+    const fullPath = path.resolve(root);
+    const index = this.approvedRoots.findIndex((approvedRoot) => path.resolve(approvedRoot) === fullPath);
+    if (index > 0) this.approvedRoots.splice(index, 1);
   }
 
   async ls(requestedPath = '.'): Promise<SystemLsResult> {
@@ -109,7 +130,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   async grep(pattern: string, options?: SystemGrepOptions): Promise<SystemGrepResult> {
     const mode = options?.mode ?? 'content';
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const result = await this.backend.grep(pattern, target, options?.glob ?? null);
     if (result.error) throw new Error(result.error);
 
@@ -120,7 +141,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async glob(pattern: string, options?: SystemGlobOptions): Promise<SystemGlobResult> {
-    const target = options?.path ? this.toBackendPath(options.path) : DEFAULT_ROOT;
+    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
     const result = await this.backend.glob(pattern, target);
     if (result.error) throw new Error(result.error);
@@ -132,6 +153,14 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async writeFile(filePath: string, content: string): Promise<SystemWriteResult> {
     const target = this.toBackendPath(filePath);
+    if (this.useLocalFsWrites) {
+      await writeLocalTextFile(target, content);
+      return {
+        path: this.fromBackendPath(target),
+        bytes: Buffer.byteLength(content, 'utf8'),
+      };
+    }
+
     const result = await this.backend.write(target, content);
     if (result.error) throw new Error(result.error);
 
@@ -159,11 +188,16 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async execute(command: string, args: string[] = [], options?: SystemExecuteOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
-    const cwd = options?.cwd ? this.toHostPath(options.cwd) : undefined;
-    const commandText = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
-    const commands = 'export OPENWALK_SESSION_NAME=MOKE && ' + commandText
-    const result = await this.backend.execute(cwd ? `cd ${shellQuote(cwd)} && ${commands}` : commands);
+    const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
+    const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
+    this.assertCommandPathsStayInApprovedRoots(commandText, cwd);
+    if (this.useLocalFsWrites) {
+      return args.length > 0
+        ? this.executeLocalProcess(command, args, cwd, startedAt, options?.timeoutMs)
+        : this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+    }
 
+    const result = await withTimeout(this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`), options?.timeoutMs, command);
     return {
       exit_code: result.exitCode ?? 1,
       stdout: result.output,
@@ -172,38 +206,86 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     };
   }
 
+  private async executeLocalCommand(
+    commandText: string,
+    cwd: string,
+    startedAt: number,
+    timeoutMs: number | undefined,
+  ): Promise<SystemExecuteResult> {
+    const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration_ms: Date.now() - startedAt,
+    };
+  }
+
+  private async executeLocalProcess(
+    command: string,
+    args: string[],
+    cwd: string,
+    startedAt: number,
+    timeoutMs: number | undefined,
+  ): Promise<SystemExecuteResult> {
+    const result = await runLocalProcess(command, args, cwd, timeoutMs);
+    return {
+      exit_code: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration_ms: Date.now() - startedAt,
+    };
+  }
+
   private toBackendPath(requestedPath: string) {
-    if (path.isAbsolute(requestedPath) && requestedPath.startsWith(this.root)) {
-      return this.toVirtualPath(requestedPath);
-    }
-    return this.toVirtualPath(this.toHostPath(requestedPath));
+    return this.toHostPath(requestedPath);
   }
 
   private toHostPath(requestedPath: string) {
-    const fullPath = path.resolve(this.root, requestedPath);
-    if (fullPath !== this.root && !fullPath.startsWith(`${this.root}${path.sep}`)) {
-      throw new Error('Path escapes workspace');
-    }
+    const fullPath = path.resolve(this.rootDir, requestedPath);
+    if (!this.isInsideApprovedRoot(fullPath)) throw this.createPathApprovalError(fullPath);
     return fullPath;
   }
 
-  private toVirtualPath(fullPath: string) {
-    const relative = path.relative(this.root, fullPath).split(path.sep).join('/');
-    return relative ? `/${relative}` : '/';
+  private isInsideApprovedRoot(fullPath: string) {
+    return this.approvedRoots.some((root) => isInsideRoot(root, fullPath));
+  }
+
+  private createPathApprovalError(fullPath: string) {
+    return new PathRequiresApprovalError({
+      path: fullPath,
+      suggestedRoot: suggestApprovalRoot(fullPath),
+      reason: `Path requires approval: ${fullPath}`,
+    });
+  }
+
+  private assertCommandPathsStayInApprovedRoots(commandText: string, cwd: string) {
+    const result = analyzeCommandSafety({
+      commandText,
+      cwd,
+      approvedRoots: this.approvedRoots,
+    });
+    const issue = result.issues[0];
+    if (!issue) return;
+
+    throw new PathRequiresApprovalError({
+      path: issue.path,
+      suggestedRoot: issue.suggestedRoot,
+      reason: issue.reason,
+    });
   }
 
   private fromBackendPath(filePath: string) {
-    const normalized = filePath.replace(/\\/g, '/').replace(/\/$/, '');
-    if (normalized === '' || normalized === '/') return '.';
-    if (path.isAbsolute(normalized) && normalized.startsWith(this.root)) {
-      return path.relative(this.root, normalized) || '.';
+    const normalized = path.resolve(this.rootDir, filePath);
+    if (isInsideRoot(this.rootDir, normalized)) {
+      return path.relative(this.rootDir, normalized) || '.';
     }
-    return normalized.replace(/^\//, '') || '.';
+    return normalized;
   }
 
   private toSystemFileInfo(file: { path: string; is_dir?: boolean; size?: number; modified_at?: string }): SystemFileInfo {
     return {
-      path: this.fromBackendPath(file.path.replace(/\/$/, '')),
+      path: this.fromBackendPath(file.path.replace(/[/\\]$/, '')),
       type: file.is_dir ? 'directory' : 'file',
       size: file.size,
       modified_at: file.modified_at || undefined,
@@ -238,4 +320,186 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function formatCommandText(command: string, args: string[], useLocalShell: boolean) {
+  if (useLocalShell && process.platform === 'win32') {
+    return `& ${[command, ...args].map(powerShellQuote).join(' ')}`;
+  }
+
+  return [command, ...args].map(shellQuote).join(' ');
+}
+
+function powerShellQuote(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+type LocalCommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
+function runLocalShellCommand(commandText: string, cwd: string, timeoutMs: number | undefined): Promise<LocalCommandResult> {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const windowsCommand = [
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+      '$OutputEncoding = [System.Text.Encoding]::UTF8',
+      '$null = chcp.com 65001',
+      commandText,
+    ].join('; ');
+    const child = isWindows
+      ? spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsCommand], {
+          cwd,
+          env: {
+            ...process.env,
+            DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
+            PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
+          },
+          windowsHide: true,
+        })
+      : spawn(commandText, {
+          cwd,
+          env: process.env,
+          detached: true,
+          shell: true,
+        });
+    collectLocalProcessResult(child, timeoutMs, commandText, resolve, reject);
+  });
+}
+
+function runLocalProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number | undefined,
+): Promise<LocalCommandResult> {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
+        PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
+      },
+      detached: !isWindows,
+      shell: false,
+      windowsHide: true,
+    });
+
+    collectLocalProcessResult(child, timeoutMs, formatCommandText(command, args, true), resolve, reject);
+  });
+}
+
+function collectLocalProcessResult(
+  child: ReturnType<typeof spawn>,
+  timeoutMs: number | undefined,
+  commandText: string,
+  resolve: (result: LocalCommandResult) => void,
+  reject: (error: Error) => void,
+) {
+  let stdout = '';
+  let stderr = '';
+  let settled = false;
+  let timer: NodeJS.Timeout | undefined;
+
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr?.on('data', (chunk) => {
+    stderr += chunk;
+  });
+  child.on('error', (error) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    reject(error);
+  });
+  child.on('close', (code) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    resolve({
+      exitCode: code ?? 1,
+      stdout,
+      stderr,
+    });
+  });
+
+  if (timeoutMs) {
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killProcessTree(child.pid);
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
+    }, timeoutMs);
+  }
+}
+
+function killProcessTree(pid: number | undefined) {
+  if (!pid) return;
+
+  if (process.platform === 'win32') {
+    spawn('taskkill.exe', ['/pid', String(pid), '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    }).on('error', () => {
+      // Best-effort cleanup; the timeout error has already been returned to the caller.
+    });
+    return;
+  }
+
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Best-effort cleanup.
+    }
+  }
+}
+
+async function writeLocalTextFile(filePath: string, content: string) {
+  try {
+    const stat = await lstat(filePath);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`);
+    }
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    if (code !== 'ENOENT') throw error;
+  }
+
+  const parent = path.dirname(filePath);
+  if (parent !== path.parse(parent).root) {
+    await mkdir(parent, { recursive: true });
+  }
+
+  await writeLocalFile(filePath, content, {
+    flag: 'w',
+    mode: 0o644,
+  });
+}
+
+async function withTimeout<T>(promise: Promise<T> | T, timeoutMs: number | undefined, command: string) {
+  if (!timeoutMs) return promise;
+
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

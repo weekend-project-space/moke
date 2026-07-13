@@ -95,7 +95,7 @@ export type SystemExecuteResult = {
 };
 
 export interface SystemBackend {
-  readonly root: string;
+  readonly rootDir: string;
 
   ls(path?: string): Promise<SystemLsResult>;
   readFile(path: string, options?: SystemReadOptions): Promise<SystemReadResult>;

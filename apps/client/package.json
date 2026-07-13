@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:server": "npm --prefix ../.. run build:server",
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop": "tauri dev"
   },
   "dependencies": {
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.11",
     "lucide-vue-next": "^0.577.0",
     "markdown-it": "^14.2.0",
     "vue": "^3.5.34"
@@ -22,6 +23,7 @@
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
+    "sass": "^1.94.2",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vue-tsc": "^3.2.8"

@@ -1,0 +1,51 @@
+:where(button, input, textarea, select) {
+  font: inherit;
+}
+
+:where(button) {
+  color: inherit;
+}
+
+:where(input, textarea, select) {
+  color: var(--ink);
+}
+
+:where(input, textarea, select)::placeholder {
+  color: var(--ink-muted);
+}
+
+:where(
+  .icon-button,
+  .sidebar-toggle,
+  .trace-summary,
+  .new-session,
+  .message-action,
+  .browser-tab-close,
+  .browser-tab-add,
+  .settings-icon-button
+) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-icon-button);
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+:where(
+  .icon-button,
+  .sidebar-toggle,
+  .trace-summary,
+  .new-session,
+  .message-action,
+  .browser-tab-close,
+  .browser-tab-add,
+  .settings-icon-button
+):hover {
+  color: var(--ink);
+  background: var(--surface-control-hover);
+}
+
+
+
+

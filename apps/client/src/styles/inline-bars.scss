@@ -1,0 +1,138 @@
+@use './mixins' as *;
+
+.approval-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  width: var(--content-width);
+  align-items: center;
+  align-self: center;
+  margin: 0 auto;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-menu);
+}
+
+.approval-inline-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.approval-inline-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--font-size-body);
+  font-weight: 540;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-inline-detail {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-muted);
+  font-size: var(--font-size-body);
+  line-height: 1.35;
+}
+
+.approval-inline-detail span {
+  flex: 0 0 auto;
+}
+
+.approval-inline-detail code {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink), transparent 8%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--font-size-ui);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-inline-reason {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
+  font-size: var(--font-size-body);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-inline menu {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+}
+
+.approval-inline button {
+  @include button-control(30px, 7px, 0 11px);
+  font-size: var(--font-size-code);
+  font-weight: 520;
+  white-space: nowrap;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.approval-inline .primary {
+  border: 1px solid var(--accent-strong);
+  color: white;
+  background: var(--accent-strong);
+}
+
+.approval-inline .secondary {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface-panel);
+}
+
+.approval-inline .ghost {
+  border: 1px solid transparent;
+  color: var(--ink-muted);
+  background: transparent;
+}
+
+.approval-inline .primary:hover {
+  background: color-mix(in srgb, var(--accent-strong), black 8%);
+}
+
+.approval-inline .secondary:hover,
+.approval-inline .ghost:hover {
+  color: var(--ink);
+  background: var(--surface-control-hover);
+}
+
+@media (max-width: 980px) {
+  .approval-inline {
+    grid-template-columns: 1fr;
+    align-items: start;
+    padding: 9px 10px;
+  }
+
+  .approval-inline-detail {
+    flex-wrap: wrap;
+  }
+
+  .approval-inline menu {
+    flex-wrap: wrap;
+  }
+
+  .approval-inline button {
+    flex: 0 0 auto;
+  }
+}
+
+
+
+

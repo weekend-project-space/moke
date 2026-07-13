@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
-import type { Message } from '../../protocol/src/index.js';
+import type { ImageAttachment, Message } from '../../protocol/src/index.js';
 import type { ToolContext } from '../../agent-runtime/src/index.js';
 import type { AgentToolSpec } from './control-tools.js';
 import { FINISH_TOOL_NAME } from './control-tools.js';
@@ -21,7 +21,8 @@ You may answer directly when no tool is needed.
 If you have used any tool observation in this run, only calling finish ends the current run.
 Do not call project tools for greetings, small talk, or self-introduction; answer directly.
 Use tools only when the user asks about project files, code, docs, or local context.
-Do not include hidden reasoning, chain-of-thought, or <think> blocks.
+Do not include hidden reasoning, chain-of-thought, or <think> blocks in the final answer.
+If the provider exposes reasoning separately, keep it separate from the final answer.
 
 Available tools:
 ${customToolList || 'None'}
@@ -35,7 +36,10 @@ Guidelines:
 - Never invent file contents you did not observe.`;
 }
 
-export function createSystemMessage(runtimeTools: AgentToolSpec[], context: ToolContext) {
+export function createSystemMessage(
+  runtimeTools: AgentToolSpec[],
+  context: ToolContext,
+) {
   const basePrompt = createSystemPrompt(runtimeTools);
   const extraContext = context.contentManager?.buildContext();
   if (!extraContext) return new SystemMessage(basePrompt);
@@ -43,13 +47,32 @@ export function createSystemMessage(runtimeTools: AgentToolSpec[], context: Tool
   return new SystemMessage(`${basePrompt}\n\n${extraContext}`);
 }
 
-export function createFinalMessage(content: string): Message {
+export function createFinalMessage(content: string, reasoning?: string): Message {
   return {
     id: `msg_${Date.now()}`,
     role: 'assistant',
     content,
     created_at: new Date().toISOString(),
+    ...(reasoning?.trim() ? { reasoning: reasoning.trim() } : {}),
   };
+}
+
+function createUserContent(content: string, attachments: ImageAttachment[] = []) {
+  if (attachments.length === 0) return content;
+
+  return [
+    ...(content ? [{ type: 'text' as const, text: content }] : []),
+    ...attachments.map((attachment) => ({
+      type: 'image_url' as const,
+      image_url: {
+        url: attachment.data_url,
+      },
+    })),
+  ];
+}
+
+export function createUserMessage(content: string, attachments: ImageAttachment[] = []) {
+  return new HumanMessage(createUserContent(content, attachments));
 }
 
 export function createHistoryMessages(history: Message[]) {
@@ -61,7 +84,7 @@ export function createHistoryMessages(history: Message[]) {
     if (!content && message.role !== 'assistant') continue;
 
     if (message.role === 'user') {
-      messages.push(new HumanMessage(content));
+      messages.push(createUserMessage(content, message.attachments || []));
       continue;
     }
 
@@ -122,6 +145,102 @@ export function getMessageText(message: BaseMessage) {
   if (!Array.isArray(content)) return '';
 
   return content.map((item) => ('text' in item ? item.text : '')).join('\n');
+}
+
+function collectReasoningValue(value: unknown): string[] {
+  if (!value) return [];
+  if (typeof value === 'string') return value ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(collectReasoningValue);
+  if (typeof value !== 'object') return [];
+
+  const record = value as Record<string, unknown>;
+  return [
+    ...collectReasoningValue(record.reasoning),
+    ...collectReasoningValue(record.reasoning_content),
+    ...collectReasoningValue(record.reasoningText),
+    ...collectReasoningValue(record.thinking),
+    ...collectReasoningValue(record.text),
+    ...collectReasoningValue(record.summary),
+  ];
+}
+
+export function getReasoningText(message: BaseMessage) {
+  const chunks: string[] = [];
+  const content = message.content;
+
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (!item || typeof item !== 'object') continue;
+      const record = item as Record<string, unknown>;
+      if (
+        record.type === 'reasoning' ||
+        record.type === 'reasoning_content' ||
+        record.type === 'thinking' ||
+        record.type === 'reasoning_text'
+      ) {
+        chunks.push(...collectReasoningValue(record));
+      }
+    }
+  }
+
+  const messageRecord = message as unknown as Record<string, unknown>;
+  chunks.push(...collectReasoningValue(messageRecord.additional_kwargs));
+  chunks.push(...collectReasoningValue(messageRecord.response_metadata));
+
+  return chunks.filter((chunk) => chunk !== '').join('');
+}
+
+function partialTagSuffixLength(text: string, tag: string) {
+  const max = Math.min(text.length, tag.length - 1);
+  for (let length = max; length > 0; length--) {
+    if (tag.startsWith(text.slice(-length))) return length;
+  }
+  return 0;
+}
+
+export function createThinkTagSplitter() {
+  let inThink = false;
+  let pending = '';
+
+  function consume(input: string) {
+    let text = pending + input;
+    pending = '';
+    let content = '';
+    let reasoning = '';
+
+    while (text) {
+      const tag = inThink ? '</think>' : '<think>';
+      const index = text.indexOf(tag);
+      if (index >= 0) {
+        if (inThink) reasoning += text.slice(0, index);
+        else content += text.slice(0, index);
+        text = text.slice(index + tag.length);
+        inThink = !inThink;
+        continue;
+      }
+
+      const keep = partialTagSuffixLength(text, tag);
+      const stable = keep ? text.slice(0, -keep) : text;
+      pending = keep ? text.slice(-keep) : '';
+      if (inThink) reasoning += stable;
+      else content += stable;
+      text = '';
+    }
+
+    return { content, reasoning };
+  }
+
+  function flush() {
+    const output = inThink ? { content: '', reasoning: pending } : { content: pending, reasoning: '' };
+    pending = '';
+    return output;
+  }
+
+  return { consume, flush };
+}
+
+export function stripThinkBlocks(text: string) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
 export function isAI(message: BaseMessage): message is AIMessage {

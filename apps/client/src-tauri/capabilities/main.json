@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "Main desktop window capability",
   "windows": ["main"],
-  "permissions": []
+  "permissions": ["core:event:default"]
 }

@@ -1,20 +1,31 @@
-import { existsSync } from 'node:fs';
 import http from 'node:http';
-import { join } from 'node:path';
 
-import { ReActAgent } from '../../packages/agent-re-act/src/index.js';
-import { RunManager, ToolRegistry } from '../../packages/agent-runtime/src/index.js';
-import { LocalSystemBackend, registerAgentTools } from '../../packages/agent-tools/src/index.js';
+import type { RuntimeRun } from '../../packages/agent-runtime/src/index.js';
+import type { Session } from '../../packages/protocol/src/index.js';
 import {
-  ContentManager,
-  createListSkillsTool,
-  createReadSkillTool,
-  SkillLoader,
-} from '../../packages/agent-skills/src/index.js';
-import type { Run, Session } from '../../packages/protocol/src/index.js';
-import { registerMcpTools } from './mcp-tools.js';
-import { createRoutes } from './routes.js';
-import { createStateSaver, loadState } from './state.js';
+  loadFirstEnvFile,
+  resolveEnvPaths,
+  resolvePath,
+  resolveServerConfig,
+  type ServerConfig,
+} from './config/paths.js';
+import { createToolRegistry, createRunManager } from './runtime/factory.js';
+import { createRoutes } from './routes/index.js';
+import { BrowserBridge } from './services/browser-bridge.js';
+import { McpSettingsService } from './services/mcp-settings-service.js';
+import { registerMcpTools } from './services/mcp-tools.js';
+import { PermissionsService } from './services/permissions-service.js';
+import { SettingsService } from './services/settings-service.js';
+import { createStateSaver, loadState } from './storage/state.js';
+
+export {
+  normalizeWindowsDrivePath,
+  resolveEnvPaths,
+  resolvePath,
+  resolvePort,
+  resolveServerConfig,
+} from './config/paths.js';
+export type { ServerConfig } from './config/paths.js';
 
 export type ServerApp = {
   port: number;
@@ -22,45 +33,70 @@ export type ServerApp = {
   close: () => Promise<void>;
 };
 
+function closeHttpServer(server: http.Server) {
+  if (!server.listening) return Promise.resolve();
+
+  return new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) rejectClose(error);
+      else resolveClose();
+    });
+  });
+}
+
 export async function createApp(): Promise<ServerApp> {
-  const root = new URL('../..', import.meta.url).pathname;
-  const envPath = join(root, '.env');
-  if (existsSync(envPath)) {
-    process.loadEnvFile(envPath);
+  const initialWorkspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+  const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialWorkspace));
+  if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
+
+  const config: ServerConfig = resolveServerConfig();
+  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, workspace } = config;
+
+  const sessions = new Map<string, Session>();
+  const runs = new Map<string, RuntimeRun>();
+  const browserBridge = new BrowserBridge();
+  const mcpSettingsService = new McpSettingsService(mcpConfigPath);
+  const settingsService = new SettingsService(settingsPath);
+  const stateSaver = createStateSaver({ statePath, sessions });
+  const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
+  const permissionsService = new PermissionsService(permissionsPath, {
+    revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
+  });
+  for (const permission of permissionsService.listWorkspaceRoots()) {
+    system.approveWorkspaceRoot(permission.path);
   }
 
-  const port = Number(process.env.PORT || 4010);
-  const statePath = process.env.MOKE_STATE_PATH || join(root, '.moke/state.json');
-  const mcpConfigPath = process.env.MOKE_MCP_CONFIG || join(root, '.moke/mcp.json');
-  const sessions = new Map<string, Session>();
-  const runs = new Map<string, Run>();
-  const workspace = root;
-  const system = new LocalSystemBackend(workspace);
-  const skillLoader = new SkillLoader(workspace);
-  const stateSaver = createStateSaver({ statePath, sessions, runs });
-  const toolRegistry = new ToolRegistry()
-    .register(createListSkillsTool(skillLoader))
-    .register(createReadSkillTool(skillLoader));
-  registerAgentTools(toolRegistry, system);
-
-  loadState({ statePath, sessions, runs });
+  loadState({ statePath, sessions });
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
-  const runManager = new RunManager({
+  const runManager = createRunManager({
     sessions,
     runs,
-    agent: new ReActAgent(),
     toolRegistry,
     workspace,
-    createSkillContentManager: () => new ContentManager(),
+    approveWorkspaceRoot: (root, scope) => {
+      const approval = system.approveWorkspaceRoot(root);
+      if (scope === 'once') {
+        return approval.added ? () => system.revokeWorkspaceRoot(root) : undefined;
+      }
+      if (scope === 'persistent') {
+        permissionsService.upsertWorkspaceRoot(root);
+      }
+    },
+    getModelSettings: () => settingsService.getModelSettings(),
     onChange: stateSaver.saveStateSoon,
   });
+
   const server = http.createServer(
     createRoutes({
       sessions,
       runs,
       runManager,
       toolRegistry,
+      browserBridge,
+      mcpSettingsService,
+      permissionsService,
+      settingsService,
       onChange: stateSaver.saveStateSoon,
     }),
   );
@@ -69,8 +105,10 @@ export async function createApp(): Promise<ServerApp> {
     port,
     server,
     close: async () => {
+      browserBridge.close();
       stateSaver.flush();
       await mcpManager?.close();
+      await closeHttpServer(server);
     },
   };
 }

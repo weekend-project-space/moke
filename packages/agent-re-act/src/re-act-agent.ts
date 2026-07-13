@@ -1,11 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import { tool } from 'langchain';
-
 import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
 import { ToolExecutionError } from '../../agent-runtime/src/index.js';
-import type { ToolCall } from '../../protocol/src/index.js';
+import type { AgentStep, AgentStepPhase, ToolCall } from '../../protocol/src/index.js';
 import {
   ASK_USER_TOOL_NAME,
   FINISH_TOOL_NAME,
@@ -17,39 +14,24 @@ import {
   readFinishContent,
   type AgentToolSpec,
 } from './control-tools.js';
-import {
-  createFinalMessage,
-  createFinishReminder,
-  createHistoryMessages,
-  createSystemMessage,
-  getMessageText,
-  isAI,
-} from './messages.js';
-import { createChatModel, withTimeout } from './llm-client.js';
+import { createFinalMessage, stripThinkBlocks } from './messages.js';
+import { resolveChatModelSettings, type ChatModelSettings } from './llm-client.js';
+import { createModelAdapter } from './model-adapter.js';
 
 function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
   return {
     max_steps: Math.max(1, Math.min(Math.trunc(limits.max_steps || 1), 1000)),
     max_tool_calls: Math.max(0, Math.min(Math.trunc(limits.max_tool_calls ?? 0), 200)),
-    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 300000)),
+    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 3600000)),
   };
+}
+
+function normalizeTimeoutMs(timeoutMs: number) {
+  return Math.max(1000, Math.min(Math.trunc(timeoutMs || 15000), 3600000));
 }
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('Run cancelled');
-}
-
-function createModelTool(runtimeTool: AgentToolSpec) {
-  return tool(
-    async () => {
-      throw new Error(`Tool ${runtimeTool.name} is executed by the ReAct runtime loop.`);
-    },
-    {
-      name: runtimeTool.name,
-      description: runtimeTool.description,
-      schema: runtimeTool.schema,
-    },
-  );
 }
 
 function createToolErrorOutput(error: unknown, toolName: string) {
@@ -76,55 +58,95 @@ function toToolCallArgs(args: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
 }
 
+function createAgentStep(index: number, phase: AgentStepPhase): AgentStep {
+  return {
+    index,
+    phase,
+  };
+}
+
 export class ReActAgent {
-  async run({ input, history = [], eventBus, toolRegistry, context, limits: rawLimits }: AgentRunInput): Promise<AgentRunResult> {
-    if (!process.env.OPENAI_API_KEY) {
+  constructor(
+    private readonly config: {
+      getModelSettings?: () => Partial<ChatModelSettings>;
+    } = {},
+  ) {}
+
+  async run({
+    input,
+    attachments = [],
+    history = [],
+    eventBus,
+    toolRegistry,
+    context,
+    limits: rawLimits,
+    options: rawOptions = {},
+  }: AgentRunInput): Promise<AgentRunResult> {
+    const modelSettings = {
+      ...resolveChatModelSettings(this.config.getModelSettings?.()),
+      ...(rawOptions.reasoningEffort ? { reasoningEffort: rawOptions.reasoningEffort } : {}),
+    };
+    if (!modelSettings.apiKey) {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
     }
 
     const limits = normalizeLimits(rawLimits);
-    const model = createChatModel();
-    const timeoutMs = limits.timeout_ms;
+    const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
     const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
-    const tools = runtimeTools.map(createModelTool);
-    const modelWithTools = tools.length > 0 ? model.bindTools(tools) : model;
-    const messages: BaseMessage[] = [
-      createSystemMessage(runtimeTools, context),
-      ...createHistoryMessages(history),
-      new HumanMessage(input),
-    ];
+    const modelAdapter = createModelAdapter(modelSettings, runtimeTools);
+    const modelMessages = modelAdapter.createInitialState({
+      context,
+      history,
+      input,
+      attachments,
+      runtimeTools,
+    });
     let toolCalls = 0;
     let finalContent = '';
+    let finalContentStreamed = false;
     let hasObservation = false;
+    let finalReasoning = '';
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
       mode: 'react',
       planner: 'manual-model-loop',
-      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      model: modelSettings.model,
       tools: runtimeTools.map((tool) => tool.name),
     });
 
+    let currentStepIndex = 0;
+
     for (let step = 0; step < limits.max_steps; step++) {
+      currentStepIndex = step + 1;
+      const reasonStep = createAgentStep(currentStepIndex, 'reason');
+      const actStep = createAgentStep(currentStepIndex, 'act');
       throwIfAborted(context.abortSignal);
-      eventBus.emit('agent.state', { state: 'reason' });
-      messages[0] = createSystemMessage(runtimeTools, context);
+      eventBus.emit('agent.state', { state: 'reason' }, { step: reasonStep });
 
-      const aiMessage = await withTimeout(modelWithTools.invoke(messages, { signal: context.abortSignal }), timeoutMs, context.abortSignal);
+      const stepResult = await modelAdapter.streamStep({
+        eventBus,
+        input,
+        attachments,
+        context,
+        history,
+        messages: modelMessages,
+        runtimeTools,
+        showRawReasoning: modelSettings.showRawReasoning,
+        step: reasonStep,
+        signal: context.abortSignal,
+        timeoutMs,
+      });
       throwIfAborted(context.abortSignal);
-      messages.push(aiMessage);
 
-      const calls = isAI(aiMessage) ? aiMessage.tool_calls || [] : [];
+      const calls = stepResult.toolCalls;
       if (calls.length === 0) {
-        const content = getMessageText(aiMessage).trim();
-        if (!hasObservation) {
-          finalContent = content || '我暂时没有更多可补充的信息。';
-          break;
-        }
-
-        messages.push(createFinishReminder(aiMessage));
-        continue;
+        const content = stripThinkBlocks(stepResult.content);
+        finalContent = content || '我暂时没有更多可补充的信息。';
+        finalReasoning = stepResult.reasoning;
+        finalContentStreamed = stepResult.contentStreamed;
+        break;
       }
 
       const callEntries = calls.map((call) => ({
@@ -143,14 +165,15 @@ export class ReActAgent {
           message: {
             id: messageId(),
             role: 'assistant',
-            content: getMessageText(aiMessage).trim(),
+            content: stripThinkBlocks(stepResult.content),
             created_at: now(),
+            ...(stepResult.reasoning.trim() ? { reasoning: stepResult.reasoning.trim() } : {}),
             tool_calls: persistedToolCalls,
           },
-        });
+        }, { step: reasonStep });
       }
 
-      eventBus.emit('agent.state', { state: 'act' });
+      eventBus.emit('agent.state', { state: 'act' }, { step: actStep });
       for (const { call, callId } of callEntries) {
         throwIfAborted(context.abortSignal);
         const isFinishCall = call.name === FINISH_TOOL_NAME;
@@ -167,12 +190,13 @@ export class ReActAgent {
           input: call.args || {},
           risk: runtimeTool?.risk || 'safe',
           source: runtimeTool?.source || { type: 'local' },
-        });
+        }, { step: actStep });
 
         const startedAt = Date.now();
         try {
           if (isFinishCall) {
-            finalContent = readFinishContent(call.args || {});
+            finalContent = stripThinkBlocks(readFinishContent(call.args || {}));
+            finalReasoning = stepResult.reasoning;
             const output = {
               status: 'finished',
               content: finalContent,
@@ -183,20 +207,27 @@ export class ReActAgent {
               status: 'ok',
               duration_ms: Date.now() - startedAt,
               output,
+            }, { step: actStep });
+            modelAdapter.appendToolResult(modelMessages, {
+              callId,
+              name: call.name,
+              output,
             });
-            messages.push(
-              new ToolMessage({
-                content: JSON.stringify(output),
-                tool_call_id: callId,
-              }),
-            );
             break;
           }
 
           const output =
             call.name === ASK_USER_TOOL_NAME
               ? await this.askUser(call.args || {}, callId, context)
-              : await toolRegistry.execute(call.name, call.args || {}, context);
+              : await toolRegistry.execute(call.name, call.args || {}, {
+                  ...context,
+                  currentToolCall: {
+                    callId,
+                    tool: call.name,
+                    input: toToolCallArgs(call.args),
+                    risk: runtimeTool?.risk || 'safe',
+                  },
+                });
           throwIfAborted(context.abortSignal);
           hasObservation = true;
 
@@ -205,7 +236,7 @@ export class ReActAgent {
             status: 'ok',
             duration_ms: Date.now() - startedAt,
             output,
-          });
+          }, { step: actStep });
           if (!isControlCall) {
             eventBus.emit('agent.message.done', {
               message: {
@@ -217,14 +248,13 @@ export class ReActAgent {
                 name: call.name,
                 status: 'success',
               },
-            });
+            }, { step: actStep });
           }
-          messages.push(
-            new ToolMessage({
-              content: JSON.stringify(output),
-              tool_call_id: callId,
-            }),
-          );
+          modelAdapter.appendToolResult(modelMessages, {
+            callId,
+            name: call.name,
+            output,
+          });
         } catch (error) {
           throwIfAborted(context.abortSignal);
           const output = createToolErrorOutput(error, call.name);
@@ -233,7 +263,7 @@ export class ReActAgent {
             status: 'error',
             duration_ms: Date.now() - startedAt,
             output,
-          });
+          }, { step: actStep });
           if (!isControlCall) {
             eventBus.emit('agent.message.done', {
               message: {
@@ -245,15 +275,14 @@ export class ReActAgent {
                 name: call.name,
                 status: 'error',
               },
-            });
+            }, { step: actStep });
           }
-          messages.push(
-            new ToolMessage({
-              content: JSON.stringify(output),
-              tool_call_id: callId,
-              status: 'error',
-            }),
-          );
+          modelAdapter.appendToolResult(modelMessages, {
+            callId,
+            name: call.name,
+            output,
+            status: 'error',
+          });
         }
       }
 
@@ -265,10 +294,11 @@ export class ReActAgent {
     }
 
     const content = finalContent;
-    const message = createFinalMessage(content);
-    eventBus.emit('agent.state', { state: 'respond' });
-    eventBus.emit('agent.message.delta', { content });
-    eventBus.emit('agent.message.done', { message });
+    const message = createFinalMessage(content, finalReasoning);
+    const respondStep = createAgentStep(currentStepIndex + 1, 'respond');
+    eventBus.emit('agent.state', { state: 'respond' }, { step: respondStep });
+    if (!finalContentStreamed) eventBus.emit('agent.message.delta', { channel: 'answer', content }, { step: respondStep });
+    eventBus.emit('agent.message.done', { message }, { step: respondStep });
 
     return { toolCalls, message };
   }

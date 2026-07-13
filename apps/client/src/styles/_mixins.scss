@@ -1,0 +1,46 @@
+@mixin inline-center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin icon-control($size, $radius: var(--radius-icon-button), $background: transparent, $color: var(--ink-soft)) {
+  @include inline-center;
+  width: $size;
+  min-width: $size;
+  height: $size;
+  padding: 0;
+  border-radius: $radius;
+  color: $color;
+  background: $background;
+}
+
+@mixin button-control($height: 30px, $radius: 7px, $padding: 0 10px, $background: transparent, $color: var(--ink-soft)) {
+  @include inline-center;
+  min-width: 0;
+  height: $height;
+  gap: 6px;
+  padding: $padding;
+  border-radius: $radius;
+  color: $color;
+  background: $background;
+}
+
+@mixin text-control($height: 30px, $radius: 7px, $background: var(--surface-input)) {
+  width: 100%;
+  min-width: 0;
+  height: $height;
+  border: 1px solid var(--border-control);
+  border-radius: $radius;
+  outline: 0;
+  padding: 0 9px;
+  color: var(--ink);
+  background: $background;
+}
+
+@mixin focus-ring($border-color: var(--focus-control-border), $ring: var(--focus-control-ring)) {
+  border-color: $border-color;
+  box-shadow: 0 0 0 3px $ring;
+}
+
+

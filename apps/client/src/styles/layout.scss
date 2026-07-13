@@ -1,0 +1,193 @@
+@use './mixins' as *;
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-app);
+}
+
+.shell.trace-collapsed {
+  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 0 0;
+}
+
+.shell.sidebar-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+}
+
+.shell.sidebar-collapsed.trace-collapsed {
+  grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
+}
+
+.sidebar,
+.workspace,
+.topbar {
+  background: var(--surface-glass);
+  border-color: var(--line);
+}
+
+.sidebar-host {
+  display: contents;
+}
+
+.sidebar {
+  container-type: inline-size;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface-glass);
+}
+
+.sidebar-resizer,
+.workspace-resizer {
+  position: relative;
+  z-index: 2;
+  min-width: 2px;
+  cursor: col-resize;
+  color: var(--text-primary);
+}
+
+.sidebar-resizer::before,
+.workspace-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  content: "";
+  background: transparent;
+  transition: background 0.14s ease;
+}
+
+.sidebar-resizer::before {
+  left: 0;
+}
+
+.workspace-resizer::before {
+  right: 0;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus-visible::before,
+.sidebar-resizing .sidebar-resizer::before,
+.workspace-resizer:hover::before,
+.workspace-resizer:focus-visible::before,
+.workspace-resizing .workspace-resizer::before {
+  background: var(--accent-resizer);
+}
+
+.trace-collapsed .workspace-resizer {
+  display: none;
+  pointer-events: none;
+}
+
+.trace-collapsed .workspace-resizer::before,
+.sidebar-collapsed .sidebar-resizer::before {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar {
+  border-right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-collapsed .sidebar-resizer {
+  min-width: 0;
+  pointer-events: none;
+}
+
+.sidebar-scrim {
+  display: none;
+}
+
+@media (min-width: 981px) {
+  .shell > .sidebar-host > .sidebar {
+    grid-column: 1;
+  }
+
+  .shell > .sidebar-resizer {
+    grid-column: 2;
+  }
+
+  .shell > .chat {
+    grid-column: 3;
+  }
+
+  .shell > .workspace-resizer {
+    grid-column: 4;
+  }
+
+  .shell > .workspace {
+    grid-column: 5;
+  }
+
+  .sidebar-host.sidebar-preview {
+    position: fixed;
+    top: 56px;
+    left: 8px;
+    z-index: 30;
+    display: none;
+    width: min(var(--sidebar-width, 268px), calc(100vw - 16px));
+    height: min(520px, calc(100dvh - 64px));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-popover);
+    box-shadow: var(--shadow-menu);
+  }
+
+  .shell.sidebar-collapsed:has(
+    .sidebar-toggle:hover,
+    .sidebar-preview:hover,
+    .sidebar-preview:focus-within
+  ) .sidebar-preview,
+  body:has(.session-context-menu) .shell.sidebar-collapsed .sidebar-preview {
+    display: block;
+  }
+
+  .sidebar-preview::before {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    width: 60px;
+    height: 18px;
+    content: '';
+  }
+
+  .sidebar-preview .sidebar {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: inherit;
+    visibility: visible;
+    background: transparent;
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .shell,
+  .shell.trace-collapsed,
+  .shell.sidebar-collapsed,
+  .shell.sidebar-collapsed.trace-collapsed {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .sidebar-resizer,
+  .workspace-resizer {
+    display: none;
+  }
+
+}
+
+
+
+

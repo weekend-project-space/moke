@@ -7,12 +7,14 @@
     "dev": "npm run dev:server & npm run dev:client",
     "dev:client": "npm --prefix apps/client run dev -- --host 127.0.0.1",
     "dev:server": "tsx apps/server/server.ts",
-    "desktop": "npm run dev:server & npm --prefix apps/client run desktop",
+    "build:server": "node scripts/build-server-bundle.mjs",
+    "test:server": "tsx --test apps/server/**/*.test.ts packages/**/*.test.ts apps/client/src/**/*.test.ts",
+    "package:desktop": "node scripts/package-desktop.mjs",
+    "desktop": "npm --prefix apps/client run desktop",
     "build": "npm --prefix apps/client run build"
   },
   "dependencies": {
     "@langchain/core": "^1.1.48",
-    "@langchain/langgraph": "^1.3.5",
     "@langchain/openai": "^1.4.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "deepagents": "^1.10.2",

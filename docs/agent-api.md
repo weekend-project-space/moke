@@ -310,6 +310,7 @@ Future approval response:
   "type": "approve",
   "request_id": "apv_01",
   "decision": "rejected",
+  "scope": "session",
   "message": "Do not modify this file"
 }
 ```
@@ -519,13 +520,14 @@ timeout
 
 ### 6.8 approval.required
 
-Future event emitted when the Agent needs user approval before continuing. This is not part of the current MVP because write and dangerous tools are delayed until approval policy exists.
+Emitted when the Agent needs user approval before continuing. The first supported approval kind is workspace path access.
 
 ```json
 {
   "type": "approval.required",
   "payload": {
     "approval_id": "apv_01",
+    "kind": "tool",
     "reason": "Agent wants to modify files",
     "risk": "write",
     "action": {
@@ -537,6 +539,41 @@ Future event emitted when the Agent needs user approval before continuing. This 
   }
 }
 ```
+
+Workspace path approval:
+
+```json
+{
+  "type": "approval.required",
+  "payload": {
+    "approval_id": "apv_02",
+    "kind": "workspace_path",
+    "reason": "Command path requires approval: E:\\notes\\a.md",
+    "risk": "write",
+    "action": {
+      "tool": "write_file",
+      "input": {
+        "path": "E:\\notes\\a.md"
+      }
+    },
+    "path": "E:\\notes\\a.md",
+    "suggested_root": "E:\\notes",
+    "created_at": "2026-06-04T10:01:00Z"
+  }
+}
+```
+
+The client should keep `approval.required` in `eventTypes`; do not add a separate workspace event type. Use `payload.kind` to choose the UI copy and behavior.
+
+Approval scope:
+
+```txt
+once        allow only the current retry
+session     allow for the current server process
+persistent  allow across restarts by writing .moke/permissions.json
+```
+
+The current implementation treats `once` and `session` as in-memory permissions. Only `persistent` is stored.
 
 ### 6.9 ask_user.required
 
