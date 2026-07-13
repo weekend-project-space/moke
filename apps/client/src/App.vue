@@ -337,11 +337,13 @@ onUnmounted(() => {
   <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="Close chat list"
       @click="closeSidebar"></button>
-    <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
-      :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
-      :session-meta="sessionMeta"
-      @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
-      @pin-session="pinSession" @open-settings="openSettings" />
+    <div class="sidebar-host" :class="{ 'sidebar-preview': desktopLayout && sidebarCollapsed }">
+      <SidebarPanel :sessions="sortedSessions" :active-session-id="sessionId"
+        :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="showSettings" :session-label="sessionLabel"
+        :session-meta="sessionMeta"
+        @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
+        @pin-session="pinSession" @open-settings="openSettings" />
+    </div>
     <div
       class="sidebar-resizer"
       role="separator"
