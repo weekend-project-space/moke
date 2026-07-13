@@ -34,7 +34,7 @@
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  padding: 14px 10px;
+  padding: 0;
   border-right: 1px solid var(--line);
   background: var(--surface-glass);
 }
@@ -87,8 +87,6 @@
 }
 
 .sidebar-collapsed .sidebar {
-  padding-right: 0;
-  padding-left: 0;
   border-right: 0;
   visibility: hidden;
   pointer-events: none;
