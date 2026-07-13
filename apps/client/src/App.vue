@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ArrowDown, Clock3, SkipForward, X } from 'lucide-vue-next'
+import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ChatHeader from './components/ChatHeader.vue'
 import SettingsPage from './components/SettingsPage.vue'
@@ -126,7 +126,6 @@ const {
   queuedMessageCount,
   queuedMessageItems,
   queuedMessageLabel,
-  queuedMessagePreview,
   queuedStopRequested,
   removeAttachment,
   sendOnEnter,
@@ -418,13 +417,12 @@ onUnmounted(() => {
           <div
             v-if="queuedMessageCount"
             class="queued-message-panel"
-            :title="queuedMessagePreview"
+            :class="{ compact: queuedMessageCount === 1 }"
           >
-            <div class="queued-message-bar">
-              <Clock3 :size="14" stroke-width="2.2" />
+            <div v-if="queuedMessageCount > 1" class="queued-message-bar">
               <span>{{ queuedMessageLabel }}</span>
               <button type="button" :aria-label="uiText.composer.clearQueued" :title="uiText.composer.clearQueued" @click="cancelQueuedMessage">
-                <X :size="14" stroke-width="2.2" />
+                <Trash2 :size="14" stroke-width="2" />
               </button>
               <button
                 v-if="isRunning && !pendingAsk && !queuedStopRequested"
@@ -439,7 +437,15 @@ onUnmounted(() => {
             </div>
             <div class="queued-message-list" :aria-label="uiText.composer.queuedMessages">
               <div v-for="(item, index) in queuedMessageItems" :key="`${index}-${item.content}`" class="queued-message-item">
-                <span class="queued-message-text">{{ item.preview }}</span>
+                <span class="queued-message-order" :class="{ next: index === 0 }">
+                  {{ queuedMessageCount === 1 ? uiText.composer.next : index + 1 }}
+                </span>
+                <span class="queued-message-copy">
+                  <span class="queued-message-text">{{ item.preview }}</span>
+                  <small v-if="queuedStopRequested">{{ queuedMessageLabel }}</small>
+                  <small v-else-if="item.attachmentCount">{{ uiText.composer.queuedAttachments(item.attachmentCount) }}</small>
+                  <small v-else-if="index === 0 && queuedMessageCount > 1">{{ uiText.composer.next }}</small>
+                </span>
                 <button
                   type="button"
                   :aria-label="uiText.composer.removeQueued(index + 1)"
@@ -447,6 +453,16 @@ onUnmounted(() => {
                   @click="cancelQueuedMessageAt(index)"
                 >
                   <X :size="13" stroke-width="2.2" />
+                </button>
+                <button
+                  v-if="queuedMessageCount === 1 && isRunning && !pendingAsk && !queuedStopRequested"
+                  type="button"
+                  class="primary"
+                  :aria-label="uiText.composer.stopAndSendNext"
+                  :title="uiText.composer.stopAndSendNext"
+                  @click="stopAndSendQueuedMessage"
+                >
+                  <SkipForward :size="14" stroke-width="2.2" />
                 </button>
               </div>
             </div>

@@ -26,7 +26,19 @@ test('useChatComposer sends a queued message without discarding the current draf
   })
 
   composer.input.value = 'queued message'
+  composer.attachments.value = [{
+    id: 'image_1',
+    kind: 'image',
+    mime_type: 'image/png',
+    data_url: 'data:image/png;base64,AA==',
+  }]
   assert.equal(composer.queueCurrentInput(), true)
+  assert.deepEqual(composer.queuedMessageItems.value, [{
+    attachmentCount: 1,
+    content: 'queued message',
+    preview: 'queued message',
+  }])
+  assert.equal(composer.queuedMessageLabel.value, 'Next up')
   composer.input.value = 'draft in progress'
 
   isRunning.value = false

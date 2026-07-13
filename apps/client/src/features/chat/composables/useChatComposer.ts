@@ -38,17 +38,18 @@ export function useChatComposer(options: UseChatComposerOptions) {
   )
   const queuedMessageLabel = computed(() =>
     queue.stopRequested.value
-      ? uiText.composer.sendAfterStopping
-      : uiText.composer.queued(queue.count.value),
-  )
-  const queuedMessagePreview = computed(() =>
-    queue.messages.value.map((message, index) => `${index + 1}. ${draftPreview(message)}`).join('\n'),
+      ? uiText.composer.stoppingNext
+      : uiText.composer.nextUp(queue.count.value),
   )
   const queuedMessageItems = computed(() =>
-    queue.messages.value.map((message) => ({
-      content: draftPreview(message),
-      preview: draftPreview(message),
-    })),
+    queue.messages.value.map((message) => {
+      const preview = draftTextPreview(message)
+      return {
+        attachmentCount: message.attachments.length,
+        content: preview,
+        preview,
+      }
+    }),
   )
 
   async function resize() {
@@ -161,12 +162,9 @@ export function useChatComposer(options: UseChatComposerOptions) {
     attachments.value = attachments.value.filter((attachment) => attachment.id !== id)
   }
 
-  function draftPreview(message: QueuedMessage) {
-    const count = message.attachments.length
-    const imageLabel = count ? ` - ${count} image${count > 1 ? 's' : ''}` : ''
-    const text = message.content || 'Image'
-    const preview = text.length > 48 ? `${text.slice(0, 48)}...` : text
-    return `${preview}${imageLabel}`
+  function draftTextPreview(message: QueuedMessage) {
+    const text = message.content.trim() || uiText.composer.imageAttachment
+    return text.length > 120 ? `${text.slice(0, 120)}...` : text
   }
 
   return {
@@ -185,7 +183,6 @@ export function useChatComposer(options: UseChatComposerOptions) {
     queuedMessageCount: queue.count,
     queuedMessageItems,
     queuedMessageLabel,
-    queuedMessagePreview,
     queuedStopRequested: queue.stopRequested,
     removeAttachment,
     sendOnEnter,
