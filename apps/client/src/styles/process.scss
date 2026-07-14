@@ -6,10 +6,6 @@
   color: color-mix(in srgb, var(--ink-muted), transparent 10%);
   font-size: var(--font-size-body);
   line-height: 1.45;
-
-  &.error .process-toggle-label {
-    color: color-mix(in srgb, var(--ink-muted), transparent 4%);
-  }
 }
 
 .process-toggle {
@@ -20,23 +16,21 @@
   gap: 6px;
   padding: 2px 0;
   border-radius: 6px;
-  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  color: var(--ink);
   background: transparent;
   font-size: var(--font-size-body);
   font-weight: 400;
   text-align: left;
-  transition:
-    color 0.14s ease,
-    background 0.14s ease;
-
-  &:hover {
-    color: var(--ink-soft);
-    background: transparent;
-  }
 }
 
 .process-group.active .process-toggle {
   grid-template-columns: auto minmax(0, auto) auto;
+  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  opacity: 1;
+
+  &:hover {
+    color: var(--ink-soft);
+  }
 }
 
 .process-active-indicator {
@@ -84,7 +78,6 @@
 .process-toggle-label {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -105,7 +98,6 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--ink-muted), transparent 18%);
 }
 
 .process-list {
@@ -116,13 +108,28 @@
   border-left: 0;
 }
 
+.process-toggle,
+.process-tool-step-summary,
+.process-ask-summary {
+  opacity: 0.6;
+  transition: opacity 0.14s ease;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.process-toggle:focus-visible,
+.process-tool-step-summary:focus-visible {
+  opacity: 1;
+}
+
 .process-item {
   min-width: 0;
   color: var(--ink-soft);
 
   summary {
     display: flex;
-    gap: 1px;
     align-items: center;
     padding: 1px 0 2px;
     cursor: pointer;
@@ -184,13 +191,6 @@
   column-gap: 6px;
   align-items: center;
   color: var(--ink);
-  opacity: 0.6;
-  transition: opacity 0.14s ease;
-
-  &:hover,
-  &:focus-visible {
-    opacity: 1;
-  }
 
   .process-tool-title {
     flex: 0 1 auto;
@@ -210,7 +210,7 @@
   align-items: center;
   min-height: 28px;
   max-width: 100%;
-  color: color-mix(in srgb, var(--ink-muted), transparent 24%);
+  color: var(--ink);
 }
 
 .process-ask-icon {
@@ -219,11 +219,9 @@
   height: 17px;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
 }
 
 .process-ask-label {
-  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
   font-size: var(--font-size-code);
   font-weight: 450;
   white-space: nowrap;
@@ -234,7 +232,6 @@
   max-width: min(680px, 62%);
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--ink-soft);
   font-size: var(--font-size-caption);
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -260,7 +257,6 @@
 
 .process-ask-answer-separator {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--ink-muted), transparent 20%);
 }
 
 .process-ask-answer {
@@ -397,5 +393,3 @@
   line-height: 1.56;
   white-space: pre-wrap;
 }
-
-
