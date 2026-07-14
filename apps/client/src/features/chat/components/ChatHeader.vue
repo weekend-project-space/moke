@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PanelLeft, PanelRight, SquarePen } from 'lucide-vue-next'
 import { computed } from 'vue'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   title: string

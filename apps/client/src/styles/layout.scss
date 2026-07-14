@@ -2,7 +2,7 @@
 
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 2px var(--workspace-width, 560px);
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
@@ -14,7 +14,7 @@
 }
 
 .shell.sidebar-collapsed {
-  grid-template-columns: 0 0 minmax(420px, 1fr) 2px var(--workspace-width, 288px);
+  grid-template-columns: 0 0 minmax(420px, 1fr) 2px var(--workspace-width, 560px);
 }
 
 .shell.sidebar-collapsed.trace-collapsed {
@@ -106,16 +106,6 @@
 }
 
 @media (min-width: 981px) {
-  .shell.settings-view,
-  .shell.settings-view.trace-collapsed {
-    grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 0 0;
-  }
-
-  .shell.settings-view.sidebar-collapsed,
-  .shell.settings-view.sidebar-collapsed.trace-collapsed {
-    grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
-  }
-
   .shell > .sidebar-host > .sidebar {
     grid-column: 1;
   }
@@ -124,7 +114,7 @@
     grid-column: 2;
   }
 
-  .shell > .chat {
+  .shell > .workspace-layout-main {
     grid-column: 3;
   }
 
@@ -179,6 +169,13 @@
   }
 }
 
+.workspace-layout-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 @media (max-width: 980px) {
   .shell,
   .shell.trace-collapsed,
@@ -191,11 +188,15 @@
     overflow: hidden;
   }
 
+  .workspace-layout-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .sidebar-resizer,
   .workspace-resizer {
     display: none;
   }
-
 }
 
 

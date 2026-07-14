@@ -1,5 +1,6 @@
 export { default as ApprovalInlineBar } from './components/ApprovalInlineBar.vue'
 export { default as AskInlineBar } from './components/AskInlineBar.vue'
+export { default as ChatWorkspace } from './components/ChatWorkspace.vue'
 export { default as ComposerBox } from './components/ComposerBox.vue'
 export { default as ConversationView } from './components/ConversationView.vue'
 export { useAgentSession } from './composables/useAgentSession'

@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { ArrowLeft, BookOpenText, Bot, Boxes, Compass, FolderX, Plus, RotateCw, Save, SendHorizontal, ShieldCheck, Trash2 } from 'lucide-vue-next'
-import { computed, onMounted, reactive, ref, type Component } from 'vue'
+import { ArrowLeft, FolderX, Plus, RotateCw, Save, SendHorizontal, Trash2 } from 'lucide-vue-next'
+import { computed, onMounted, reactive, ref } from 'vue'
+import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import McpSettingsPanel from './McpSettingsPanel.vue'
+import SettingsSidebar from './SettingsSidebar.vue'
 import SkillSettingsPanel from './SkillSettingsPanel.vue'
 import {
   DEFAULT_BROWSER_PREFERENCES,
   loadBrowserPreferences,
   saveBrowserPreferences as persistBrowserPreferences,
   type BrowserLinkOpenMode,
-} from '../features/browser'
-import { uiText } from '../text/uiText'
+} from '../../browser'
+import { uiText } from '../../../text/uiText'
+import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
 
 type WorkspaceRootPermission = {
   path: string
@@ -35,8 +38,6 @@ type BrowserSettings = {
   linkOpenMode: BrowserLinkOpenMode
 }
 
-type SettingsTab = 'model' | 'mcp' | 'skills' | 'permissions' | 'browser'
-
 const props = defineProps<{
   apiBase: string
 }>()
@@ -49,15 +50,8 @@ const emit = defineEmits<{
 
 const MODEL_PROVIDER_MAX_RETRIES_MAX = 6
 const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
-const settingsTabs: Array<{ id: SettingsTab; label: string; icon: Component }> = [
-  { id: 'model', label: 'Model', icon: Bot },
-  { id: 'mcp', label: 'MCP', icon: Boxes },
-  { id: 'skills', label: 'Skills', icon: BookOpenText },
-  { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
-  { id: 'browser', label: 'Browser', icon: Compass },
-]
 const activeSettingsTab = ref<SettingsTab>('model')
-const activeSettingsItem = computed(() => settingsTabs.find((tab) => tab.id === activeSettingsTab.value) || settingsTabs[0])
+const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
 const skillSettingsDirty = ref(false)
 const activeProviderId = ref('')
 const selectedProviderId = ref('')
@@ -327,28 +321,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="settings-page">
-    <div class="settings-window">
-      <aside class="settings-navigation">
-        <div class="settings-navigation-header">
-          <h1>{{ uiText.app.settings }}</h1>
-        </div>
-        <nav aria-label="Settings sections">
-          <button
-            v-for="tab in settingsTabs"
-            :key="tab.id"
-            type="button"
-            :class="{ active: activeSettingsTab === tab.id }"
-            :aria-current="activeSettingsTab === tab.id ? 'page' : undefined"
-            @click="selectSettingsTab(tab.id)"
-          >
-            <component :is="tab.icon" :size="15" stroke-width="1.9" aria-hidden="true" />
-            <span>{{ tab.label }}</span>
-          </button>
-        </nav>
-      </aside>
+  <WorkspaceLayout class="settings-workspace-layout" sidebar-label="Resize settings navigation">
+    <template #sidebar>
+      <SettingsSidebar :active-tab="activeSettingsTab" @select="selectSettingsTab" />
+    </template>
 
-      <main class="settings-content">
+      <section class="settings-content">
         <header class="settings-content-header">
           <button
             type="button"
@@ -546,7 +524,6 @@ onMounted(() => {
       </div>
     </div>
         </div>
-      </main>
-    </div>
-  </section>
+      </section>
+  </WorkspaceLayout>
 </template>

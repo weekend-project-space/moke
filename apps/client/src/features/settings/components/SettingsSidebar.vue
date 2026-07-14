@@ -1,0 +1,33 @@
+<script setup lang="ts">
+import { uiText } from '../../../text/uiText'
+import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
+
+defineProps<{
+  activeTab: SettingsTab
+}>()
+
+const emit = defineEmits<{
+  select: [tab: SettingsTab]
+}>()
+</script>
+
+<template>
+  <aside class="settings-navigation">
+    <div class="settings-navigation-header">
+      <h1>{{ uiText.app.settings }}</h1>
+    </div>
+    <nav aria-label="Settings sections">
+      <button
+        v-for="item in settingsNavigationItems"
+        :key="item.id"
+        type="button"
+        :class="{ active: activeTab === item.id }"
+        :aria-current="activeTab === item.id ? 'page' : undefined"
+        @click="emit('select', item.id)"
+      >
+        <component :is="item.icon" :size="15" stroke-width="1.9" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+      </button>
+    </nav>
+  </aside>
+</template>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Archive, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import type { SessionSummary } from '../features/chat'
-import { uiText } from '../text/uiText'
+import type { SessionSummary } from '../model/conversation'
+import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
   sessions: SessionSummary[]

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CircleCheck, Plus, RotateCw, Save, Trash2 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 
 type SkillSummary = {
   id: string

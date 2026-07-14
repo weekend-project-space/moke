@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RotateCw, Save } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
-import { uiText } from '../text/uiText'
+import { uiText } from '../../../text/uiText'
 
 type McpServerSummary = {
   id: string

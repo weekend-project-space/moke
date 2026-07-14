@@ -3,6 +3,7 @@
   display: flex;
   min-height: 0;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   --content-width: min(728px, calc(100% - 48px));
   background: var(--surface-chat-panel);
