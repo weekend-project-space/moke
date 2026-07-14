@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createProcessGroupView, formatProcessGroupStatus } from './processDisplay'
+import { createProcessGroupView, formatProcessGroupStatus, resolveToolStepState } from './processDisplay'
 import type { ProcessItem, ToolStepViewItem } from './types'
 
 const group = {
@@ -93,4 +93,20 @@ test('process display attaches approval history to the original tool step', () =
   const step = createProcessGroupView(items).items[0] as ToolStepViewItem
 
   assert.deepEqual(step.approvals, [approval])
+  assert.deepEqual(step.state, { kind: 'approved', label: 'Allowed once' })
+})
+
+test('process display prioritizes rejection and execution failure states', () => {
+  const rejected = {
+    approval_id: 'approval_1',
+    kind: 'tool' as const,
+    decision: 'rejected' as const,
+    scope: 'once' as const,
+    reason: 'Run command',
+  }
+  const approved = { ...rejected, decision: 'approved' as const }
+
+  assert.deepEqual(resolveToolStepState('error', [rejected]), { kind: 'rejected', label: 'Rejected' })
+  assert.deepEqual(resolveToolStepState('error', [approved]), { kind: 'failed', label: 'Failed' })
+  assert.deepEqual(resolveToolStepState('error'), { kind: 'failed', label: 'Failed' })
 })

@@ -256,7 +256,7 @@ const tool = {
   approvalAllowedSession: 'Allowed for chat',
   approvalAllowedAlways: 'Always allowed',
   approvalRejected: 'Rejected',
-  json: 'JSON',
+  rawDetails: 'Raw details',
   commandNoOutput: 'Command produced no output',
   pageStructureCaptured: 'Page structure captured',
   runCommand: 'Run command',

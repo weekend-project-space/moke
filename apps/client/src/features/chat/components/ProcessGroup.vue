@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { BrainCircuit, Check, ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, ShieldCheck, ShieldX, Terminal } from 'lucide-vue-next'
+import { BrainCircuit, Check, CircleX, ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, ShieldCheck, ShieldX, Terminal } from 'lucide-vue-next'
 import type { ToolCategory, ProcessViewItem } from '../presentation/types'
 import ToolStepDetails from './ToolStepDetails.vue'
 import { uiText } from '../../../text/uiText'
@@ -23,18 +23,6 @@ function iconKind(step: { toolCategory: ToolCategory }) {
   return step.toolCategory
 }
 
-function approvalStatus(step: Extract<ProcessViewItem, { kind: 'tool-step' }>) {
-  const approval = latestApproval(step)
-  if (!approval) return ''
-  if (approval.decision === 'rejected') return uiText.tool.approvalRejected
-  if (approval.scope === 'persistent') return uiText.tool.approvalAllowedAlways
-  if (approval.scope === 'session') return uiText.tool.approvalAllowedSession
-  return uiText.tool.approvalAllowedOnce
-}
-
-function latestApproval(step: Extract<ProcessViewItem, { kind: 'tool-step' }>) {
-  return step.approvals?.at(-1)
-}
 </script>
 
 <template>
@@ -61,7 +49,7 @@ function latestApproval(step: Extract<ProcessViewItem, { kind: 'tool-step' }>) {
         >
           <div class="process-ask-summary">
             <span class="process-ask-icon" aria-hidden="true">
-              <Check :size="14" stroke-width="2.2" />
+              <Check :size="14" stroke-width="2" />
             </span>
             <span class="process-ask-label">{{ uiText.tool.userInput }}</span>
             <span class="process-tool-separator" aria-hidden="true">·</span>
@@ -69,10 +57,14 @@ function latestApproval(step: Extract<ProcessViewItem, { kind: 'tool-step' }>) {
               {{ processItem.summary.question || processItem.objectLabel }}
             </small>
             <span
-              v-if="processItem.summary.selectedLabel"
+              v-if="processItem.state?.kind === 'failed' || processItem.summary.selectedLabel"
               class="process-ask-selection"
-              :title="processItem.summary.selectedLabel"
-            >{{ processItem.summary.selectedLabel }}</span>
+              :class="processItem.state?.kind"
+              :title="processItem.state?.label || processItem.summary.selectedLabel"
+            >
+              <span class="process-ask-answer-separator" aria-hidden="true">→</span>
+              <span class="process-ask-answer">{{ processItem.state?.label || processItem.summary.selectedLabel }}</span>
+            </span>
           </div>
         </div>
       <details
@@ -109,16 +101,16 @@ function latestApproval(step: Extract<ProcessViewItem, { kind: 'tool-step' }>) {
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
           <span
-            v-if="approvalStatus(processItem)"
-            class="process-approval-status"
-            :class="latestApproval(processItem)?.decision"
-            :title="approvalStatus(processItem)"
+            v-if="processItem.state"
+            class="process-tool-state"
+            :class="processItem.state.kind"
+            :title="processItem.state.label"
           >
-            <ShieldCheck v-if="latestApproval(processItem)?.decision === 'approved'" :size="13" stroke-width="1.9" />
-            <ShieldX v-else :size="13" stroke-width="1.9" />
-            <span>{{ approvalStatus(processItem) }}</span>
+            <ShieldCheck v-if="processItem.state.kind === 'approved'" :size="13" stroke-width="1.9" />
+            <ShieldX v-else-if="processItem.state.kind === 'rejected'" :size="13" stroke-width="1.9" />
+            <CircleX v-else :size="13" stroke-width="1.9" />
+            <span>{{ processItem.state.label }}</span>
           </span>
-          <span v-else-if="processItem.tone === 'error'" class="process-tool-status">{{ uiText.process.failed }}</span>
           <span class="process-step-caret" aria-hidden="true">
             <ChevronRight class="when-closed" :size="15" stroke-width="2" />
             <ChevronDown class="when-open" :size="15" stroke-width="2" />

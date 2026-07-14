@@ -5,7 +5,9 @@ import type {
   ToolRendererKind,
   ToolStepSummary,
   ToolStepViewItem,
+  ToolStepState,
 } from './types'
+import type { ToolApprovalRecord } from '../model/conversation'
 import { summarizeOutput } from './toolDisplay'
 import { uiText } from '../../../text/uiText'
 
@@ -75,6 +77,7 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
         }
         step.objectLabel = combineToolStepDetail(step.objectLabel, item.raw, item.tone)
         step.approvals = item.approvals
+        step.state = resolveToolStepState(item.tone, item.approvals)
         if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
         if (lastPendingCall === call) lastPendingCall = null
         continue
@@ -122,7 +125,30 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     toolCategory: call.toolCategory || 'run',
     inputRaw: call.raw,
     approvals: call.approvals,
+    state: resolveToolStepState(call.tone, call.approvals),
   }
+}
+
+export function resolveToolStepState(
+  tone: ProcessItem['tone'],
+  approvals: ToolApprovalRecord[] = [],
+): ToolStepState | undefined {
+  const approval = approvals.at(-1)
+  if (approval?.decision === 'rejected') {
+    return { kind: 'rejected', label: uiText.tool.approvalRejected }
+  }
+  if (tone === 'error') {
+    return { kind: 'failed', label: uiText.process.failed }
+  }
+  if (approval?.decision === 'approved') {
+    const label = approval.scope === 'persistent'
+      ? uiText.tool.approvalAllowedAlways
+      : approval.scope === 'session'
+        ? uiText.tool.approvalAllowedSession
+        : uiText.tool.approvalAllowedOnce
+    return { kind: 'approved', label }
+  }
+  return undefined
 }
 
 function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | undefined): ToolStepSummary {

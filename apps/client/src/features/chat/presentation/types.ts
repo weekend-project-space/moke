@@ -3,6 +3,10 @@ import type { Message, ToolApprovalRecord } from '../model/conversation'
 export type ProcessTone = 'neutral' | 'error' | 'ask'
 export type ToolCategory = 'view' | 'change' | 'run'
 export type ToolRendererKind = 'file-read' | 'file-change' | 'directory' | 'search' | 'command' | 'browser' | 'ask-user' | 'generic'
+export type ToolStepState = {
+  kind: 'approved' | 'rejected' | 'failed'
+  label: string
+}
 
 export type ToolStepSummary = {
   command?: string
@@ -63,6 +67,7 @@ export type ToolStepViewItem = {
   inputRaw?: string
   outputRaw?: string
   approvals?: ToolApprovalRecord[]
+  state?: ToolStepState
 }
 
 export type ProcessViewItem = ProcessItem | ToolStepViewItem

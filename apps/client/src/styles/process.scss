@@ -2,7 +2,7 @@
   align-self: center;
   width: var(--content-width);
   max-width: min(var(--content-width), calc(100% - 24px));
-  padding: 3px 0 5px;
+  padding: 3px 0 1px;
   color: color-mix(in srgb, var(--ink-muted), transparent 10%);
   font-size: var(--font-size-body);
   line-height: 1.45;
@@ -94,7 +94,7 @@
   align-self: center;
   width: var(--content-width);
   max-width: min(var(--content-width), calc(100% - 24px));
-  margin: 6px 0 10px;
+  margin: 2px 0 8px;
   border-top: 1px solid var(--line-divider);
 }
 
@@ -130,17 +130,6 @@
 
     &::-webkit-details-marker {
       display: none;
-    }
-  }
-
-  &:not(.error):hover {
-    .process-tool-icon,
-    .process-tool-title,
-    .process-tool-separator,
-    .process-tool-detail,
-    .process-reasoning-icon,
-    .process-reasoning-title {
-      color: var(--ink);
     }
   }
 
@@ -187,16 +176,6 @@
     }
   }
 
-  &.error {
-    .process-tool-title,
-    .process-tool-detail {
-      color: color-mix(in srgb, var(--danger), var(--ink-muted) 30%);
-    }
-
-    .process-tool-icon {
-      color: color-mix(in srgb, var(--danger), var(--ink-muted) 38%);
-    }
-  }
 }
 
 .process-tool-step-summary {
@@ -204,6 +183,14 @@
   max-width: 100%;
   column-gap: 6px;
   align-items: center;
+  color: var(--ink);
+  opacity: 0.6;
+  transition: opacity 0.14s ease;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
 
   .process-tool-title {
     flex: 0 1 auto;
@@ -223,6 +210,7 @@
   align-items: center;
   min-height: 28px;
   max-width: 100%;
+  color: color-mix(in srgb, var(--ink-muted), transparent 24%);
 }
 
 .process-ask-icon {
@@ -231,13 +219,13 @@
   height: 17px;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--accent-strong), var(--ink-muted) 35%);
+  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
 }
 
 .process-ask-label {
-  color: var(--ink-soft);
+  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
   font-size: var(--font-size-code);
-  font-weight: 520;
+  font-weight: 450;
   white-space: nowrap;
 }
 
@@ -246,7 +234,7 @@
   max-width: min(680px, 62%);
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--ink-muted);
+  color: var(--ink-soft);
   font-size: var(--font-size-caption);
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -259,13 +247,26 @@
   max-width: min(240px, 34vw);
   flex: 0 1 auto;
   align-items: center;
+  gap: 5px;
   color: var(--accent-strong);
   font-size: var(--font-size-caption);
-  font-weight: 560;
+  font-weight: 500;
+  white-space: nowrap;
 
+  &.failed {
+    color: color-mix(in srgb, var(--danger), var(--ink-muted) 35%);
+  }
+}
+
+.process-ask-answer-separator {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--ink-muted), transparent 20%);
+}
+
+.process-ask-answer {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 680px) {
@@ -315,6 +316,9 @@
   height: 15px;
   align-items: center;
   justify-content: center;
+}
+
+.tool-detail-raw-caret {
   color: color-mix(in srgb, var(--ink-muted), transparent 22%);
 }
 
@@ -334,28 +338,16 @@
   height: 15px;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
 }
 
 .process-tool-title {
   min-width: 0;
-  color: color-mix(in srgb, var(--ink-muted), transparent 6%);
   font-size: var(--font-size-body);
   font-weight: 430;
   line-height: 1.5;
 }
 
-.process-tool-status {
-  padding: 0 4px;
-  border-radius: 4px;
-  color: color-mix(in srgb, var(--danger), var(--ink-muted) 34%);
-  background: var(--surface-danger-faint);
-  font-size: var(--font-size-body);
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.process-approval-status {
+.process-tool-state {
   display: inline-flex;
   min-width: 0;
   flex: 0 0 auto;
@@ -367,13 +359,13 @@
   line-height: 1.4;
   white-space: nowrap;
 
-  &.rejected {
+  &.rejected,
+  &.failed {
     color: color-mix(in srgb, var(--danger), var(--ink-muted) 35%);
   }
 }
 
 .process-tool-separator {
-  color: color-mix(in srgb, var(--ink-muted), transparent 24%);
   font-size: var(--font-size-body);
   line-height: 1.5;
 }
@@ -381,7 +373,6 @@
 .process-tool-detail {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: 1.5;
@@ -390,7 +381,7 @@
 }
 
 @media (max-width: 680px) {
-  .process-approval-status > span {
+  .process-tool-state > span {
     display: none;
   }
 }
