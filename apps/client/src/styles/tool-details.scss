@@ -5,6 +5,34 @@
   margin: 5px 0 8px 18px;
 }
 
+.tool-approval-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+
+  > div {
+    display: inline-flex;
+    min-height: 26px;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+    color: var(--ink-muted);
+    background: var(--surface-control);
+    font-size: var(--font-size-code);
+  }
+
+  .approved {
+    color: var(--accent-strong);
+  }
+
+  .rejected {
+    color: var(--danger-ink, var(--ink-muted));
+  }
+}
+
 .tool-detail-note {
   margin: 0;
   color: color-mix(in srgb, var(--ink-muted), var(--ink) 10%);

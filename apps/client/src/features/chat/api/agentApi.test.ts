@@ -29,11 +29,16 @@ test('agentApi sends a typed message request and normalizes the run response', a
 })
 
 test('agentApi reports non-success responses consistently', async () => {
-  const fetcher = (async () => new Response('{}', { status: 503 })) as typeof fetch
+  const fetcher = (async () => new Response(JSON.stringify({
+    error: { code: 'ASK_NOT_PENDING', message: 'Run is not waiting for this answer' },
+  }), { status: 409 })) as typeof fetch
   const api = createAgentApi('', fetcher)
 
   await assert.rejects(
     api.listSessions(),
-    (error: unknown) => error instanceof AgentApiError && error.status === 503,
+    (error: unknown) => error instanceof AgentApiError
+      && error.status === 409
+      && error.code === 'ASK_NOT_PENDING'
+      && error.message === 'Run is not waiting for this answer',
   )
 })

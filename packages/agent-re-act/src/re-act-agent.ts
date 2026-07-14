@@ -58,6 +58,10 @@ function toToolCallArgs(args: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
 }
 
+export function shouldPersistToolMessages(name: string) {
+  return name !== FINISH_TOOL_NAME;
+}
+
 function createAgentStep(index: number, phase: AgentStepPhase): AgentStep {
   return {
     index,
@@ -154,7 +158,7 @@ export class ReActAgent {
         callId: call.id || `call_${randomUUID().slice(0, 8)}`,
       }));
       const persistedToolCalls: ToolCall[] = callEntries
-        .filter(({ call }) => !isControlTool(call.name))
+        .filter(({ call }) => shouldPersistToolMessages(call.name))
         .map(({ call, callId }) => ({
           id: callId,
           name: call.name,
@@ -178,6 +182,7 @@ export class ReActAgent {
         throwIfAborted(context.abortSignal);
         const isFinishCall = call.name === FINISH_TOOL_NAME;
         const isControlCall = isControlTool(call.name);
+        const persistsToolMessages = shouldPersistToolMessages(call.name);
         if (!isControlCall && toolCalls >= limits.max_tool_calls) {
           throw new Error('Maximum tool calls exceeded');
         }
@@ -230,6 +235,7 @@ export class ReActAgent {
                 });
           throwIfAborted(context.abortSignal);
           hasObservation = true;
+          const approvals = context.consumeApprovals?.(callId) || [];
 
           eventBus.emit('tool.result', {
             call_id: callId,
@@ -237,7 +243,7 @@ export class ReActAgent {
             duration_ms: Date.now() - startedAt,
             output,
           }, { step: actStep });
-          if (!isControlCall) {
+          if (persistsToolMessages) {
             eventBus.emit('agent.message.done', {
               message: {
                 id: messageId(),
@@ -247,6 +253,7 @@ export class ReActAgent {
                 tool_call_id: callId,
                 name: call.name,
                 status: 'success',
+                ...(approvals.length ? { approvals } : {}),
               },
             }, { step: actStep });
           }
@@ -258,13 +265,14 @@ export class ReActAgent {
         } catch (error) {
           throwIfAborted(context.abortSignal);
           const output = createToolErrorOutput(error, call.name);
+          const approvals = context.consumeApprovals?.(callId) || [];
           eventBus.emit('tool.result', {
             call_id: callId,
             status: 'error',
             duration_ms: Date.now() - startedAt,
             output,
           }, { step: actStep });
-          if (!isControlCall) {
+          if (persistsToolMessages) {
             eventBus.emit('agent.message.done', {
               message: {
                 id: messageId(),
@@ -274,6 +282,7 @@ export class ReActAgent {
                 tool_call_id: callId,
                 name: call.name,
                 status: 'error',
+                ...(approvals.length ? { approvals } : {}),
               },
             }, { step: actStep });
           }

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatProcessGroupStatus } from './processDisplay'
+import { createProcessGroupView, formatProcessGroupStatus } from './processDisplay'
+import type { ProcessItem, ToolStepViewItem } from './types'
 
 const group = {
   label: 'Process details',
@@ -20,4 +21,76 @@ test('formatProcessGroupStatus distinguishes active and completed work', () => {
     durationLabel: '3s',
     label: 'Processed · 3s',
   })
+})
+
+test('process display restores an answered ask_user tool step', () => {
+  const items: ProcessItem[] = [
+    {
+      id: 'ask-call',
+      kind: 'tool-call',
+      title: 'ask_user',
+      detail: 'Which side?',
+      tone: 'neutral',
+      actionLabel: 'User input',
+      objectLabel: 'Which side?',
+      renderer: 'ask-user',
+      summary: { question: 'Which side?' },
+      toolCategory: 'run',
+      toolCallId: 'call_1',
+    },
+    {
+      id: 'ask-result',
+      kind: 'tool-result',
+      title: 'ask_user',
+      detail: 'Frontend',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({
+        question: 'Which side?',
+        selected: { id: 'frontend', label: 'Frontend' },
+        status: 'answered',
+      }),
+    },
+  ]
+
+  const step = createProcessGroupView(items).items[0] as ToolStepViewItem
+
+  assert.equal(step.kind, 'tool-step')
+  assert.equal(step.renderer, 'ask-user')
+  assert.equal(step.summary.question, 'Which side?')
+  assert.equal(step.summary.selectedLabel, 'Frontend')
+})
+
+test('process display attaches approval history to the original tool step', () => {
+  const approval = {
+    approval_id: 'approval_1',
+    kind: 'tool' as const,
+    decision: 'approved' as const,
+    scope: 'once' as const,
+    reason: 'Run command',
+  }
+  const items: ProcessItem[] = [
+    {
+      id: 'execute-call',
+      kind: 'tool-call',
+      title: 'execute',
+      detail: 'npm test',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+    },
+    {
+      id: 'execute-result',
+      kind: 'tool-result',
+      title: 'execute',
+      detail: 'Done',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: '{}',
+      approvals: [approval],
+    },
+  ]
+
+  const step = createProcessGroupView(items).items[0] as ToolStepViewItem
+
+  assert.deepEqual(step.approvals, [approval])
 })

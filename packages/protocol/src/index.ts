@@ -65,6 +65,14 @@ export type AssistantMessage = {
   tool_calls?: ToolCall[];
 };
 
+export type ToolApprovalRecord = {
+  approval_id: string;
+  kind: 'workspace_path' | 'tool';
+  decision: 'approved' | 'rejected';
+  scope: 'once' | 'session' | 'persistent';
+  reason: string;
+};
+
 export type ToolMessage = {
   id: string;
   role: 'tool';
@@ -73,6 +81,7 @@ export type ToolMessage = {
   tool_call_id: string;
   name: string;
   status?: 'success' | 'error';
+  approvals?: ToolApprovalRecord[];
 };
 
 export type Message = UserMessage | AssistantMessage | ToolMessage;
@@ -106,6 +115,7 @@ export type PendingAsk = {
 
 export type PendingApproval = {
   approval_id: string;
+  call_id?: string;
   kind: 'workspace_path' | 'tool';
   reason: string;
   risk: RiskLevel;
@@ -173,7 +183,20 @@ export type AgentEventPayloadMap = {
     output: unknown;
   };
   'ask_user.required': PendingAsk;
+  'ask_user.answered': {
+    ask_id: string;
+    call_id: string;
+    selected: {
+      id: string;
+      label: string;
+    };
+  };
   'approval.required': PendingApproval;
+  'approval.resolved': {
+    approval_id: string;
+    decision: 'approved' | 'rejected';
+    scope: 'once' | 'session' | 'persistent';
+  };
   'agent.done': {
     status: RunStatus;
     usage?: {

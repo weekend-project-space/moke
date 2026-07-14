@@ -59,7 +59,6 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
-let clearComposerDraft: () => void = () => undefined
 let sendNextQueuedMessage: () => Promise<void> = async () => undefined
 const {
   cancelRun,
@@ -71,6 +70,8 @@ const {
   events,
   forkSession,
   isRunning,
+  isSubmittingApproval,
+  isSubmittingAsk,
   loadActiveRuns,
   loadSessions,
   messages,
@@ -92,9 +93,6 @@ const {
 } = useAgentSession({
   apiBase,
   isFinalAssistantMessage,
-  onAskUserRequired: () => {
-    clearComposerDraft()
-  },
   onMessagesLoaded: async () => {
     resizeComposer()
   },
@@ -116,7 +114,6 @@ const {
   attachments,
   cancelQueuedMessage,
   cancelQueuedMessageAt,
-  clearDraft,
   clearQueuedMessages,
   handleInput,
   handlePrimaryAction,
@@ -143,7 +140,6 @@ const {
   serverStatus,
   sessionId,
 })
-clearComposerDraft = clearDraft
 sendNextQueuedMessage = sendQueuedMessageIfReady
 const {
   disposeBrowserWorkspace,
@@ -228,6 +224,8 @@ const {
   isRunning,
   runtimeNow,
   runError,
+  pendingAsk,
+  pendingApproval,
   processCollapsed,
   toolLabels,
   formatTimelineTime,
@@ -411,9 +409,15 @@ onUnmounted(() => {
           <ApprovalInlineBar
             v-if="pendingApproval"
             :approval="pendingApproval"
+            :submitting="isSubmittingApproval"
             @approve="decideApproval($event.decision, $event.scope)"
           />
-          <AskInlineBar v-if="pendingAsk" :ask="pendingAsk" @select="selectAskOption" />
+          <AskInlineBar
+            v-if="pendingAsk"
+            :ask="pendingAsk"
+            :submitting="isSubmittingAsk"
+            @select="selectAskOption"
+          />
           <div
             v-if="queuedMessageCount"
             class="queued-message-panel"

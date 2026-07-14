@@ -8,6 +8,7 @@ import type {
   ReasoningEffort as ProtocolReasoningEffort,
   SessionSummary as ProtocolSessionSummary,
   ToolCall as ProtocolToolCall,
+  ToolApprovalRecord as ProtocolToolApprovalRecord,
 } from '../../../../../../packages/protocol/src/index'
 
 export type AgentEvent = ProtocolAgentEvent
@@ -18,6 +19,7 @@ export type ImageAttachment = ProtocolImageAttachment
 export type SessionSummary = ProtocolSessionSummary
 export type PendingAsk = ProtocolPendingAsk
 export type PendingApproval = ProtocolPendingApproval
+export type ToolApprovalRecord = ProtocolToolApprovalRecord
 export type AskOption = PendingAsk['options'][number]
 
 type BaseMessage = {
@@ -57,6 +59,7 @@ export type ToolMessage = BaseMessage & {
   tool_call_id?: string
   name?: string
   status?: 'success' | 'error'
+  approvals?: ToolApprovalRecord[]
 }
 
 export type Message = UserMessage | AssistantMessage | ToolMessage

@@ -1,15 +1,15 @@
-import type { AgentEvent, Message, PendingAsk } from './conversation'
+import type { AgentEvent, Message } from './conversation'
 import {
   awaitRunApproval,
   awaitRunUser,
   finishRunState,
+  resumeRun,
   type SessionRunState,
 } from './runState'
 
 export type RunEventEffects = {
   answerDelta?: string
   message?: Message
-  ask?: PendingAsk
   finish: boolean
 }
 
@@ -48,7 +48,18 @@ export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEv
     awaitRunApproval(nextState, event.payload)
   } else if (event.type === 'ask_user.required') {
     awaitRunUser(nextState, event.payload)
-    effects.ask = event.payload
+  } else if (
+    event.type === 'ask_user.answered'
+    && nextState.lifecycle.status === 'awaiting-user'
+    && nextState.lifecycle.ask.ask_id === event.payload.ask_id
+  ) {
+    resumeRun(nextState)
+  } else if (
+    event.type === 'approval.resolved'
+    && nextState.lifecycle.status === 'awaiting-approval'
+    && nextState.lifecycle.approval.approval_id === event.payload.approval_id
+  ) {
+    resumeRun(nextState)
   } else if (event.type === 'agent.message.done') {
     effects.message = event.payload.message
   } else if (event.type === 'agent.done' || event.type === 'agent.error') {

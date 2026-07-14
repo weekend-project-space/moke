@@ -515,10 +515,15 @@
   overflow-wrap: anywhere;
 }
 
-.ask-inline-options button:hover {
+.ask-inline-options button:not(:disabled):hover {
   color: var(--accent-strong);
   border-color: var(--border-focus);
   background: var(--accent-faint);
+}
+
+.ask-inline-options button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .composer button {

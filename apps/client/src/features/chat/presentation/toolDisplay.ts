@@ -92,9 +92,13 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
   const value = firstString(args, ['value'])
   const key = firstString(args, ['key'])
   const selector = firstString(args, ['selector'])
+  const question = firstString(args, ['question'])
   let objectLabel = name
 
   switch (name) {
+    case 'ask_user':
+      objectLabel = shortText(question || uiText.tool.userInput, 96)
+      break
     case 'apply_patch':
       objectLabel = path ? shortText(path, 88) : uiText.tool.applyPatchFallback
       break
@@ -219,6 +223,7 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
       url,
       uid,
       value: text || value || key,
+      question,
     },
     toolCategory: descriptor.category,
   }
@@ -266,6 +271,7 @@ function changeActionLabel(name: string) {
 }
 
 function runActionLabel(name: string) {
+  if (name === 'ask_user') return uiText.tool.userInput
   if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return uiText.tool.runCommand
   if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return uiText.tool.runSearch
   if (name === 'evaluate_script') return uiText.tool.runScript
@@ -274,6 +280,7 @@ function runActionLabel(name: string) {
 }
 
 function toolRendererKind(name: string): ToolRendererKind {
+  if (name === 'ask_user') return 'ask-user'
   if (name === 'ls') return 'directory'
   if (['read_file', 'cat', 'sed'].includes(name)) return 'file-read'
   if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return 'file-change'

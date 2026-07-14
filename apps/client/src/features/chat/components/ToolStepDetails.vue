@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, ShieldCheck, ShieldX } from 'lucide-vue-next'
 import { computed } from 'vue'
 import type { ToolStepViewItem } from '../presentation/types'
 import { formatBytes, guardToolContent } from '../presentation/toolContentGuard'
@@ -53,6 +53,12 @@ const resultEmptyText = computed(() => {
 
   return props.step.renderer === 'directory' ? uiText.process.emptyDirectory : uiText.process.noResults
 })
+function approvalLabel(decision: 'approved' | 'rejected', scope: 'once' | 'session' | 'persistent') {
+  if (decision === 'rejected') return uiText.tool.approvalRejected
+  if (scope === 'persistent') return uiText.tool.approvalAllowedAlways
+  if (scope === 'session') return uiText.tool.approvalAllowedSession
+  return uiText.tool.approvalAllowedOnce
+}
 
 function browserFallbackText(toolName: string) {
   if (toolName === 'navigate_page' || toolName === 'create_page' || toolName === 'select_page') return uiText.tool.pageOpened
@@ -88,6 +94,14 @@ function diffStats(lines: string[]) {
 
 <template>
   <div class="tool-detail">
+    <div v-if="step.approvals?.length" class="tool-approval-history">
+      <div v-for="approval in step.approvals" :key="approval.approval_id" :class="approval.decision">
+        <ShieldCheck v-if="approval.decision === 'approved'" :size="14" stroke-width="2" />
+        <ShieldX v-else :size="14" stroke-width="2" />
+        <span>{{ approvalLabel(approval.decision, approval.scope) }}</span>
+      </div>
+    </div>
+
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">

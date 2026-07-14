@@ -1,6 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, AgentEventPayloadMap, ImageAttachment, Message, ReasoningEffort, Session } from '../../protocol/src/index.js';
+import type {
+  AgentEvent,
+  AgentEventPayloadMap,
+  ImageAttachment,
+  Message,
+  PendingApproval,
+  ReasoningEffort,
+  Session,
+  ToolApprovalRecord,
+} from '../../protocol/src/index.js';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
 import type { RuntimeRun } from './run-state.js';
@@ -106,6 +115,7 @@ export class RunManager {
       reject: (error: Error) => void;
     }
   >();
+  private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
 
   constructor(private readonly config: RunManagerConfig) { }
 
@@ -172,6 +182,7 @@ export class RunManager {
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
           approveTool: (input) => this.approveTool(run, eventBus, input),
+          consumeApprovals: (callId) => this.consumeApprovalRecords(run.id, callId),
         },
         limits,
       });
@@ -212,6 +223,7 @@ export class RunManager {
       });
     } finally {
       this.abortControllers.delete(run.id);
+      this.approvalRecords.delete(run.id);
       this.pruneTerminalRuns();
     }
   }
@@ -225,6 +237,7 @@ export class RunManager {
     run.status = 'awaiting_approval';
     run.pending_approval = {
       approval_id: approvalId,
+      ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'workspace_path',
       reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
       risk: input.risk,
@@ -258,6 +271,7 @@ export class RunManager {
     run.status = 'awaiting_approval';
     run.pending_approval = {
       approval_id: approvalId,
+      ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'tool',
       reason: input.reason,
       risk: input.risk,
@@ -321,26 +335,11 @@ export class RunManager {
     run.pending_ask = undefined;
     run.status = 'running';
 
-    const session = this.config.sessions.get(run.session_id);
-    if (session) {
-      const questionCreatedAt = pendingAsk.created_at;
-      const answerCreatedAt = new Date().toISOString();
-      session.messages.push(
-        {
-          id: id('msg'),
-          role: 'assistant',
-          content: pendingAsk.question,
-          created_at: questionCreatedAt,
-        },
-        {
-          id: id('msg'),
-          role: 'user',
-          content: selected.label,
-          created_at: answerCreatedAt,
-        },
-      );
-      session.updated_at = answerCreatedAt;
-    }
+    new EventBus(run).emit('ask_user.answered', {
+      ask_id: pendingAsk.ask_id,
+      call_id: pendingAsk.call_id,
+      selected,
+    });
 
     this.config.onChange?.();
     pending.resolve(selected);
@@ -367,8 +366,14 @@ export class RunManager {
     this.pendingApprovals.delete(approvalId);
     run.pending_approval = undefined;
     run.status = 'running';
-    this.config.onChange?.();
     const scope = options.scope || 'session';
+    this.recordApproval(run.id, pendingApproval, decision, scope);
+    new EventBus(run).emit('approval.resolved', {
+      approval_id: pendingApproval.approval_id,
+      decision,
+      scope,
+    });
+    this.config.onChange?.();
     const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
@@ -428,5 +433,37 @@ export class RunManager {
     for (const run of terminalRuns.slice(MAX_RETAINED_TERMINAL_RUNS)) {
       this.config.runs.delete(run.id);
     }
+  }
+
+  private recordApproval(
+    runId: string,
+    approval: PendingApproval,
+    decision: 'approved' | 'rejected',
+    scope: 'once' | 'session' | 'persistent',
+  ) {
+    if (!approval.call_id) return;
+
+    let runRecords = this.approvalRecords.get(runId);
+    if (!runRecords) {
+      runRecords = new Map();
+      this.approvalRecords.set(runId, runRecords);
+    }
+    const records = runRecords.get(approval.call_id) || [];
+    records.push({
+      approval_id: approval.approval_id,
+      kind: approval.kind,
+      decision,
+      scope,
+      reason: approval.reason,
+    });
+    runRecords.set(approval.call_id, records);
+  }
+
+  private consumeApprovalRecords(runId: string, callId: string) {
+    const runRecords = this.approvalRecords.get(runId);
+    const records = runRecords?.get(callId) || [];
+    runRecords?.delete(callId);
+    if (runRecords?.size === 0) this.approvalRecords.delete(runId);
+    return records;
   }
 }

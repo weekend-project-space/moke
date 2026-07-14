@@ -74,6 +74,7 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
           ...summarizeToolResult(step.renderer, item.raw),
         }
         step.objectLabel = combineToolStepDetail(step.objectLabel, item.raw, item.tone)
+        step.approvals = item.approvals
         if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
         if (lastPendingCall === call) lastPendingCall = null
         continue
@@ -120,6 +121,7 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     summary: call.summary || {},
     toolCategory: call.toolCategory || 'run',
     inputRaw: call.raw,
+    approvals: call.approvals,
   }
 }
 
@@ -133,6 +135,16 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
     }
 
     const output = parsed as Record<string, unknown>
+
+    if (renderer === 'ask-user') {
+      const selected = output.selected && typeof output.selected === 'object' && !Array.isArray(output.selected)
+        ? output.selected as Record<string, unknown>
+        : {}
+      return {
+        question: typeof output.question === 'string' ? output.question : undefined,
+        selectedLabel: typeof selected.label === 'string' ? selected.label : undefined,
+      }
+    }
 
     if (renderer === 'search') {
       const matches = Array.isArray(output.matches) ? output.matches : []

@@ -9,7 +9,9 @@ const RUN_EVENT_TYPES = [
   'tool.call',
   'tool.result',
   'ask_user.required',
+  'ask_user.answered',
   'approval.required',
+  'approval.resolved',
   'agent.done',
   'agent.error',
 ] as const

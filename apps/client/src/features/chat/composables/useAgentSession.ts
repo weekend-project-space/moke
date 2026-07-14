@@ -2,12 +2,10 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { createLatestRequestGuard } from '../services/latestRequest'
 import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
-import { createAgentApi } from '../api/agentApi'
+import { AgentApiError, createAgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
 import { reduceRunEvent } from '../model/runEventReducer'
 import {
-  awaitRunApproval,
-  awaitRunUser,
   connectRun,
   createSessionRunState,
   finishRunState,
@@ -27,7 +25,6 @@ import { createStreamingTextBuffer } from '../services/streamingTextBuffer'
 type UseAgentSessionOptions = {
   apiBase: string
   isFinalAssistantMessage: (message: Message | undefined) => boolean
-  onAskUserRequired?: () => void
   onMessagesLoaded?: () => void | Promise<void>
   onRunFinished?: (sessionId: string) => void | Promise<void>
 }
@@ -45,6 +42,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const messages = ref<Message[]>([])
   const sessions = ref<SessionSummary[]>([])
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
+  const submittingAskId = ref('')
+  const submittingApprovalId = ref('')
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
   const sessionLoadGuard = createLatestRequestGuard()
   const api = createAgentApi(options.apiBase)
@@ -75,6 +74,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const streamingText = computed(() => currentRunState.value.streamingText)
   const pendingApproval = computed(() => pendingApprovalFrom(currentRunState.value))
   const pendingAsk = computed(() => pendingAskFrom(currentRunState.value))
+  const isSubmittingAsk = computed(() => Boolean(pendingAsk.value?.ask_id && submittingAskId.value === pendingAsk.value.ask_id))
+  const isSubmittingApproval = computed(() => Boolean(
+    pendingApproval.value?.approval_id && submittingApprovalId.value === pendingApproval.value.approval_id,
+  ))
   const isRunning = computed(() => isRunActive(currentRunState.value))
   const runError = computed(() => currentRunState.value.error)
   const runningSessionIds = computed(() =>
@@ -340,16 +343,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       streamingTextBuffer.append(targetSessionId, reduction.effects.answerDelta)
     }
 
-    if (reduction.effects.ask) {
-      const ask = reduction.effects.ask
-      if (sessionId.value === targetSessionId) {
-        options.onAskUserRequired?.()
-        messages.value.push({
-          role: 'assistant',
-          content: ask.question,
-          created_at: ask.created_at || event.ts,
-        })
-      }
+    if (event.type === 'ask_user.answered' && submittingAskId.value === event.payload.ask_id) {
+      submittingAskId.value = ''
+    } else if (event.type === 'approval.resolved' && submittingApprovalId.value === event.payload.approval_id) {
+      submittingApprovalId.value = ''
     }
 
     if (reduction.effects.message) {
@@ -366,23 +363,32 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const state = sessionRunStates[targetSessionId]
     const ask = state ? pendingAskFrom(state) : null
     if (!ask || !state.runId) return
+    if (submittingAskId.value === ask.ask_id) return
 
     const targetRunId = state.runId
-    const optimisticMessage = appendOptimisticUserMessage(messages.value, { content: option.label })
-    const previousAsk = ask
-    resumeRun(state)
+    submittingAskId.value = ask.ask_id
 
     try {
       await api.choose(targetRunId, ask.ask_id, option.id)
-      return
-    } catch {
-      // Restore the pending question below.
-    }
-
-    const currentState = sessionRunStates[targetSessionId]
-    if (currentState?.runId === targetRunId && currentState.lifecycle.status === 'running') {
-      awaitRunUser(currentState, previousAsk, uiText.app.responseFailed)
-      optimisticMessage.rollback()
+      const currentState = sessionRunStates[targetSessionId]
+      if (
+        currentState?.runId === targetRunId
+        && currentState.lifecycle.status === 'awaiting-user'
+        && currentState.lifecycle.ask.ask_id === ask.ask_id
+      ) {
+        resumeRun(currentState)
+      }
+    } catch (error) {
+      if (error instanceof AgentApiError && error.code === 'ASK_NOT_PENDING') {
+        await loadActiveRuns()
+      } else {
+        const currentState = sessionRunStates[targetSessionId]
+        if (currentState?.runId === targetRunId && pendingAskFrom(currentState)?.ask_id === ask.ask_id) {
+          setRunError(currentState, uiText.app.responseFailed)
+        }
+      }
+    } finally {
+      if (submittingAskId.value === ask.ask_id) submittingAskId.value = ''
     }
   }
 
@@ -391,19 +397,31 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const state = sessionRunStates[targetSessionId]
     const approval = state ? pendingApprovalFrom(state) : null
     if (!state || !approval || !state.runId) return
+    if (submittingApprovalId.value === approval.approval_id) return
     const targetRunId = state.runId
-    resumeRun(state)
+    submittingApprovalId.value = approval.approval_id
 
     try {
       await api.approve(targetRunId, approval.approval_id, decision, scope)
-      return
-    } catch {
-      // Restore the approval below.
-    }
-
-    const currentState = sessionRunStates[targetSessionId]
-    if (currentState?.runId === targetRunId && isRunActive(currentState)) {
-      awaitRunApproval(currentState, approval, uiText.app.responseFailed)
+      const currentState = sessionRunStates[targetSessionId]
+      if (
+        currentState?.runId === targetRunId
+        && currentState.lifecycle.status === 'awaiting-approval'
+        && currentState.lifecycle.approval.approval_id === approval.approval_id
+      ) {
+        resumeRun(currentState)
+      }
+    } catch (error) {
+      if (error instanceof AgentApiError && error.code === 'APPROVAL_NOT_PENDING') {
+        await loadActiveRuns()
+      } else {
+        const currentState = sessionRunStates[targetSessionId]
+        if (currentState?.runId === targetRunId && pendingApprovalFrom(currentState)?.approval_id === approval.approval_id) {
+          setRunError(currentState, uiText.app.responseFailed)
+        }
+      }
+    } finally {
+      if (submittingApprovalId.value === approval.approval_id) submittingApprovalId.value = ''
     }
   }
 
@@ -432,6 +450,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     events,
     forkSession,
     isRunning,
+    isSubmittingApproval,
+    isSubmittingAsk,
     loadSessions,
     loadActiveRuns,
     loadSessionMessages,

@@ -1,5 +1,5 @@
 ﻿import { computed, type Ref } from 'vue'
-import type { AgentEvent, Message } from '../model/conversation'
+import type { AgentEvent, Message, PendingApproval, PendingAsk } from '../model/conversation'
 import type { DisplayItem, ProcessItem, ProcessNote } from './types'
 import { createProcessGroupView, formatProcessGroupStatus } from './processDisplay'
 import { uiText } from '../../../text/uiText'
@@ -23,6 +23,8 @@ type UseConversationDisplayOptions = {
   isRunning: Ref<boolean>
   runtimeNow: Ref<number>
   runError: Ref<string>
+  pendingAsk: Ref<PendingAsk | null>
+  pendingApproval: Ref<PendingApproval | null>
   processCollapsed: Ref<Record<string, boolean>>
   toolLabels: Record<string, string>
   formatTimelineTime: (time: number) => string
@@ -75,7 +77,9 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       flushReasoning()
 
       if (event.type === 'tool.call') {
-        callsById.set(String(event.payload.call_id || event.id), event)
+        const callId = String(event.payload.call_id || event.id)
+        callsById.set(callId, event)
+        if (isPendingInteractionCall(String(event.payload.tool || ''), callId, options)) continue
         items.push(createToolCallEventProcessItem(event, options.toolLabels))
         continue
       }
@@ -134,6 +138,9 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
           ? mergeProcessItems(processItems, activeEventProcessItems.value)
           : processItems
         const processGroup = createProcessGroupView(nextProcessItems)
+        const hasInteraction = processGroup.items.some(
+          (item) => item.kind === 'tool-step' && (item.renderer === 'ask-user' || Boolean(item.approvals?.length)),
+        )
         const startedAt = turnStartedAt || processGroup.startedAt
         const endedAt = isCurrentTurn ? options.runtimeNow.value : turnEndedAt || processGroup.endedAt || startedAt
         const status = formatProcessGroupStatus(
@@ -148,7 +155,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
           label: status.label,
           durationLabel: status.durationLabel,
           items: processGroup.items,
-          collapsed: options.processCollapsed.value[groupId] ?? !isCurrentTurn,
+          collapsed: options.processCollapsed.value[groupId] ?? (!isCurrentTurn && !hasInteraction),
           hasError: processGroup.hasError,
           isActive: isCurrentTurn,
         })
@@ -207,6 +214,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         }
         if (message.content.trim()) processItems.push(createAssistantProcessItem(message, `message-${index}`))
         for (const toolCall of message.tool_calls) {
+          if (isPendingInteractionCall(toolCall.name, toolCall.id, options)) continue
           processItems.push(createToolCallProcessItem(toolCall, `message-${index}-${toolCall.id}`))
         }
         return
@@ -416,7 +424,17 @@ function createToolResultProcessItem(message: Message, id: string): ProcessItem 
     toolCategory: 'run',
     raw,
     toolCallId: message.tool_call_id,
+    approvals: message.role === 'tool' ? message.approvals : undefined,
   }
+}
+
+function isPendingInteractionCall(
+  toolName: string,
+  callId: string,
+  options: Pick<UseConversationDisplayOptions, 'pendingAsk' | 'pendingApproval'>,
+) {
+  if (toolName === 'ask_user' && options.pendingAsk.value?.call_id === callId) return true
+  return options.pendingApproval.value?.call_id === callId
 }
 
 function createToolResultEventProcessItem(event: ToolResultEvent, callEvent?: ToolCallEvent): ProcessItem {

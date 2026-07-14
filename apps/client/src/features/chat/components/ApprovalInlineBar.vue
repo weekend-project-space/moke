@@ -4,6 +4,7 @@ import { uiText } from '../../../text/uiText'
 
 defineProps<{
   approval: PendingApproval
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -78,17 +79,17 @@ function reasonText(approval: PendingApproval) {
     </div>
     <menu>
       <template v-if="isWorkspacePathApproval(approval)">
-        <button type="button" class="primary" @click="emit('approve', { decision: 'approved', scope: 'session' })">
+        <button type="button" class="primary" :disabled="submitting" @click="emit('approve', { decision: 'approved', scope: 'session' })">
           {{ text.allowSession }}
         </button>
-        <button type="button" class="secondary" @click="emit('approve', { decision: 'approved', scope: 'persistent' })">
+        <button type="button" class="secondary" :disabled="submitting" @click="emit('approve', { decision: 'approved', scope: 'persistent' })">
           {{ text.permanent }}
         </button>
       </template>
-      <button v-else type="button" class="primary" @click="emit('approve', { decision: 'approved', scope: 'once' })">
+      <button v-else type="button" class="primary" :disabled="submitting" @click="emit('approve', { decision: 'approved', scope: 'once' })">
         {{ text.allowCommandOnce }}
       </button>
-      <button type="button" class="ghost" @click="emit('approve', { decision: 'rejected' })">{{ text.reject }}</button>
+      <button type="button" class="ghost" :disabled="submitting" @click="emit('approve', { decision: 'rejected' })">{{ text.reject }}</button>
     </menu>
   </section>
 </template>

@@ -297,11 +297,16 @@ agent.message.delta
 tool.call
 tool.result
 ask_user.required
+ask_user.answered
+approval.required
+approval.resolved
 agent.done
 agent.error
 ```
 
 The event stream is the main contract between the backend and frontend.
+
+Completed `ask_user` interactions are persisted as assistant tool calls plus matching tool messages. Approval decisions are metadata on the original tool result so session reloads can restore the UI without creating synthetic user messages or duplicate tool results.
 
 ## 13. Persistence
 

@@ -1,3 +1,5 @@
+import type { ToolApprovalRecord } from '../../protocol/src/index.js';
+
 export type RuntimeContentManager = {
   addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;
   buildContext: () => string;
@@ -60,4 +62,5 @@ export type ToolContext = {
   }) => Promise<{ id: string; label: string }>;
   approveWorkspacePath?: (input: WorkspacePathApprovalRequest) => Promise<WorkspacePathApprovalDecision>;
   approveTool?: (input: ToolApprovalRequest) => Promise<ToolApprovalDecision>;
+  consumeApprovals?: (callId: string) => ToolApprovalRecord[];
 };

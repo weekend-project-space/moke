@@ -26,18 +26,31 @@ type Fetcher = typeof fetch
 
 export class AgentApiError extends Error {
   readonly status: number
+  readonly code: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, code: string, message: string) {
     super(message)
     this.name = 'AgentApiError'
     this.status = status
+    this.code = code
   }
 }
 
 export function createAgentApi(apiBase: string, fetcher: Fetcher = fetch) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetcher(`${apiBase}${path}`, init)
-    if (!response.ok) throw new AgentApiError(response.status, `HTTP ${response.status}`)
+    if (!response.ok) {
+      let code = ''
+      let message = `HTTP ${response.status}`
+      try {
+        const data = await response.json() as { error?: { code?: unknown; message?: unknown } }
+        if (typeof data.error?.code === 'string') code = data.error.code
+        if (typeof data.error?.message === 'string') message = data.error.message
+      } catch {
+        // Fall back to the HTTP status when the server does not return structured JSON.
+      }
+      throw new AgentApiError(response.status, code, message)
+    }
     return response.json() as Promise<T>
   }
 

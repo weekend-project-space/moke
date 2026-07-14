@@ -527,6 +527,7 @@ Emitted when the Agent needs user approval before continuing. The first supporte
   "type": "approval.required",
   "payload": {
     "approval_id": "apv_01",
+    "call_id": "call_01",
     "kind": "tool",
     "reason": "Agent wants to modify files",
     "risk": "write",
@@ -547,6 +548,7 @@ Workspace path approval:
   "type": "approval.required",
   "payload": {
     "approval_id": "apv_02",
+    "call_id": "call_02",
     "kind": "workspace_path",
     "reason": "Command path requires approval: E:\\notes\\a.md",
     "risk": "write",
@@ -575,7 +577,22 @@ persistent  allow across restarts by writing .moke/permissions.json
 
 The current implementation treats `once` and `session` as in-memory permissions. Only `persistent` is stored.
 
-### 6.9 ask_user.required
+### 6.9 approval.resolved
+
+Emitted after an approval response is accepted. During event replay it closes the matching `approval.required` interaction.
+
+```json
+{
+  "type": "approval.resolved",
+  "payload": {
+    "approval_id": "apv_01",
+    "decision": "approved",
+    "scope": "once"
+  }
+}
+```
+
+### 6.10 ask_user.required
 
 Emitted when the Agent needs the user to choose one option before continuing.
 
@@ -601,7 +618,29 @@ Emitted when the Agent needs the user to choose one option before continuing.
 }
 ```
 
-### 6.10 agent.done
+### 6.11 ask_user.answered
+
+Emitted after an answer is accepted. The selected option is returned to the `ask_user` tool and is not stored as a new chat message.
+
+For session persistence, `ask_user` is stored as an assistant `tool_calls` entry followed by a matching tool message. This lets the client restore the completed interaction after reloading a session without representing the selection as a user message.
+
+Approval remains part of its original tool call. The final tool message may include an `approvals` array with the decision, scope, and reason; it does not create an additional tool result for the same `call_id`.
+
+```json
+{
+  "type": "ask_user.answered",
+  "payload": {
+    "ask_id": "ask_01",
+    "call_id": "call_01",
+    "selected": {
+      "id": "frontend",
+      "label": "Check the frontend first"
+    }
+  }
+}
+```
+
+### 6.12 agent.done
 
 Emitted when the run completes.
 
@@ -619,7 +658,7 @@ Emitted when the run completes.
 }
 ```
 
-### 6.11 agent.error
+### 6.13 agent.error
 
 Emitted when the run fails.
 
@@ -774,7 +813,9 @@ function subscribeRun(eventsUrl: string, onEvent: (event: any) => void) {
     "tool.call",
     "tool.result",
     "ask_user.required",
+    "ask_user.answered",
     "approval.required",
+    "approval.resolved",
     "agent.done",
     "agent.error",
   ];
@@ -812,6 +853,9 @@ agent.message.delta
 tool.call
 tool.result
 ask_user.required
+ask_user.answered
+approval.required
+approval.resolved
 agent.done
 agent.error
 ```
