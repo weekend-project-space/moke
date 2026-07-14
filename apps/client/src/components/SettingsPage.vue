@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { FolderX, Plus, RotateCw, Save, SendHorizontal, Trash2 } from 'lucide-vue-next'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { ArrowLeft, BookOpenText, Bot, Boxes, Compass, FolderX, Plus, RotateCw, Save, SendHorizontal, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { computed, onMounted, reactive, ref, type Component } from 'vue'
 import McpSettingsPanel from './McpSettingsPanel.vue'
+import SkillSettingsPanel from './SkillSettingsPanel.vue'
 import {
   DEFAULT_BROWSER_PREFERENCES,
   loadBrowserPreferences,
@@ -34,7 +35,7 @@ type BrowserSettings = {
   linkOpenMode: BrowserLinkOpenMode
 }
 
-type SettingsTab = 'model' | 'mcp' | 'permissions' | 'browser'
+type SettingsTab = 'model' | 'mcp' | 'skills' | 'permissions' | 'browser'
 
 const props = defineProps<{
   apiBase: string
@@ -42,18 +43,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  dirtyChange: [dirty: boolean]
   openBrowserUrl: [request: { url: string; mode: BrowserLinkOpenMode }]
 }>()
 
 const MODEL_PROVIDER_MAX_RETRIES_MAX = 6
 const MODEL_PROVIDER_TIMEOUT_MAX_MS = 60 * 60 * 1000
-const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'model', label: 'Model' },
-  { id: 'mcp', label: 'MCP' },
-  { id: 'permissions', label: 'Permissions' },
-  { id: 'browser', label: 'Browser' },
+const settingsTabs: Array<{ id: SettingsTab; label: string; icon: Component }> = [
+  { id: 'model', label: 'Model', icon: Bot },
+  { id: 'mcp', label: 'MCP', icon: Boxes },
+  { id: 'skills', label: 'Skills', icon: BookOpenText },
+  { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
+  { id: 'browser', label: 'Browser', icon: Compass },
 ]
 const activeSettingsTab = ref<SettingsTab>('model')
+const activeSettingsItem = computed(() => settingsTabs.find((tab) => tab.id === activeSettingsTab.value) || settingsTabs[0])
+const skillSettingsDirty = ref(false)
 const activeProviderId = ref('')
 const selectedProviderId = ref('')
 const providers = ref<ModelProviderProfile[]>([])
@@ -293,6 +298,27 @@ function openHomeUrl() {
   if (url) emit('openBrowserUrl', { url, mode: browserSettings.linkOpenMode })
 }
 
+function selectProviderFromEvent(event: Event) {
+  const id = (event.target as HTMLSelectElement).value
+  const provider = providers.value.find((item) => item.id === id)
+  if (provider) selectProvider(provider)
+}
+
+function selectSettingsTab(tab: SettingsTab) {
+  if (tab === activeSettingsTab.value) return
+  if (activeSettingsTab.value === 'skills' && skillSettingsDirty.value && !window.confirm(uiText.skills.discardChanges)) return
+  activeSettingsTab.value = tab
+}
+
+function closeSettings() {
+  emit('close')
+}
+
+function updateSkillSettingsDirty(dirty: boolean) {
+  skillSettingsDirty.value = dirty
+  emit('dirtyChange', dirty)
+}
+
 onMounted(() => {
   loadBrowserSettings()
   void loadSettings()
@@ -302,46 +328,68 @@ onMounted(() => {
 
 <template>
   <section class="settings-page">
-    <header class="settings-header">
-      <button type="button" class="settings-secondary" @click="emit('close')">{{ uiText.settings.returnToChat }}</button>
-    </header>
+    <div class="settings-window">
+      <aside class="settings-navigation">
+        <div class="settings-navigation-header">
+          <h1>{{ uiText.app.settings }}</h1>
+        </div>
+        <nav aria-label="Settings sections">
+          <button
+            v-for="tab in settingsTabs"
+            :key="tab.id"
+            type="button"
+            :class="{ active: activeSettingsTab === tab.id }"
+            :aria-current="activeSettingsTab === tab.id ? 'page' : undefined"
+            @click="selectSettingsTab(tab.id)"
+          >
+            <component :is="tab.icon" :size="15" stroke-width="1.9" aria-hidden="true" />
+            <span>{{ tab.label }}</span>
+          </button>
+        </nav>
+      </aside>
 
-    <nav class="settings-tabs" aria-label="Settings sections">
-      <button
-        v-for="tab in settingsTabs"
-        :key="tab.id"
-        type="button"
-        :class="{ active: activeSettingsTab === tab.id }"
-        @click="activeSettingsTab = tab.id"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
+      <main class="settings-content">
+        <header class="settings-content-header">
+          <button
+            type="button"
+            class="settings-back-button"
+            :title="uiText.settings.returnToChat"
+            :aria-label="uiText.settings.returnToChat"
+            @click="closeSettings"
+          >
+            <ArrowLeft :size="16" stroke-width="2" />
+          </button>
+          <h2>{{ activeSettingsItem.label }}</h2>
+        </header>
 
-    <div v-if="activeSettingsTab === 'model'" class="settings-section">
-      <div class="settings-section-heading">
-        <h3>{{ uiText.settings.model }}</h3>
+        <div class="settings-content-scroll">
+          <div v-if="activeSettingsTab === 'model'" class="settings-section">
+      <div v-if="modelTestMessage || modelListMessage" class="settings-section-heading">
         <span>{{ modelTestMessage || modelListMessage }}</span>
       </div>
       <div v-if="modelError" class="settings-note error">{{ modelError }}</div>
 
       <div class="provider-settings">
-        <aside class="provider-list">
-          <button
-            v-for="provider in providers"
-            :key="provider.id"
-            type="button"
-            :class="{ active: provider.id === selectedProviderId }"
-            @click="selectProvider(provider)"
+        <div class="provider-toolbar">
+          <select
+            :value="selectedProviderId"
+            :aria-label="uiText.settings.model"
+            @change="selectProviderFromEvent"
           >
-            <strong>{{ provider.name }}</strong>
-            <small>{{ provider.model }}<span v-if="provider.id === activeProviderId"> · {{ uiText.settings.active }}</span></small>
-          </button>
-          <button type="button" class="provider-add" @click="addProvider">
+            <option v-for="provider in providers" :key="provider.id" :value="provider.id">
+              {{ provider.name }} · {{ provider.model }}{{ provider.id === activeProviderId ? ` · ${uiText.settings.active}` : '' }}
+            </option>
+          </select>
+          <button
+            type="button"
+            class="settings-icon-button"
+            :title="uiText.settings.addProvider"
+            :aria-label="uiText.settings.addProvider"
+            @click="addProvider"
+          >
             <Plus :size="14" />
-            {{ uiText.settings.addProvider }}
           </button>
-        </aside>
+        </div>
 
         <div class="provider-form">
           <label class="settings-row">
@@ -449,9 +497,14 @@ onMounted(() => {
 
     <McpSettingsPanel v-else-if="activeSettingsTab === 'mcp'" :api-base="apiBase" />
 
+    <SkillSettingsPanel
+      v-else-if="activeSettingsTab === 'skills'"
+      :api-base="apiBase"
+      @dirty-change="updateSkillSettingsDirty"
+    />
+
     <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section">
       <div class="settings-section-heading">
-        <h3>{{ uiText.settings.permissions }}</h3>
         <button type="button" class="settings-icon-button" :title="uiText.settings.refresh" :aria-label="uiText.settings.refresh" @click="loadPermissions">
           <RotateCw :size="14" />
         </button>
@@ -470,9 +523,6 @@ onMounted(() => {
     </div>
 
     <div v-else-if="activeSettingsTab === 'browser'" class="settings-section">
-      <div class="settings-section-heading">
-        <h3>{{ uiText.settings.browser }}</h3>
-      </div>
       <label class="settings-row">
         <span>{{ uiText.settings.defaultHome }}</span>
         <input v-model="browserSettings.browserHomeUrl" type="url" spellcheck="false" />
@@ -494,6 +544,9 @@ onMounted(() => {
           {{ saved ? uiText.settings.saved : uiText.settings.save }}
         </button>
       </div>
+    </div>
+        </div>
+      </main>
     </div>
   </section>
 </template>

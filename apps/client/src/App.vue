@@ -30,7 +30,9 @@ const composerBox = ref<InstanceType<typeof ComposerBox> | null>(null)
 const conversationView = ref<InstanceType<typeof ConversationView> | null>(null)
 const copiedKey = ref('')
 const showJumpToBottom = ref(false)
-const showSettings = ref(false)
+const appView = ref<'chat' | 'settings'>('chat')
+const settingsDirty = ref(false)
+const showSettings = computed(() => appView.value === 'settings')
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 let runtimeTimer: number | undefined
@@ -164,7 +166,9 @@ const {
   selectSession,
   startNewSession,
 } = useSessionNavigation({
+  appView,
   archiveSession,
+  canLeaveSettings: () => !settingsDirty.value || window.confirm(uiText.skills.discardChanges),
   clearQueuedMessages,
   closeTransientPanels,
   createSession,
@@ -172,21 +176,26 @@ const {
   onCloseSettings: () => void loadReasoningCapability(),
   selectAgentSession,
   sessionId,
-  showSettings,
   sortedSessions,
 })
+
+function handleAppKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && showSettings.value) {
+    event.preventDefault()
+    closeSettings()
+    return
+  }
+
+  handleGlobalKeydown(event)
+}
 const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
   title: prompt,
   description: '',
   prompt,
 }))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
-const currentTitle = computed(() => {
-  if (showSettings.value) return uiText.app.settings
-  return currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat
-})
+const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const sessionSubtitle = computed(() => {
-  if (showSettings.value) return uiText.app.settingsSubtitle
   if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
   return ''
@@ -300,8 +309,20 @@ watch(isRunning, (running) => {
   }, 1000)
 })
 
+watch(showSettings, async (visible) => {
+  if (!visible) return
+  await nextTick()
+  document.querySelector<HTMLButtonElement>('.settings-page .settings-navigation nav button')?.focus()
+})
+
+async function openLinkFromSettings(request: { url: string; mode: 'current' | 'new-tab' }) {
+  if (!closeSettings()) return
+  await nextTick()
+  await openLinkInBrowser(request.url, request.mode)
+}
+
 onMounted(async () => {
-  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('keydown', handleAppKeydown)
   window.addEventListener('resize', handleWindowResize)
   loadComposerReasoningEffort()
   initBrowserWorkspace()
@@ -322,7 +343,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.clearInterval(runtimeTimer)
-  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('keydown', handleAppKeydown)
   window.removeEventListener('resize', handleWindowResize)
   disposeBrowserWorkspace()
   disposeResizablePanels()
@@ -331,7 +352,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="shell" :class="{ 'trace-collapsed': traceCollapsed, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }" :style="shellStyle">
+  <main
+    class="shell"
+    :class="{ 'trace-collapsed': traceCollapsed, 'settings-view': showSettings, 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed, 'sidebar-resizing': sidebarResizing, 'workspace-resizing': workspaceResizing }"
+    :style="shellStyle"
+  >
     <button v-if="sidebarOpen" class="sidebar-scrim" type="button" aria-label="Close chat list"
       @click="closeSidebar"></button>
     <div class="sidebar-host" :class="{ 'sidebar-preview': desktopLayout && sidebarCollapsed }">
@@ -353,6 +378,7 @@ onUnmounted(() => {
 
     <section class="chat">
       <ChatHeader
+        v-if="!showSettings"
         :title="currentTitle"
         :subtitle="sessionSubtitle"
         :desktop-layout="desktopLayout"
@@ -369,7 +395,8 @@ onUnmounted(() => {
         v-if="showSettings"
         :api-base="apiBase"
         @close="closeSettings"
-        @open-browser-url="openLinkInBrowser($event.url, $event.mode)"
+        @dirty-change="settingsDirty = $event"
+        @open-browser-url="openLinkFromSettings"
       />
       <ConversationView
         v-else
@@ -486,7 +513,7 @@ onUnmounted(() => {
     </section>
 
     <div
-      v-if="!traceCollapsed"
+      v-if="!showSettings && !traceCollapsed"
       class="workspace-resizer"
       role="separator"
       aria-label="Resize workspace"
@@ -496,7 +523,7 @@ onUnmounted(() => {
       @pointerdown="startWorkspaceResize"
     ></div>
 
-    <aside v-if="!traceCollapsed" class="workspace">
+    <aside v-if="!showSettings && !traceCollapsed" class="workspace">
       <BrowserPanel ref="browserPanel" :active="!traceCollapsed" />
     </aside>
   </main>

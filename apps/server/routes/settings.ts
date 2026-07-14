@@ -1,4 +1,5 @@
 import { HttpError, type Router } from '../http/router.js';
+import { SkillRepositoryError } from '../../../packages/agent-skills/src/index.js';
 import type { RoutesContext } from './context.js';
 
 export function registerSettingRoutes(router: Router<RoutesContext>) {
@@ -16,6 +17,34 @@ export function registerSettingRoutes(router: Router<RoutesContext>) {
 
   router.post('/api/settings/model/list', async ({ body, context, json }) =>
     json(200, await context.settingsService.listModels(await body())),
+  );
+
+  router.get('/api/settings/skills', async ({ context, json }) =>
+    json(200, await withSkillErrors(() => context.skillSettingsService.list())),
+  );
+
+  router.get('/api/settings/skills/:id', async ({ context, json, params }) =>
+    json(200, await withSkillErrors(() => context.skillSettingsService.get(params.id))),
+  );
+
+  router.post('/api/settings/skills', async ({ body, context, json }) =>
+    json(201, await withSkillErrors(async () => context.skillSettingsService.create(await body()))),
+  );
+
+  router.patch('/api/settings/skills/:id', async ({ body, context, json, params }) =>
+    json(200, await withSkillErrors(async () => context.skillSettingsService.update(params.id, await body()))),
+  );
+
+  router.post('/api/settings/skills/:id/status', async ({ body, context, json, params }) =>
+    json(200, await withSkillErrors(async () => context.skillSettingsService.setEnabled(params.id, await body()))),
+  );
+
+  router.post('/api/settings/skills/:id/delete', async ({ context, json, params }) =>
+    json(200, await withSkillErrors(() => context.skillSettingsService.remove(params.id))),
+  );
+
+  router.post('/api/settings/skills/validate', async ({ body, context, json }) =>
+    json(200, await withSkillErrors(async () => context.skillSettingsService.validate(await body()))),
   );
 
   router.get('/api/settings/mcp', ({ context, json }) =>
@@ -49,4 +78,18 @@ export function registerSettingRoutes(router: Router<RoutesContext>) {
       workspace_roots: context.permissionsService.listWorkspaceRoots(),
     });
   });
+}
+
+async function withSkillErrors<T>(action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (error) {
+    if (!(error instanceof SkillRepositoryError)) throw error;
+    const status = error.code === 'SKILL_NOT_FOUND'
+      ? 404
+      : error.code === 'SKILL_EXISTS' || error.code === 'SKILL_NAME_EXISTS'
+        ? 409
+        : 400;
+    throw new HttpError(status, error.code, error.message);
+  }
 }

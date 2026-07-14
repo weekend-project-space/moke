@@ -13,3 +13,5 @@ apps/client/src-tauri/resources/server/
 *skills*
 *todo*
 !todo.md
+!packages/agent-skills/
+!packages/agent-skills/**

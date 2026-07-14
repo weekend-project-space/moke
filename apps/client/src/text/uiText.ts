@@ -10,7 +10,6 @@ const app = {
   jumpToBottom: 'Jump to bottom',
   newChat: 'New chat',
   settings: 'Settings',
-  settingsSubtitle: 'Models, permissions, and browser',
   working: 'Working',
 } as const
 
@@ -203,6 +202,34 @@ const mcp = {
   validateFailed: 'Failed to validate MCP config',
 } as const
 
+const skills = {
+  add: 'Add skill',
+  confirmDelete: (name: string) => `Delete "${name}"?`,
+  countLabel: (count: number) => `${count} skill${count === 1 ? '' : 's'}`,
+  deleteFailed: 'Failed to delete skill',
+  deleted: 'Skill deleted',
+  description: 'Description',
+  disabled: 'Disabled',
+  discardChanges: 'Discard unsaved skill changes?',
+  empty: 'No skills configured',
+  enabled: 'Enabled',
+  id: 'ID',
+  instructions: 'Instructions',
+  invalid: 'Invalid',
+  loadFailed: 'Failed to load skills',
+  name: 'Name',
+  newSkillName: 'New skill',
+  saveFailed: 'Failed to save skill',
+  saved: 'Skill saved',
+  saving: 'Saving',
+  statusFailed: 'Failed to update skill status',
+  title: 'Skills',
+  valid: 'Skill is valid',
+  validate: 'Validate',
+  validating: 'Validating',
+  validationFailed: 'Failed to validate skill',
+} as const
+
 const sidebar = {
   chatActions: 'Chat actions',
   archive: 'Archive',
@@ -318,6 +345,7 @@ export const uiText = {
   mcp,
   process,
   settings,
+  skills,
   sidebar,
   tool,
   toolLabel,

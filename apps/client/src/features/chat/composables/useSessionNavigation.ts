@@ -4,7 +4,9 @@ import type { SessionSummary } from '../model/conversation'
 import { readSessionIdFromHash, writeSessionIdToHash } from '../services/sessionRoute'
 
 type UseSessionNavigationOptions = {
+  appView: Ref<'chat' | 'settings'>
   archiveSession: (id: string) => Promise<boolean>
+  canLeaveSettings: () => boolean
   clearQueuedMessages: () => void
   closeTransientPanels: () => void
   createSession: () => Promise<boolean>
@@ -12,11 +14,14 @@ type UseSessionNavigationOptions = {
   onCloseSettings: () => void
   selectAgentSession: (id: string) => Promise<boolean>
   sessionId: Ref<string>
-  showSettings: Ref<boolean>
   sortedSessions: Readonly<Ref<SessionSummary[]>>
 }
 
 export function useSessionNavigation(options: UseSessionNavigationOptions) {
+  function canEnterChat() {
+    return options.appView.value !== 'settings' || options.canLeaveSettings()
+  }
+
   function initialSessionFromHash() {
     const hashSessionId = readSessionIdFromHash()
     if (!hashSessionId) return options.sortedSessions.value[0]
@@ -25,30 +30,33 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
   }
 
   async function selectSession(id: string) {
+    if (!canEnterChat()) return false
     if (!(await options.selectAgentSession(id))) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
+    options.appView.value = 'chat'
     writeSessionIdToHash(id)
     options.closeTransientPanels()
     return true
   }
 
   async function startNewSession() {
+    if (!canEnterChat()) return false
     if (!(await options.createSession())) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
+    options.appView.value = 'chat'
     writeSessionIdToHash(options.sessionId.value)
     options.closeTransientPanels()
     return true
   }
 
   async function forkMessage(messageId: string) {
+    if (!canEnterChat()) return false
     if (!(await options.forkSession(messageId))) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
+    options.appView.value = 'chat'
     writeSessionIdToHash(options.sessionId.value)
     options.closeTransientPanels()
     return true
@@ -61,13 +69,15 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
   }
 
   function openSettings() {
-    options.showSettings.value = true
+    options.appView.value = 'settings'
     options.closeTransientPanels()
   }
 
   function closeSettings() {
-    options.showSettings.value = false
+    if (!canEnterChat()) return false
+    options.appView.value = 'chat'
     options.onCloseSettings()
+    return true
   }
 
   return {

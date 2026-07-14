@@ -134,7 +134,6 @@ onMounted(() => {
 <template>
   <div class="settings-section">
     <div class="settings-section-heading">
-      <h3>MCP</h3>
       <span>{{ statusText }}</span>
     </div>
 

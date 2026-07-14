@@ -16,6 +16,7 @@ import { McpSettingsService } from './services/mcp-settings-service.js';
 import { registerMcpTools } from './services/mcp-tools.js';
 import { PermissionsService } from './services/permissions-service.js';
 import { SettingsService } from './services/settings-service.js';
+import { SkillSettingsService } from './services/skill-settings-service.js';
 import { createStateSaver, loadState } from './storage/state.js';
 
 export {
@@ -57,6 +58,7 @@ export async function createApp(): Promise<ServerApp> {
   const browserBridge = new BrowserBridge();
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
+  const skillSettingsService = new SkillSettingsService(workspace);
   const stateSaver = createStateSaver({ statePath, sessions });
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
   const permissionsService = new PermissionsService(permissionsPath, {
@@ -97,6 +99,7 @@ export async function createApp(): Promise<ServerApp> {
       mcpSettingsService,
       permissionsService,
       settingsService,
+      skillSettingsService,
       onChange: stateSaver.saveStateSoon,
     }),
   );

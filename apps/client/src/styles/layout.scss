@@ -106,6 +106,16 @@
 }
 
 @media (min-width: 981px) {
+  .shell.settings-view,
+  .shell.settings-view.trace-collapsed {
+    grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 0 0;
+  }
+
+  .shell.settings-view.sidebar-collapsed,
+  .shell.settings-view.sidebar-collapsed.trace-collapsed {
+    grid-template-columns: 0 0 minmax(420px, 1fr) 0 0;
+  }
+
   .shell > .sidebar-host > .sidebar {
     grid-column: 1;
   }
