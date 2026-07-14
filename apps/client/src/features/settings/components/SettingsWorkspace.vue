@@ -323,7 +323,11 @@ onMounted(() => {
 <template>
   <WorkspaceLayout class="settings-workspace-layout" sidebar-label="Resize settings navigation">
     <template #sidebar>
-      <SettingsSidebar :active-tab="activeSettingsTab" @select="selectSettingsTab" />
+      <SettingsSidebar
+        :active-tab="activeSettingsTab"
+        @close="closeSettings"
+        @select="selectSettingsTab"
+      />
     </template>
 
       <section class="settings-content">
