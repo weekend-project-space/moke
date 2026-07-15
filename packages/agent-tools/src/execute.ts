@@ -77,8 +77,8 @@ function isAllowlistedComplexCommand(commandText: string) {
 function isAllowlistedSimpleCommand(commandText: string) {
   return [
     /^npm test$/,
+    /^npm run test$/,
     /^npm run build$/,
-    /^npm run test:server$/,
     /^npm run build:server$/,
   ].some((pattern) => pattern.test(commandText));
 }

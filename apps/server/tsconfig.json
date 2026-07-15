@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/agent-runtime" },
+    { "path": "../../packages/agent-re-act" },
+    { "path": "../../packages/agent-tools" },
+    { "path": "../../packages/agent-skills" },
+    { "path": "../../packages/browser-tools" },
+    { "path": "../../packages/mcp-client" }
+  ]
+}

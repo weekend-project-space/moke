@@ -8,14 +8,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently --kill-others --names server,client \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:client": "npm run dev --workspace @moke/client -- --host 127.0.0.1",
-    "dev:server": "tsx apps/server/server.ts",
-    "build:server": "node scripts/build-server-bundle.mjs",
-    "test:server": "tsx --test apps/server/**/*.test.ts packages/**/*.test.ts apps/client/src/**/*.test.ts",
+    "dev": "tsc -b && concurrently --kill-others --names packages,server,client \"tsc -b --watch --preserveWatchOutput\" \"node --watch --import tsx apps/server/server.ts\" \"npm run dev --workspace @moke/client -- --host 127.0.0.1\"",
+    "build": "npm run build --workspace @moke/client",
+    "build:server": "tsc -b && node scripts/build-server-bundle.mjs",
+    "test": "tsc -b && tsx --test apps/server/**/*.test.ts packages/**/*.test.ts apps/client/src/**/*.test.ts",
+    "typecheck": "tsc -b && tsc -b apps/server && npm run typecheck --workspace @moke/client",
     "package:desktop": "node scripts/package-desktop.mjs",
-    "desktop": "npm run desktop --workspace @moke/client",
-    "build": "npm run build --workspace @moke/client"
+    "desktop": "npm run desktop --workspace @moke/client"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

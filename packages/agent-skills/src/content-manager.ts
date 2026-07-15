@@ -1,5 +1,7 @@
 import type { LoadedSkill, SkillContentManager } from './skill-types.js';
 
+type ActiveSkill = Pick<LoadedSkill, 'name' | 'description' | 'path' | 'content'>;
+
 const DEFAULT_MAX_SKILLS = 2;
 const DEFAULT_MAX_CHARS_PER_SKILL = 4000;
 
@@ -9,7 +11,7 @@ type ContentManagerOptions = {
 };
 
 export class ContentManager implements SkillContentManager {
-  private readonly active = new Map<string, LoadedSkill>();
+  private readonly active = new Map<string, ActiveSkill>();
   private readonly maxSkills: number;
   private readonly maxCharsPerSkill: number;
 
@@ -18,7 +20,7 @@ export class ContentManager implements SkillContentManager {
     this.maxCharsPerSkill = options.maxCharsPerSkill ?? DEFAULT_MAX_CHARS_PER_SKILL;
   }
 
-  addSkill(skill: LoadedSkill) {
+  addSkill(skill: ActiveSkill) {
     if (this.active.has(skill.name)) return;
     if (this.active.size >= this.maxSkills) return;
 

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "tsc -b ../../tsconfig.json",
     "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b",
     "build:server": "npm --prefix ../.. run build:server",
     "preview": "vite preview",
     "tauri": "tauri",

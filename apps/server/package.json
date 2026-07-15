@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
   "dependencies": {
     "@moke/agent-re-act": "0.1.0",
     "@moke/agent-runtime": "0.1.0",

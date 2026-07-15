@@ -40,7 +40,7 @@
 ## 工程结构
 
 - [x] 改为 npm workspaces，只保留根 lockfile，并通过包名导入 protocol/runtime 等内部包。
-- [ ] 为所有内部包补齐 exports、依赖声明和 TypeScript project references。
+- [x] 为所有内部包补齐 exports、依赖声明和 TypeScript project references。
 - [ ] 建立 CI：类型检查、测试、Vue 构建、Rust 检查、依赖审计和生成产物校验。
 
 ## 现有功能事项
