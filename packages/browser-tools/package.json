@@ -3,5 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "./src/index.ts"
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@moke/agent-runtime": "0.1.0",
+    "zod": "^4.4.3"
+  }
 }

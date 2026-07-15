@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, WritableSystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, WritableSystemBackend } from '@moke/agent-runtime';
 
 const editFileSchema = z.object({
   path: z.string().min(1),

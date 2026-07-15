@@ -1,4 +1,4 @@
-import type { ImageAttachment, ReasoningEffort, Session } from '../../../packages/protocol/src/index.js';
+import type { ImageAttachment, ReasoningEffort, Session } from '@moke/protocol';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import {

@@ -1,4 +1,4 @@
-import type { RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
+import type { RuntimeRun } from '@moke/agent-runtime';
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import type { ExecutableSystemBackend, RuntimeTool } from '../../agent-runtime/src/index.js';
-import { ToolExecutionError } from '../../agent-runtime/src/index.js';
+import type { ExecutableSystemBackend, RuntimeTool } from '@moke/agent-runtime';
+import { ToolExecutionError } from '@moke/agent-runtime';
 import { analyzeCommandComplexity } from './command-safety.js';
 
 const executeSchema = z.object({

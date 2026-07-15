@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createExecuteTool } from './execute.js';
-import type { ExecutableSystemBackend } from '../../agent-runtime/src/index.js';
+import type { ExecutableSystemBackend } from '@moke/agent-runtime';
 
 function createSystemBackend() {
   const calls: string[] = [];

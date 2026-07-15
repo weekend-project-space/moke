@@ -1,7 +1,7 @@
 import http from 'node:http';
 
-import type { RuntimeRun } from '../../packages/agent-runtime/src/index.js';
-import type { Session } from '../../packages/protocol/src/index.js';
+import type { RuntimeRun } from '@moke/agent-runtime';
+import type { Session } from '@moke/protocol';
 import {
   loadFirstEnvFile,
   resolveEnvPaths,

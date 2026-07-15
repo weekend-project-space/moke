@@ -1,4 +1,4 @@
-import type { ImageAttachment, Message, ReasoningEffort, RuntimeLimits } from '../../protocol/src/index.js';
+import type { ImageAttachment, Message, ReasoningEffort, RuntimeLimits } from '@moke/protocol';
 import type { EventBus } from './event-bus.js';
 import type { ToolContext } from './tool-context.js';
 import type { ToolRegistry } from './tool-registry.js';

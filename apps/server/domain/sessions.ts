@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Message, Run, Session, ToolCall } from '../../../packages/protocol/src/index.js';
+import type { Message, Run, Session, ToolCall } from '@moke/protocol';
 
 export type ForkMode = 'after';
 

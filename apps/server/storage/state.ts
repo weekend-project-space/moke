@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { Session } from '../../../packages/protocol/src/index.js';
+import type { Session } from '@moke/protocol';
 
 type StoredState = {
   sessions: Session[];

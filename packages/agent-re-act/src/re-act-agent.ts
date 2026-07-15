@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentRunInput, AgentRunResult } from '../../agent-runtime/src/index.js';
-import { ToolExecutionError } from '../../agent-runtime/src/index.js';
-import type { AgentStep, AgentStepPhase, ToolCall } from '../../protocol/src/index.js';
+import type { AgentRunInput, AgentRunResult } from '@moke/agent-runtime';
+import { ToolExecutionError } from '@moke/agent-runtime';
+import type { AgentStep, AgentStepPhase, ToolCall } from '@moke/protocol';
 import {
   ASK_USER_TOOL_NAME,
   FINISH_TOOL_NAME,

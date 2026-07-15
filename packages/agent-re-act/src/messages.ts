@@ -1,7 +1,7 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
-import type { ImageAttachment, Message } from '../../protocol/src/index.js';
-import type { ToolContext } from '../../agent-runtime/src/index.js';
+import type { ImageAttachment, Message } from '@moke/protocol';
+import type { ToolContext } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import { FINISH_TOOL_NAME } from './control-tools.js';
 

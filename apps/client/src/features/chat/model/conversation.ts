@@ -9,7 +9,7 @@ import type {
   SessionSummary as ProtocolSessionSummary,
   ToolCall as ProtocolToolCall,
   ToolApprovalRecord as ProtocolToolApprovalRecord,
-} from '../../../../../../packages/protocol/src/index'
+} from '@moke/protocol'
 
 export type AgentEvent = ProtocolAgentEvent
 export type AgentStepPhase = ProtocolAgentStepPhase

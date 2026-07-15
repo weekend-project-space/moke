@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { parseMcpConfigText, type McpConfig } from '../../../packages/mcp-client/src/index.js';
+import { parseMcpConfigText, type McpConfig } from '@moke/mcp-client';
 
 const DEFAULT_MCP_CONFIG = `{
   "mcpServers": {}

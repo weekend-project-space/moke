@@ -1,4 +1,4 @@
-import type { ToolRegistry } from '../../agent-runtime/src/index.js';
+import type { ToolRegistry } from '@moke/agent-runtime';
 import type { BrowserBackend } from './browser-backend.js';
 import {
   createClickTool,

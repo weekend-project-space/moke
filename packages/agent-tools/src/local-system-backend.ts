@@ -25,8 +25,8 @@ import type {
   SystemReadOptions,
   SystemReadResult,
   SystemWriteResult,
-} from '../../agent-runtime/src/index.js';
-import { PathRequiresApprovalError } from '../../agent-runtime/src/index.js';
+} from '@moke/agent-runtime';
+import { PathRequiresApprovalError } from '@moke/agent-runtime';
 import { analyzeCommandSafety, isInsideRoot, suggestApprovalRoot } from './command-safety.js';
 
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {

@@ -1,5 +1,5 @@
-import type { RunManager, RuntimeRun, ToolRegistry } from '../../../packages/agent-runtime/src/index.js';
-import type { Session } from '../../../packages/protocol/src/index.js';
+import type { RunManager, RuntimeRun, ToolRegistry } from '@moke/agent-runtime';
+import type { Session } from '@moke/protocol';
 import type { BrowserBridge } from '../services/browser-bridge.js';
 import type { McpSettingsService } from '../services/mcp-settings-service.js';
 import type { PermissionsService } from '../services/permissions-service.js';

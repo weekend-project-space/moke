@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Message, Session, ToolApprovalRecord } from '../../protocol/src/index.js';
+import type { Message, Session, ToolApprovalRecord } from '@moke/protocol';
 import type { Agent } from './agent.js';
 import { RunManager, selectRecentHistory } from './run-manager.js';
 import { ToolRegistry } from './tool-registry.js';

@@ -1,4 +1,4 @@
-import { SkillRepository, type SkillDraft } from '../../../packages/agent-skills/src/index.js';
+import { SkillRepository, type SkillDraft } from '@moke/agent-skills';
 
 export class SkillSettingsService {
   private readonly repository: SkillRepository;

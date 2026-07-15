@@ -1,4 +1,4 @@
-import type { ToolApprovalRecord } from '../../protocol/src/index.js';
+import type { ToolApprovalRecord } from '@moke/protocol';
 
 export type RuntimeContentManager = {
   addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;

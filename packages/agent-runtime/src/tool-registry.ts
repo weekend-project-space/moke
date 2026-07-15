@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RiskLevel } from '../../protocol/src/index.js';
+import type { RiskLevel } from '@moke/protocol';
 import type { ToolContext } from './tool-context.js';
 import { isPathRequiresApprovalError } from './workspace-approval.js';
 

@@ -1,12 +1,11 @@
 {
-  "name": "@moke/agent-skills",
+  "name": "@moke/agent-runtime",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@moke/agent-runtime": "0.1.0",
-    "yaml": "^2.9.0",
+    "@moke/protocol": "0.1.0",
     "zod": "^4.4.3"
   }
 }

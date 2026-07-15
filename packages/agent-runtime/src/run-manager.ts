@@ -9,7 +9,7 @@ import type {
   ReasoningEffort,
   Session,
   ToolApprovalRecord,
-} from '../../protocol/src/index.js';
+} from '@moke/protocol';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
 import type { RuntimeRun } from './run-state.js';

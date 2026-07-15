@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
 
-import type { RunSnapshot } from '../../protocol/src/index.js';
+import type { RunSnapshot } from '@moke/protocol';
 
 export type RuntimeRun = RunSnapshot & {
   clients: Set<ServerResponse>;

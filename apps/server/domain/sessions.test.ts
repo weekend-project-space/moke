@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Session } from '../../../packages/protocol/src/index.js';
+import type { Session } from '@moke/protocol';
 import {
   applySessionUpdate,
   forkSession,

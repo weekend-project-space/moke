@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const grepSchema = z.object({
   pattern: z.string().min(1),

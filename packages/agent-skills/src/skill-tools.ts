@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool } from '@moke/agent-runtime';
 import type { SkillLoader } from './skill-loader.js';
 
 const listSkillsSchema = z.object({});

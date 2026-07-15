@@ -3,27 +3,24 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "npm run dev:server & npm run dev:client",
-    "dev:client": "npm --prefix apps/client run dev -- --host 127.0.0.1",
+    "dev": "concurrently --kill-others --names server,client \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "npm run dev --workspace @moke/client -- --host 127.0.0.1",
     "dev:server": "tsx apps/server/server.ts",
     "build:server": "node scripts/build-server-bundle.mjs",
     "test:server": "tsx --test apps/server/**/*.test.ts packages/**/*.test.ts apps/client/src/**/*.test.ts",
     "package:desktop": "node scripts/package-desktop.mjs",
-    "desktop": "npm --prefix apps/client run desktop",
-    "build": "npm --prefix apps/client run build"
-  },
-  "dependencies": {
-    "@langchain/core": "^1.1.48",
-    "@langchain/openai": "^1.4.7",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "deepagents": "^1.10.2",
-    "langchain": "^1.4.4",
-    "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "desktop": "npm run desktop --workspace @moke/client",
+    "build": "npm run build --workspace @moke/client"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "concurrently": "^10.0.3",
+    "esbuild": "^0.28.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }

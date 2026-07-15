@@ -1,15 +1,15 @@
-import { ReActAgent } from '../../../packages/agent-re-act/src/index.js';
-import { RunManager, ToolRegistry, type RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
-import { LocalSystemBackend, registerAgentTools } from '../../../packages/agent-tools/src/index.js';
+import { ReActAgent } from '@moke/agent-re-act';
+import { RunManager, ToolRegistry, type RuntimeRun } from '@moke/agent-runtime';
+import { LocalSystemBackend, registerAgentTools } from '@moke/agent-tools';
 import {
   ContentManager,
   createListSkillsTool,
   createReadSkillTool,
   SkillLoader,
-} from '../../../packages/agent-skills/src/index.js';
-import { registerBrowserTools } from '../../../packages/browser-tools/src/index.js';
-import type { ChatModelSettings } from '../../../packages/agent-re-act/src/llm-client.js';
-import type { Session } from '../../../packages/protocol/src/index.js';
+} from '@moke/agent-skills';
+import { registerBrowserTools } from '@moke/browser-tools';
+import type { ChatModelSettings } from '@moke/agent-re-act';
+import type { Session } from '@moke/protocol';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
 
 export function createToolRegistry(workspace: string, browserBridge: BrowserBridge) {

@@ -1,5 +1,5 @@
 import { HttpError, type Router } from '../http/router.js';
-import { SkillRepositoryError } from '../../../packages/agent-skills/src/index.js';
+import { SkillRepositoryError } from '@moke/agent-skills';
 import type { RoutesContext } from './context.js';
 
 export function registerSettingRoutes(router: Router<RoutesContext>) {

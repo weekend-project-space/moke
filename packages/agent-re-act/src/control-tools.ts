@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ToolExecutionError, type ToolRegistry } from '../../agent-runtime/src/index.js';
+import { ToolExecutionError, type ToolRegistry } from '@moke/agent-runtime';
 
 export const FINISH_TOOL_NAME = 'finish';
 export const ASK_USER_TOOL_NAME = 'ask_user';

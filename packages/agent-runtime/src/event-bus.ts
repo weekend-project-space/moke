@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, AgentEventPayloadMap, AgentEventType, AgentStep } from '../../protocol/src/index.js';
+import type { AgentEvent, AgentEventPayloadMap, AgentEventType, AgentStep } from '@moke/protocol';
 import type { RuntimeRun } from './run-state.js';
 
 export const MAX_RETAINED_RUN_EVENTS = 2000;

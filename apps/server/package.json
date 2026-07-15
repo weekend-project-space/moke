@@ -1,0 +1,16 @@
+{
+  "name": "@moke/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@moke/agent-re-act": "0.1.0",
+    "@moke/agent-runtime": "0.1.0",
+    "@moke/agent-skills": "0.1.0",
+    "@moke/agent-tools": "0.1.0",
+    "@moke/browser-tools": "0.1.0",
+    "@moke/mcp-client": "0.1.0",
+    "@moke/protocol": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

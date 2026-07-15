@@ -7,7 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import type { RiskLevel } from '../../protocol/src/index.js';
+import type { RiskLevel } from '@moke/protocol';
 
 const rootConfigSchema = z.union([
   z.string().min(1),

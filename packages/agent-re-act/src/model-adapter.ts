@@ -1,8 +1,8 @@
 import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { AgentStep, ImageAttachment, Message, ToolCall } from '../../protocol/src/index.js';
-import type { AgentRunInput } from '../../agent-runtime/src/index.js';
+import type { AgentStep, ImageAttachment, Message, ToolCall } from '@moke/protocol';
+import type { AgentRunInput } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
   createHistoryMessages,

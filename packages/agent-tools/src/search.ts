@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const MAX_RESULTS = 20;
 
