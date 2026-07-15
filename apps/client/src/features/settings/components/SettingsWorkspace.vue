@@ -332,36 +332,44 @@ onMounted(() => {
 
       <section class="settings-content">
         <header class="settings-content-header">
-          <button
-            type="button"
-            class="settings-back-button"
-            :title="uiText.settings.returnToChat"
-            :aria-label="uiText.settings.returnToChat"
-            @click="closeSettings"
-          >
-            <ArrowLeft :size="16" stroke-width="2" />
-          </button>
-          <h2>{{ activeSettingsItem.label }}</h2>
+          <div class="settings-content-frame settings-content-header-inner">
+            <button
+              type="button"
+              class="settings-back-button"
+              :title="uiText.settings.returnToChat"
+              :aria-label="uiText.settings.returnToChat"
+              @click="closeSettings"
+            >
+              <ArrowLeft :size="16" stroke-width="2" />
+            </button>
+            <h2>{{ activeSettingsItem.label }}</h2>
+          </div>
         </header>
 
         <div class="settings-content-scroll">
-          <div v-if="activeSettingsTab === 'model'" class="settings-section">
-      <div v-if="modelTestMessage || modelListMessage" class="settings-section-heading">
-        <span>{{ modelTestMessage || modelListMessage }}</span>
-      </div>
-      <div v-if="modelError" class="settings-note error">{{ modelError }}</div>
-
+          <div class="settings-content-frame">
+          <div v-if="activeSettingsTab === 'model'" class="settings-section model-settings">
       <div class="provider-settings">
+        <section class="model-form-group provider-profile-group">
+          <div class="model-group-heading">
+            <h3>{{ uiText.settings.providerProfile }}</h3>
+            <span v-if="editingProvider.id === activeProviderId" class="model-provider-status">
+              {{ uiText.settings.active }}
+            </span>
+          </div>
         <div class="provider-toolbar">
-          <select
-            :value="selectedProviderId"
-            :aria-label="uiText.settings.model"
-            @change="selectProviderFromEvent"
-          >
-            <option v-for="provider in providers" :key="provider.id" :value="provider.id">
-              {{ provider.name }} · {{ provider.model }}{{ provider.id === activeProviderId ? ` · ${uiText.settings.active}` : '' }}
-            </option>
-          </select>
+          <div class="provider-selector">
+            <select
+              :value="selectedProviderId"
+              :aria-label="uiText.settings.providerProfile"
+              @change="selectProviderFromEvent"
+            >
+              <option v-for="provider in providers" :key="provider.id" :value="provider.id">
+                {{ provider.name }}
+              </option>
+            </select>
+            <small>{{ editingProvider.model }}</small>
+          </div>
           <button
             type="button"
             class="settings-icon-button"
@@ -372,8 +380,15 @@ onMounted(() => {
             <Plus :size="14" />
           </button>
         </div>
+        </section>
+
+        <div v-if="modelError" class="settings-note error">{{ modelError }}</div>
 
         <div class="provider-form">
+          <section class="model-form-group">
+            <div class="model-group-heading">
+              <h3>{{ uiText.settings.connection }}</h3>
+            </div>
           <label class="settings-row">
             <span>{{ uiText.settings.name }}</span>
             <input v-model="editingProvider.name" type="text" spellcheck="false" />
@@ -393,13 +408,22 @@ onMounted(() => {
             <span>{{ uiText.settings.apiKey }}</span>
             <input v-model="editingProvider.apiKey" type="password" spellcheck="false" autocomplete="off" />
           </label>
+          </section>
+
+          <section class="model-form-group">
+            <div class="model-group-heading">
+              <h3>{{ uiText.settings.model }}</h3>
+            </div>
           <label class="settings-row">
             <span>{{ uiText.settings.model }}</span>
-            <div class="settings-inline-control">
-              <input v-model="editingProvider.model" list="model-options" type="text" spellcheck="false" />
-              <button type="button" class="settings-secondary" :disabled="loadingModels" @click="loadModelOptions">
-                {{ loadingModels ? uiText.settings.loading : uiText.settings.loadModels }}
-              </button>
+            <div class="settings-stacked-control">
+              <div class="settings-inline-control">
+                <input v-model="editingProvider.model" list="model-options" type="text" spellcheck="false" />
+                <button type="button" class="settings-secondary" :disabled="loadingModels" @click="loadModelOptions">
+                  {{ loadingModels ? uiText.settings.loading : uiText.settings.loadModels }}
+                </button>
+              </div>
+              <small v-if="modelListMessage" aria-live="polite">{{ modelListMessage }}</small>
               <datalist id="model-options">
                 <option v-for="model in modelOptions" :key="model" :value="model" />
               </datalist>
@@ -455,23 +479,27 @@ onMounted(() => {
               </div>
             </label>
           </details>
+          </section>
 
-          <div class="settings-actions">
-            <button type="button" class="settings-secondary" @click="testModel">
-              <RotateCw :size="14" />
-              {{ modelTest === 'checking' ? uiText.settings.testing : uiText.settings.testModel }}
-            </button>
-            <button type="button" class="settings-secondary" :disabled="editingProvider.id === activeProviderId" @click="activateProvider">
-              {{ uiText.settings.setActive }}
-            </button>
-            <button type="button" class="settings-secondary" :disabled="providers.length <= 1" @click="deleteProvider">
+          <div class="settings-actions model-actions">
+            <button type="button" class="settings-secondary model-delete-action" :disabled="providers.length <= 1" @click="deleteProvider">
               <Trash2 :size="14" />
               {{ uiText.settings.delete }}
             </button>
-            <button type="button" class="settings-primary" @click="saveModelProviders()">
-              <Save :size="14" />
-              {{ saved ? uiText.settings.saved : uiText.settings.save }}
-            </button>
+            <span v-if="modelTestMessage" class="model-test-message" aria-live="polite">{{ modelTestMessage }}</span>
+            <div class="model-primary-actions">
+              <button type="button" class="settings-secondary" @click="testModel">
+                <RotateCw :size="14" />
+                {{ modelTest === 'checking' ? uiText.settings.testing : uiText.settings.testModel }}
+              </button>
+              <button type="button" class="settings-secondary" :disabled="editingProvider.id === activeProviderId" @click="activateProvider">
+                {{ uiText.settings.setActive }}
+              </button>
+              <button type="button" class="settings-primary" @click="saveModelProviders()">
+                <Save :size="14" />
+                {{ saved ? uiText.settings.saved : uiText.settings.save }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -527,6 +555,7 @@ onMounted(() => {
         </button>
       </div>
     </div>
+          </div>
         </div>
       </section>
   </WorkspaceLayout>
