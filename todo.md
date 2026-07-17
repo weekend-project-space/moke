@@ -31,7 +31,7 @@
 
 ## 服务端与运行时
 
-- [ ] 所有路由输入统一使用 Zod schema 校验，并生成一致的错误响应。
+- [x] 所有路由输入统一使用 Zod schema 校验，并生成一致的错误响应。
 - [ ] 将模型历史按完整对话轮次和 token 预算裁剪，而不是固定消息条数。
 - [ ] 将 MCP `write`、`dangerous` 工具接入现有审批流程，而不是直接拒绝。
 - [ ] 将 Rust `lib.rs` 拆为 sidecar、browser state、browser commands、snapshot 和 script 模块。
