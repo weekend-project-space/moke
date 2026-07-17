@@ -54,7 +54,7 @@ type RunMessageInput = {
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
 
-export function selectRecentHistory(messages: Message[], maxMessages = 12) {
+export function selectRecentHistory(messages: Message[], maxMessages = 999) {
   if (messages.length <= maxMessages) return messages.slice();
 
   const cutoff = Math.max(0, messages.length - maxMessages);

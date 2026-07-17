@@ -49,16 +49,17 @@ test('router returns one validation error shape', async () => {
   request.url = '/api/example';
   request.headers = { host: 'localhost' };
   const responseBody: { status?: number; body?: unknown } = {};
-  const response = {
+  const responseStub = {
     writableEnded: false,
     writeHead(status: number) {
       responseBody.status = status;
     },
     end(body?: string) {
       responseBody.body = body ? JSON.parse(body) : undefined;
-      this.writableEnded = true;
+      responseStub.writableEnded = true;
     },
-  } as unknown as ServerResponse;
+  };
+  const response = responseStub as unknown as ServerResponse;
 
   await router.handler({})(request, response);
 
