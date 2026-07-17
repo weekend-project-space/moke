@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Message, Session, ToolApprovalRecord } from '@moke/protocol';
+import type { ImageAttachment, Message, Session, ToolApprovalRecord } from '@moke/protocol';
 import type { Agent } from './agent.js';
 import { RunManager, selectRecentHistory } from './run-manager.js';
 import { ToolRegistry } from './tool-registry.js';
@@ -81,7 +81,6 @@ test('RunManager records an ask answer as an interaction event instead of chat m
     },
   };
   const manager = new RunManager({
-    sessions: new Map([[session.id, session]]),
     runs,
     agent,
     toolRegistry: new ToolRegistry(),
@@ -121,7 +120,6 @@ test('RunManager emits approval resolution after a decision', async () => {
     },
   };
   const manager = new RunManager({
-    sessions: new Map([[session.id, session]]),
     runs,
     agent,
     toolRegistry: new ToolRegistry(),
@@ -148,4 +146,106 @@ test('RunManager emits approval resolution after a decision', async () => {
     scope: 'once',
     reason: 'Run tests',
   }]);
+});
+
+test('RunManager persists a returned final message after intermediate tool messages', async () => {
+  const session = createSession();
+  const finalMessage = message({ role: 'assistant', content: 'final' });
+  const agent: Agent = {
+    async run(input) {
+      input.eventBus.emit('agent.message.done', {
+        message: message({ role: 'tool', content: 'tool output', tool_call_id: 'call_1', name: 'test' }),
+      });
+      return { toolCalls: 1, message: finalMessage };
+    },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent,
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => run.status === 'completed');
+
+  assert.deepEqual(session.messages.map(({ role, content }) => ({ role, content })), [
+    { role: 'tool', content: 'tool output' },
+    { role: 'assistant', content: 'final' },
+  ]);
+});
+
+test('RunManager shutdown waits for execution and ignores late messages', async () => {
+  const session = createSession();
+  let release: () => void = () => undefined;
+  let started = false;
+  let changes = 0;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const agent: Agent = {
+    async run(input) {
+      started = true;
+      await gate;
+      const finalMessage = message({ role: 'assistant', content: 'late' });
+      input.eventBus.emit('agent.message.done', { message: finalMessage });
+      return { toolCalls: 0, message: finalMessage };
+    },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent,
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+    onSessionChanged: () => changes++,
+  });
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => started);
+  const shutdown = manager.shutdown();
+  release();
+  await shutdown;
+
+  assert.equal(run.status, 'cancelled');
+  assert.equal(changes, 0);
+  assert.deepEqual(session.messages, []);
+  assert.throws(() => manager.createRun(session, { content: 'again' }), /shutting down/);
+});
+
+test('RunManager resolves persisted image attachments before sending history to the agent', async () => {
+  const session = createSession();
+  const attachment: ImageAttachment = {
+    id: 'img_history',
+    kind: 'image',
+    mime_type: 'image/png',
+    relative_path: 'attachments/blobs/abc.png',
+    size: 8,
+    sha256: 'a'.repeat(64),
+  };
+  session.messages.push(
+    message({ role: 'user', content: 'image', attachments: [attachment] }),
+    message({ role: 'user', content: 'current' }),
+  );
+  let historyDataUrl = '';
+  const agent: Agent = {
+    async run(input) {
+      const first = input.history?.[0];
+      historyDataUrl = first?.role === 'user' ? first.attachments?.[0]?.data_url || '' : '';
+      return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+    },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent,
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+    resolveImageAttachments: (attachments) => attachments.map((item) => ({
+      ...item,
+      data_url: 'data:image/png;base64,AA==',
+    })),
+  });
+
+  const run = manager.createRun(session, { content: 'current' });
+  await waitFor(() => run.status === 'completed');
+  assert.equal(historyDataUrl, 'data:image/png;base64,AA==');
 });

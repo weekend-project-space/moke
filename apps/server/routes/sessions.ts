@@ -1,6 +1,7 @@
-import type { ImageAttachment, ReasoningEffort, Session } from '@moke/protocol';
+import type { ReasoningEffort, Session } from '@moke/protocol';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
+import { AttachmentStoreError, toStoredAttachment } from '../storage/attachment-store.js';
 import {
   applySessionUpdate,
   forkSession,
@@ -23,19 +24,18 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
         ? requestBody.metadata as Record<string, unknown>
         : {},
     };
-    context.sessions.set(session.id, session);
-    context.onChange();
+    context.sessionStore.save(session);
     return json(200, { session });
   });
 
   router.get('/api/sessions', ({ context, json, query }) => {
     const includeArchived = query.get('include_archived') === 'true';
-    const visibleSessions = [...context.sessions.values()].filter(
-      (session) => includeArchived || session.metadata?.archived !== true,
+    const visibleSessions = context.sessionStore.list().filter(
+      (session) => includeArchived || !session.archived,
     );
 
     return json(200, {
-      sessions: visibleSessions.map(summarizeSession),
+      sessions: visibleSessions,
       next_cursor: null,
     });
   });
@@ -46,7 +46,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     if (!result.ok) throw new HttpError(result.status, result.code, result.message);
 
     session.updated_at = now();
-    context.onChange();
+    context.sessionStore.save(session);
     return json(200, { session: summarizeSession(session) });
   });
 
@@ -67,8 +67,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const forkedSession = forkSession({ source, messageId, now: now() });
     if (!forkedSession) throw new HttpError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
 
-    context.sessions.set(forkedSession.id, forkedSession);
-    context.onChange();
+    context.sessionStore.save(forkedSession);
     return json(200, {
       session: summarizeSession(forkedSession),
       messages: forkedSession.messages,
@@ -82,7 +81,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       ? requestBody.message as Record<string, unknown>
       : {};
     const content = typeof message.content === 'string' ? message.content.trim() : '';
-    const attachments = normalizeImageAttachments(message.attachments);
+    const attachments = saveImageAttachments(context, message.attachments);
     if (!content && attachments.length === 0) {
       throw new HttpError(400, 'BAD_REQUEST', 'message.content or message.attachments is required');
     }
@@ -94,9 +93,10 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       role: 'user',
       content,
       created_at: createdAt,
-      ...(attachments.length ? { attachments } : {}),
+      ...(attachments.length ? { attachments: attachments.map(toStoredAttachment) } : {}),
     });
     session.updated_at = createdAt;
+    context.sessionStore.save(session);
 
     const options = requestBody.options && typeof requestBody.options === 'object' ? requestBody.options : {};
     const run = context.runManager.createRun(session, { content, attachments }, {
@@ -119,49 +119,19 @@ function normalizeRunReasoningEffort(input: unknown): ReasoningEffort | undefine
     : undefined;
 }
 
-const MAX_IMAGE_ATTACHMENTS = 4;
-const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
-
-function normalizeImageAttachments(input: unknown): ImageAttachment[] {
-  if (input === undefined) return [];
-  if (!Array.isArray(input)) throw new HttpError(400, 'BAD_REQUEST', 'message.attachments must be an array');
-  if (input.length > MAX_IMAGE_ATTACHMENTS) {
-    throw new HttpError(400, 'BAD_REQUEST', `message.attachments supports at most ${MAX_IMAGE_ATTACHMENTS} images`);
+function saveImageAttachments(context: RoutesContext, input: unknown) {
+  try {
+    return context.attachmentStore.saveImages(input);
+  } catch (error) {
+    if (error instanceof AttachmentStoreError) {
+      throw new HttpError(error.status, error.code, error.message);
+    }
+    throw error;
   }
-
-  let totalLength = 0;
-  return input.map((item, index) => {
-    if (!item || typeof item !== 'object') {
-      throw new HttpError(400, 'BAD_REQUEST', `message.attachments[${index}] must be an object`);
-    }
-
-    const candidate = item as Partial<ImageAttachment>;
-    const mimeType = typeof candidate.mime_type === 'string' ? candidate.mime_type.trim().toLowerCase() : '';
-    const dataUrl = typeof candidate.data_url === 'string' ? candidate.data_url.trim() : '';
-    if (!mimeType.startsWith('image/')) {
-      throw new HttpError(400, 'BAD_REQUEST', `message.attachments[${index}].mime_type must be an image type`);
-    }
-    if (!dataUrl.startsWith(`data:${mimeType};base64,`)) {
-      throw new HttpError(400, 'BAD_REQUEST', `message.attachments[${index}].data_url must match its image mime_type`);
-    }
-
-    totalLength += dataUrl.length;
-    if (totalLength > MAX_IMAGE_DATA_URL_LENGTH) {
-      throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Image attachments are too large');
-    }
-
-    return {
-      id: typeof candidate.id === 'string' && candidate.id ? candidate.id : id('img'),
-      kind: 'image',
-      name: typeof candidate.name === 'string' ? candidate.name.slice(0, 120) : undefined,
-      mime_type: mimeType,
-      data_url: dataUrl,
-    };
-  });
 }
 
 function getSession(context: RoutesContext, id: string) {
-  const session = context.sessions.get(id);
+  const session = context.sessionStore.get(id);
   if (!session) throw new HttpError(404, 'SESSION_NOT_FOUND', 'Session not found');
   return session;
 }

@@ -1,7 +1,7 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
-import type { ImageAttachment, Message } from '@moke/protocol';
-import type { ToolContext } from '@moke/agent-runtime';
+import type { Message, ResolvedImageAttachment } from '@moke/protocol';
+import type { RuntimeMessage, ToolContext } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import { FINISH_TOOL_NAME } from './control-tools.js';
 
@@ -57,7 +57,7 @@ export function createFinalMessage(content: string, reasoning?: string): Message
   };
 }
 
-function createUserContent(content: string, attachments: ImageAttachment[] = []) {
+function createUserContent(content: string, attachments: ResolvedImageAttachment[] = []) {
   if (attachments.length === 0) return content;
 
   return [
@@ -71,11 +71,11 @@ function createUserContent(content: string, attachments: ImageAttachment[] = [])
   ];
 }
 
-export function createUserMessage(content: string, attachments: ImageAttachment[] = []) {
+export function createUserMessage(content: string, attachments: ResolvedImageAttachment[] = []) {
   return new HumanMessage(createUserContent(content, attachments));
 }
 
-export function createHistoryMessages(history: Message[]) {
+export function createHistoryMessages(history: RuntimeMessage[]) {
   const messages: BaseMessage[] = [];
 
   for (let index = 0; index < history.length; index++) {

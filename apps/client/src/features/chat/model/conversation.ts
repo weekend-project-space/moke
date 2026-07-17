@@ -3,6 +3,7 @@ import type {
   AgentStep as ProtocolAgentStep,
   AgentStepPhase as ProtocolAgentStepPhase,
   ImageAttachment as ProtocolImageAttachment,
+  ImageAttachmentUpload as ProtocolImageAttachmentUpload,
   PendingApproval as ProtocolPendingApproval,
   PendingAsk as ProtocolPendingAsk,
   ReasoningEffort as ProtocolReasoningEffort,
@@ -15,7 +16,9 @@ export type AgentEvent = ProtocolAgentEvent
 export type AgentStepPhase = ProtocolAgentStepPhase
 export type AgentStep = ProtocolAgentStep
 export type ReasoningEffort = ProtocolReasoningEffort
-export type ImageAttachment = ProtocolImageAttachment
+export type StoredImageAttachment = ProtocolImageAttachment
+export type ImageAttachment = ProtocolImageAttachmentUpload
+export type MessageImageAttachment = StoredImageAttachment | ImageAttachment
 export type SessionSummary = ProtocolSessionSummary
 export type PendingAsk = ProtocolPendingAsk
 export type PendingApproval = ProtocolPendingApproval
@@ -30,7 +33,7 @@ type BaseMessage = {
 
 export type UserMessage = BaseMessage & {
   role: 'user'
-  attachments?: ImageAttachment[]
+  attachments?: MessageImageAttachment[]
   reasoning?: never
   step?: never
   tool_calls?: never

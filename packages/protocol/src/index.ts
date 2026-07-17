@@ -44,6 +44,20 @@ export type ImageAttachment = {
   kind: 'image';
   name?: string;
   mime_type: string;
+  relative_path: string;
+  size: number;
+  sha256: string;
+};
+
+export type ImageAttachmentUpload = {
+  id: string;
+  kind: 'image';
+  name?: string;
+  mime_type: string;
+  data_url: string;
+};
+
+export type ResolvedImageAttachment = ImageAttachment & {
   data_url: string;
 };
 

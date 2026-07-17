@@ -1,7 +1,6 @@
 import http from 'node:http';
 
 import type { RuntimeRun } from '@moke/agent-runtime';
-import type { Session } from '@moke/protocol';
 import {
   loadFirstEnvFile,
   resolveEnvPaths,
@@ -17,7 +16,9 @@ import { registerMcpTools } from './services/mcp-tools.js';
 import { PermissionsService } from './services/permissions-service.js';
 import { SettingsService } from './services/settings-service.js';
 import { SkillSettingsService } from './services/skill-settings-service.js';
-import { createStateSaver, loadState } from './storage/state.js';
+import { JsonSessionStore } from './storage/session-store.js';
+import { AttachmentStore } from './storage/attachment-store.js';
+import { summarizeSession } from './domain/sessions.js';
 
 export {
   normalizeWindowsDrivePath,
@@ -51,15 +52,15 @@ export async function createApp(): Promise<ServerApp> {
   if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
 
   const config: ServerConfig = resolveServerConfig();
-  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, workspace } = config;
+  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, storePath, workspace } = config;
 
-  const sessions = new Map<string, Session>();
   const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const skillSettingsService = new SkillSettingsService(workspace);
-  const stateSaver = createStateSaver({ statePath, sessions });
+  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession });
+  const attachmentStore = new AttachmentStore(storePath);
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
@@ -68,11 +69,11 @@ export async function createApp(): Promise<ServerApp> {
     system.approveWorkspaceRoot(permission.path);
   }
 
-  loadState({ statePath, sessions });
+  sessionStore.initialize();
+  attachmentStore.migrateInlineAttachments(sessionStore);
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
   const runManager = createRunManager({
-    sessions,
     runs,
     toolRegistry,
     workspace,
@@ -86,12 +87,14 @@ export async function createApp(): Promise<ServerApp> {
       }
     },
     getModelSettings: () => settingsService.getModelSettings(),
-    onChange: stateSaver.saveStateSoon,
+    resolveImageAttachments: (attachments) => attachments.map((attachment) => attachmentStore.resolve(attachment)),
+    onSessionChanged: (session) => sessionStore.save(session),
   });
 
   const server = http.createServer(
     createRoutes({
-      sessions,
+      sessionStore,
+      attachmentStore,
       runs,
       runManager,
       toolRegistry,
@@ -100,7 +103,6 @@ export async function createApp(): Promise<ServerApp> {
       permissionsService,
       settingsService,
       skillSettingsService,
-      onChange: stateSaver.saveStateSoon,
     }),
   );
 
@@ -108,10 +110,13 @@ export async function createApp(): Promise<ServerApp> {
     port,
     server,
     close: async () => {
+      const httpClosed = closeHttpServer(server);
+      const runsStopped = runManager.shutdown();
       browserBridge.close();
-      stateSaver.flush();
       await mcpManager?.close();
-      await closeHttpServer(server);
+      await runsStopped;
+      await httpClosed;
+      sessionStore.flush();
     },
   };
 }

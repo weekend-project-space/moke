@@ -9,6 +9,7 @@ import type { DisplayItem, TaskTemplate } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
+  apiBase: string
   copiedKey: string
   displayItems: DisplayItem[]
   sessionKey: string
@@ -325,6 +326,7 @@ defineExpose({
       />
       <MessageBubble
         v-else
+        :api-base="apiBase"
         :id="item.id"
         :message="item.message"
         :copied-key="copiedKey"

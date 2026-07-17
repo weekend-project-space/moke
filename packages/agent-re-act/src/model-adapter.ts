@@ -1,8 +1,8 @@
 import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { AgentStep, ImageAttachment, Message, ToolCall } from '@moke/protocol';
-import type { AgentRunInput } from '@moke/agent-runtime';
+import type { AgentStep, ResolvedImageAttachment, ToolCall } from '@moke/protocol';
+import type { AgentRunInput, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
   createHistoryMessages,
@@ -18,9 +18,9 @@ import { createChatModel, type ChatModelSettings, withTimeout } from './llm-clie
 export type ModelStepInput = {
   eventBus: AgentRunInput['eventBus'];
   input: string;
-  attachments: ImageAttachment[];
+  attachments: ResolvedImageAttachment[];
   context: AgentRunInput['context'];
-  history: Message[];
+  history: RuntimeMessage[];
   messages: ModelConversationState;
   runtimeTools: AgentToolSpec[];
   showRawReasoning: boolean;
@@ -45,9 +45,9 @@ export type ModelConversationState = {
 export type ModelAdapter = {
   createInitialState(input: {
     context: AgentRunInput['context'];
-    history: Message[];
+    history: RuntimeMessage[];
     input: string;
-    attachments: ImageAttachment[];
+    attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState;
   appendToolResult(state: ModelConversationState, input: {
@@ -135,7 +135,7 @@ function createResponsesReasoning(settings: ChatModelSettings): { effort: string
   return { effort: settings.reasoningEffort };
 }
 
-function createResponsesUserContent(content: string, attachments: ImageAttachment[]): ResponseContentItem[] {
+function createResponsesUserContent(content: string, attachments: ResolvedImageAttachment[]): ResponseContentItem[] {
   return [
     ...(content ? [{ type: 'input_text' as const, text: content }] : []),
     ...attachments.map((attachment) => ({
@@ -145,7 +145,7 @@ function createResponsesUserContent(content: string, attachments: ImageAttachmen
   ];
 }
 
-function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[] {
+function createResponsesHistoryMessages(history: RuntimeMessage[]): ResponsesInputItem[] {
   const messages: ResponsesInputItem[] = [];
   const knownToolCallIds = new Set<string>();
 
@@ -405,9 +405,9 @@ export class ChatCompletionsAdapter implements ModelAdapter {
 
   createInitialState(input: {
     context: AgentRunInput['context'];
-    history: Message[];
+    history: RuntimeMessage[];
     input: string;
-    attachments: ImageAttachment[];
+    attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState {
     return {
@@ -475,9 +475,9 @@ export class ResponsesAdapter implements ModelAdapter {
 
   createInitialState(input: {
     context: AgentRunInput['context'];
-    history: Message[];
+    history: RuntimeMessage[];
     input: string;
-    attachments: ImageAttachment[];
+    attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState {
     const system = createSystemMessage(input.runtimeTools, input.context);

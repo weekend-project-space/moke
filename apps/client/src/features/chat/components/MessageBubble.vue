@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
-import type { Message } from '../model/conversation'
+import type { Message, MessageImageAttachment } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 
-defineProps<{
+const props = defineProps<{
+  apiBase: string
   copiedKey: string
   id: string
   message: Message
   renderMarkdown: (content: string) => string
   showContinue?: boolean
 }>()
+
+function attachmentSrc(attachment: MessageImageAttachment) {
+  if ('data_url' in attachment) return attachment.data_url
+  return `${props.apiBase}/api/attachments/${encodeURIComponent(attachment.sha256)}`
+}
 
 const emit = defineEmits<{
   copy: [payload: { key: string; content: string }]
@@ -25,8 +31,10 @@ const emit = defineEmits<{
         <img
           v-for="attachment in message.attachments"
           :key="attachment.id"
-          :src="attachment.data_url"
+          :src="attachmentSrc(attachment)"
           :alt="attachment.name || uiText.composer.imageAttachment"
+          loading="lazy"
+          decoding="async"
         />
       </div>
       <div v-if="message.content" class="bubble user">

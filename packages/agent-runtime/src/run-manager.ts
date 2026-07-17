@@ -7,10 +7,11 @@ import type {
   Message,
   PendingApproval,
   ReasoningEffort,
+  ResolvedImageAttachment,
   Session,
   ToolApprovalRecord,
 } from '@moke/protocol';
-import type { Agent } from './agent.js';
+import type { Agent, RuntimeMessage } from './agent.js';
 import { EventBus } from './event-bus.js';
 import type { RuntimeRun } from './run-state.js';
 import type {
@@ -27,14 +28,16 @@ function id(prefix: string) {
 }
 
 type RunManagerConfig = {
-  sessions: Map<string, Session>;
   runs: Map<string, RuntimeRun>;
   agent: Agent;
   toolRegistry: ToolRegistry;
   workspace: string;
   createSkillContentManager?: () => RuntimeContentManager;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
-  onChange?: () => void;
+  resolveImageAttachments?: (
+    attachments: ImageAttachment[],
+  ) => ResolvedImageAttachment[] | Promise<ResolvedImageAttachment[]>;
+  onSessionChanged?: (session: Session) => void;
 };
 
 type RunOptions = {
@@ -46,7 +49,7 @@ type RunOptions = {
 
 type RunMessageInput = {
   content: string;
-  attachments?: ImageAttachment[];
+  attachments?: ResolvedImageAttachment[];
 };
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
@@ -99,6 +102,8 @@ function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap[
 
 export class RunManager {
   private readonly abortControllers = new Map<string, AbortController>();
+  private readonly activeExecutions = new Map<string, Promise<void>>();
+  private shuttingDown = false;
   private readonly pendingAsks = new Map<
     string,
     {
@@ -120,6 +125,7 @@ export class RunManager {
   constructor(private readonly config: RunManagerConfig) { }
 
   createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
+    if (this.shuttingDown) throw new Error('Run manager is shutting down');
     const run: RuntimeRun = {
       id: id('run'),
       session_id: session.id,
@@ -132,37 +138,37 @@ export class RunManager {
     };
 
     this.config.runs.set(run.id, run);
-    this.config.onChange?.();
-    void this.execute(run, session, input, options);
+    const execution = this.execute(run, session, input, options);
+    this.activeExecutions.set(run.id, execution);
+    void execution.then(
+      () => this.activeExecutions.delete(run.id),
+      () => this.activeExecutions.delete(run.id),
+    );
     return run;
   }
 
   private async execute(run: RuntimeRun, session: Session, input: RunMessageInput, options: RunOptions) {
-    let assistantMessageSaved = false;
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
+      if (run.abort) return;
       if (event.type !== 'agent.message.done') {
         return;
       }
 
       const message = readSessionMessage(event);
-      if (!message) {
-        this.config.onChange?.();
-        return;
-      }
+      if (!message) return;
 
       session.messages.push(message);
       session.updated_at = message.created_at;
-      assistantMessageSaved = true;
-      this.config.onChange?.();
+      this.config.onSessionChanged?.(session);
     });
     const limits = {
       max_steps: options.max_steps || 999,
       max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
-    const history = selectRecentHistory(session.messages.slice(0, -1));
+    const history = await this.resolveHistory(selectRecentHistory(session.messages.slice(0, -1)));
     const contentManager = this.config.createSkillContentManager?.();
 
     try {
@@ -189,9 +195,10 @@ export class RunManager {
 
       if (run.abort) return;
 
-      if (!assistantMessageSaved) {
+      if (!session.messages.some((message) => message.id === result.message.id)) {
         session.messages.push(result.message);
         session.updated_at = result.message.created_at;
+        this.config.onSessionChanged?.(session);
       }
       run.status = 'completed';
       eventBus.emit('agent.done', {
@@ -251,8 +258,6 @@ export class RunManager {
     };
 
     eventBus.emit('approval.required', run.pending_approval);
-    this.config.onChange?.();
-
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
@@ -283,8 +288,6 @@ export class RunManager {
     };
 
     eventBus.emit('approval.required', run.pending_approval);
-    this.config.onChange?.();
-
     return new Promise<ToolApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
@@ -341,7 +344,6 @@ export class RunManager {
       selected,
     });
 
-    this.config.onChange?.();
     pending.resolve(selected);
 
     return { status: 200 as const, run };
@@ -373,7 +375,6 @@ export class RunManager {
       decision,
       scope,
     });
-    this.config.onChange?.();
     const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
@@ -419,10 +420,22 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
-    this.config.onChange?.();
     this.pruneTerminalRuns();
 
     return run;
+  }
+
+  cancelAll() {
+    for (const run of this.config.runs.values()) {
+      if (!isActiveRun(run)) continue;
+      this.cancel(run.id);
+    }
+  }
+
+  async shutdown() {
+    this.shuttingDown = true;
+    this.cancelAll();
+    await Promise.allSettled([...this.activeExecutions.values()]);
   }
 
   private pruneTerminalRuns() {
@@ -466,4 +479,25 @@ export class RunManager {
     if (runRecords?.size === 0) this.approvalRecords.delete(runId);
     return records;
   }
+
+  private async resolveHistory(messages: Message[]): Promise<RuntimeMessage[]> {
+    return Promise.all(messages.map(async (message): Promise<RuntimeMessage> => {
+      if (message.role !== 'user') return message;
+      if (!message.attachments?.length) return { ...message, attachments: undefined };
+      if (!this.config.resolveImageAttachments) {
+        throw new Error('Image attachment resolver is not configured');
+      }
+      return {
+        ...message,
+        attachments: await this.config.resolveImageAttachments(message.attachments),
+      };
+    }));
+  }
+}
+
+function isActiveRun(run: RuntimeRun) {
+  return run.status !== 'completed'
+    && run.status !== 'failed'
+    && run.status !== 'cancelled'
+    && run.status !== 'timeout';
 }

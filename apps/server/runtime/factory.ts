@@ -9,8 +9,8 @@ import {
 } from '@moke/agent-skills';
 import { registerBrowserTools } from '@moke/browser-tools';
 import type { ChatModelSettings } from '@moke/agent-re-act';
-import type { Session } from '@moke/protocol';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
+import type { ImageAttachment, ResolvedImageAttachment, Session } from '@moke/protocol';
 
 export function createToolRegistry(workspace: string, browserBridge: BrowserBridge) {
   const system = new LocalSystemBackend(workspace);
@@ -28,21 +28,23 @@ export function createToolRegistry(workspace: string, browserBridge: BrowserBrid
 
 export function createRunManager(input: {
   runs: Map<string, RuntimeRun>;
-  sessions: Map<string, Session>;
   toolRegistry: ToolRegistry;
   workspace: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   getModelSettings: () => Partial<ChatModelSettings>;
-  onChange: () => void;
+  resolveImageAttachments: (
+    attachments: ImageAttachment[],
+  ) => ResolvedImageAttachment[] | Promise<ResolvedImageAttachment[]>;
+  onSessionChanged: (session: Session) => void;
 }) {
   return new RunManager({
-    sessions: input.sessions,
     runs: input.runs,
     agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
     workspace: input.workspace,
     createSkillContentManager: () => new ContentManager(),
     approveWorkspaceRoot: input.approveWorkspaceRoot,
-    onChange: input.onChange,
+    resolveImageAttachments: input.resolveImageAttachments,
+    onSessionChanged: input.onSessionChanged,
   });
 }

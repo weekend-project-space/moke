@@ -1,6 +1,7 @@
 import { createRouter } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { registerBrowserRoutes } from './browser.js';
+import { registerAttachmentRoutes } from './attachments.js';
 import { registerHealthRoutes } from './health.js';
 import { registerRunRoutes } from './runs.js';
 import { registerSettingRoutes } from './settings.js';
@@ -13,6 +14,7 @@ export function createRoutes(context: RoutesContext) {
   registerHealthRoutes(router);
   registerToolRoutes(router);
   registerBrowserRoutes(router);
+  registerAttachmentRoutes(router);
   registerSessionRoutes(router);
   registerSettingRoutes(router);
   registerRunRoutes(router);

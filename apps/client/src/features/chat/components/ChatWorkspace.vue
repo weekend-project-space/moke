@@ -364,6 +364,7 @@ defineExpose({
 
       <ConversationView
         ref="conversationView"
+        :api-base="apiBase"
         :copied-key="copiedKey"
         :display-items="displayItems"
         :session-key="sessionId"

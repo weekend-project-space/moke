@@ -71,3 +71,23 @@ test('resolveServerConfig includes permissions path under workspace', async () =
     else process.env.MOKE_PERMISSIONS_PATH = previousPermissionsPath;
   }
 });
+
+test('resolveServerConfig places the session store under workspace', async () => {
+  const { resolveServerConfig } = await import(`./paths.js?store-test=${Date.now()}`);
+  const previousWorkspace = process.env.MOKE_WORKSPACE;
+  const previousStorePath = process.env.MOKE_STORE_PATH;
+
+  try {
+    process.env.MOKE_WORKSPACE = 'E:\\work\\test\\moke';
+    delete process.env.MOKE_STORE_PATH;
+    assert.equal(
+      resolveServerConfig().storePath,
+      resolve('E:\\work\\test\\moke', '.moke', 'store'),
+    );
+  } finally {
+    if (previousWorkspace === undefined) delete process.env.MOKE_WORKSPACE;
+    else process.env.MOKE_WORKSPACE = previousWorkspace;
+    if (previousStorePath === undefined) delete process.env.MOKE_STORE_PATH;
+    else process.env.MOKE_STORE_PATH = previousStorePath;
+  }
+});
