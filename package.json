@@ -14,7 +14,7 @@
     "test": "tsc -b && tsx --test apps/server/**/*.test.ts packages/**/*.test.ts apps/client/src/**/*.test.ts",
     "typecheck": "tsc -b && tsc -b apps/server && npm run typecheck --workspace @moke/client",
     "package:desktop": "node scripts/package-desktop.mjs",
-    "desktop": "npm run desktop --workspace @moke/client"
+    "desktop":  "tsc -b && concurrently --kill-others --names packages,server,client \"tsc -b --watch --preserveWatchOutput\" \"node --watch --import tsx apps/server/server.ts\" \"npm run desktop --workspace @moke/client\""
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
