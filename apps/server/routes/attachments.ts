@@ -1,9 +1,12 @@
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
+import { attachmentParamsSchema } from './schemas.js';
+import { parseParams } from '../http/validation.js';
 
 export function registerAttachmentRoutes(router: Router<RoutesContext>) {
   router.get('/api/attachments/:sha256', ({ context, params, raw }) => {
-    const attachment = context.attachmentStore.open(params.sha256);
+    const { sha256 } = parseParams(params, attachmentParamsSchema);
+    const attachment = context.attachmentStore.open(sha256);
     if (!attachment) throw new HttpError(404, 'ATTACHMENT_NOT_FOUND', 'Attachment not found');
 
     raw.res.writeHead(200, {

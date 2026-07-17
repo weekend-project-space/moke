@@ -1,7 +1,16 @@
-import type { ReasoningEffort, Session } from '@moke/protocol';
+import type { Session } from '@moke/protocol';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { AttachmentStoreError, toStoredAttachment } from '../storage/attachment-store.js';
+import {
+  createSessionSchema,
+  forkSessionSchema,
+  idParamsSchema,
+  listSessionsQuerySchema,
+  sendMessageSchema,
+  updateSessionSchema,
+} from './schemas.js';
+import { parseBody, parseParams, parseQuery } from '../http/validation.js';
 import {
   applySessionUpdate,
   forkSession,
@@ -13,25 +22,23 @@ import {
 
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
-    const requestBody = await body();
+    const requestBody = await parseBody(body, createSessionSchema);
     const session: Session = {
       id: id('sess'),
-      title: typeof requestBody.title === 'string' ? requestBody.title : 'New chat',
+      title: requestBody.title || 'New chat',
       created_at: now(),
       updated_at: now(),
       messages: [],
-      metadata: typeof requestBody.metadata === 'object' && requestBody.metadata !== null
-        ? requestBody.metadata as Record<string, unknown>
-        : {},
+      metadata: requestBody.metadata || {},
     };
     context.sessionStore.save(session);
     return json(200, { session });
   });
 
   router.get('/api/sessions', ({ context, json, query }) => {
-    const includeArchived = query.get('include_archived') === 'true';
+    const { include_archived: includeArchived } = parseQuery(query, listSessionsQuerySchema);
     const visibleSessions = context.sessionStore.list().filter(
-      (session) => includeArchived || !session.archived,
+      (session) => includeArchived === 'true' || !session.archived,
     );
 
     return json(200, {
@@ -41,8 +48,9 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   });
 
   router.patch('/api/sessions/:id', async ({ body, context, json, params }) => {
-    const session = getSession(context, params.id);
-    const result = applySessionUpdate(session, await body());
+    const { id: sessionId } = parseParams(params, idParamsSchema);
+    const session = getSession(context, sessionId);
+    const result = applySessionUpdate(session, await parseBody(body, updateSessionSchema));
     if (!result.ok) throw new HttpError(result.status, result.code, result.message);
 
     session.updated_at = now();
@@ -51,18 +59,15 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   });
 
   router.get('/api/sessions/:id', ({ context, json, params }) => {
-    const session = getSession(context, params.id);
+    const { id: sessionId } = parseParams(params, idParamsSchema);
+    const session = getSession(context, sessionId);
     return json(200, { session: summarizeSession(session), messages: session.messages });
   });
 
   router.post('/api/sessions/:id/fork', async ({ body, context, json, params }) => {
-    const source = getSession(context, params.id);
-    const requestBody = await body();
-    const messageId = typeof requestBody.message_id === 'string' ? requestBody.message_id : '';
-    const mode = typeof requestBody.mode === 'string' ? requestBody.mode : 'after';
-    if (!messageId || mode !== 'after') {
-      throw new HttpError(400, 'BAD_REQUEST', 'message_id is required and mode must be after');
-    }
+    const { id: sessionId } = parseParams(params, idParamsSchema);
+    const source = getSession(context, sessionId);
+    const { message_id: messageId } = await parseBody(body, forkSessionSchema);
 
     const forkedSession = forkSession({ source, messageId, now: now() });
     if (!forkedSession) throw new HttpError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
@@ -75,13 +80,11 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   });
 
   router.post('/api/sessions/:id/messages', async ({ body, context, json, params }) => {
-    const session = getSession(context, params.id);
-    const requestBody = await body();
-    const message = requestBody.message && typeof requestBody.message === 'object'
-      ? requestBody.message as Record<string, unknown>
-      : {};
-    const content = typeof message.content === 'string' ? message.content.trim() : '';
-    const attachments = saveImageAttachments(context, message.attachments);
+    const { id: sessionId } = parseParams(params, idParamsSchema);
+    const session = getSession(context, sessionId);
+    const requestBody = await parseBody(body, sendMessageSchema);
+    const content = requestBody.message.content.trim();
+    const attachments = saveImageAttachments(context, requestBody.message.attachments);
     if (!content && attachments.length === 0) {
       throw new HttpError(400, 'BAD_REQUEST', 'message.content or message.attachments is required');
     }
@@ -98,10 +101,9 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     session.updated_at = createdAt;
     context.sessionStore.save(session);
 
-    const options = requestBody.options && typeof requestBody.options === 'object' ? requestBody.options : {};
     const run = context.runManager.createRun(session, { content, attachments }, {
-      ...options,
-      reasoningEffort: normalizeRunReasoningEffort((options as Record<string, unknown>).reasoningEffort),
+      ...requestBody.options,
+      reasoningEffort: requestBody.options.reasoningEffort === 'ultra' ? 'max' : requestBody.options.reasoningEffort,
     });
 
     return json(200, {
@@ -110,13 +112,6 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       events_url: `/api/runs/${run.id}/events`,
     });
   });
-}
-
-function normalizeRunReasoningEffort(input: unknown): ReasoningEffort | undefined {
-  if (input === 'ultra') return 'max';
-  return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max'
-    ? input
-    : undefined;
 }
 
 function saveImageAttachments(context: RoutesContext, input: unknown) {

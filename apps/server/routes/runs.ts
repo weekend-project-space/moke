@@ -2,6 +2,8 @@ import type { RuntimeRun } from '@moke/agent-runtime';
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';
+import { idParamsSchema, runRespondSchema } from './schemas.js';
+import { parseBody, parseParams } from '../http/validation.js';
 
 export function registerRunRoutes(router: Router<RoutesContext>) {
   router.get('/api/runs/active', ({ context, json }) => {
@@ -20,7 +22,8 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
   });
 
   router.get('/api/runs/:id/events', ({ context, params, raw }) => {
-    const run = getRun(context, params.id);
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
 
     raw.res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -44,19 +47,19 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
   });
 
   router.post('/api/runs/:id/respond', async ({ body, context, json, params }) => {
-    const run = getRun(context, params.id);
-    const requestBody = await body();
-    const type = typeof requestBody.type === 'string' ? requestBody.type : '';
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
+    const requestBody = await parseBody(body, runRespondSchema);
 
-    if (type === 'choose') {
+    if (requestBody.type === 'choose') {
       return handleChoose(context, run, requestBody, json);
     }
 
-    if (type === 'approve') {
+    if (requestBody.type === 'approve') {
       return handleApprove(context, run, requestBody, json);
     }
 
-    if (type === 'cancel') {
+    if (requestBody.type === 'cancel') {
       context.runManager.cancel(run.id);
       return json(200, {
         run_id: run.id,
@@ -64,7 +67,6 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
       });
     }
 
-    throw new HttpError(400, 'BAD_REQUEST', 'type must be choose, approve, or cancel');
   });
 }
 
@@ -77,14 +79,14 @@ function getRun(context: RoutesContext, id: string) {
 function handleChoose(
   context: RoutesContext,
   run: RuntimeRun,
-  body: Record<string, unknown>,
+  body: {
+    request_id: string;
+    option_id: string;
+  },
   json: (status: number, body: unknown) => void,
 ) {
-  const requestId = typeof body.request_id === 'string' ? body.request_id : '';
-  const optionId = typeof body.option_id === 'string' ? body.option_id : '';
-  if (!requestId || !optionId) {
-    throw new HttpError(400, 'BAD_REQUEST', 'request_id and option_id are required');
-  }
+  const requestId = body.request_id;
+  const optionId = body.option_id;
 
   const result = context.runManager.answer(run.id, requestId, optionId);
   if (result.status !== 200) {
@@ -105,21 +107,21 @@ function handleChoose(
 function handleApprove(
   context: RoutesContext,
   run: RuntimeRun,
-  body: Record<string, unknown>,
+  body: {
+    request_id: string;
+    decision: 'approved' | 'rejected';
+    scope?: 'once' | 'session' | 'persistent';
+    message?: string;
+  },
   json: (status: number, body: unknown) => void,
 ) {
-  const requestId = typeof body.request_id === 'string' ? body.request_id : '';
-  const decision = body.decision === 'approved' ? 'approved' : body.decision === 'rejected' ? 'rejected' : '';
-  const scope =
-    body.scope === 'once' || body.scope === 'session' || body.scope === 'persistent' ? body.scope : undefined;
-
-  if (!requestId || !decision) {
-    throw new HttpError(400, 'BAD_REQUEST', 'request_id and decision are required');
-  }
+  const requestId = body.request_id;
+  const decision = body.decision;
+  const scope = body.scope;
 
   const result = context.runManager.approve(run.id, requestId, decision, {
     scope,
-    message: typeof body.message === 'string' ? body.message : undefined,
+    message: body.message,
   });
   if (result.status !== 200) {
     throw new HttpError(result.status, result.status === 404 ? 'RUN_NOT_FOUND' : 'APPROVAL_NOT_PENDING', result.error);

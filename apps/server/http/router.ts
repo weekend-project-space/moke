@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { json, readJson, RequestBodyError } from './response.js';
+import { RequestValidationError } from './validation.js';
 
 type Method = 'GET' | 'POST' | 'PATCH';
 type RouteHandler<TContext> = (ctx: RequestContext<TContext>) => unknown | Promise<unknown>;
@@ -13,7 +14,7 @@ type Route<TContext> = {
 };
 
 export type RequestContext<TContext> = {
-  body: () => Promise<Record<string, unknown>>;
+  body: () => Promise<unknown>;
   context: TContext;
   json: (status: number, body: unknown) => void;
   params: Record<string, string>;
@@ -76,6 +77,16 @@ export function createRouter<TContext>() {
 
           if (result === RAW_RESPONSE || res.writableEnded) return;
         } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return json(res, error.status, {
+              error: {
+                code: error.code,
+                message: error.message,
+                details: error.issues,
+              },
+            });
+          }
+
           if (error instanceof HttpError || error instanceof RequestBodyError) {
             return json(res, error.status, {
               error: { code: error.code, message: error.message },
