@@ -19,6 +19,7 @@ import {
   now,
   summarizeSession,
 } from '../domain/sessions.js';
+import { SessionApplicationService } from '../services/session-application-service.js';
 
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
@@ -90,26 +91,21 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     }
 
     maybeSetTitleFromFirstUserMessage(session, content || 'Image');
-    const createdAt = now();
-    session.messages.push({
-      id: id('msg'),
-      role: 'user',
+    const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager);
+    const result = sessionApplicationService.acceptUserMessage({
+      session,
       content,
-      created_at: createdAt,
-      ...(attachments.length ? { attachments: attachments.map(toStoredAttachment) } : {}),
-    });
-    session.updated_at = createdAt;
-    context.sessionStore.save(session);
-
-    const run = context.runManager.createRun(session, { content, attachments }, {
+      attachments,
+      options: {
       ...requestBody.options,
       reasoningEffort: requestBody.options.reasoningEffort === 'ultra' ? 'max' : requestBody.options.reasoningEffort,
+      },
     });
 
     return json(200, {
-      run_id: run.id,
+      run_id: result.runId,
       session_id: session.id,
-      events_url: `/api/runs/${run.id}/events`,
+      events_url: `/api/runs/${result.runId}/events`,
     });
   });
 }

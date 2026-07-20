@@ -13,7 +13,13 @@
     "@moke/agent-tools": "0.1.0",
     "@moke/browser-tools": "0.1.0",
     "@moke/mcp-client": "0.1.0",
+    "@moke/messaging-core": "0.1.0",
+    "@moke/messaging-weixin": "0.1.0",
     "@moke/protocol": "0.1.0",
+    "qrcode": "^1.5.4",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
   }
 }

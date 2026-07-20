@@ -1,4 +1,5 @@
 import type { ToolApprovalRecord } from '@moke/protocol';
+import type { RuntimeRun } from './run-state.js';
 
 export type RuntimeContentManager = {
   addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;
@@ -47,6 +48,7 @@ export type ToolApprovalDecision = {
 
 export type ToolContext = {
   workspace: string;
+  run?: RuntimeRun;
   abortSignal?: AbortSignal;
   contentManager?: RuntimeContentManager;
   currentToolCall?: {

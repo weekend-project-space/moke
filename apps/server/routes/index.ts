@@ -7,6 +7,8 @@ import { registerRunRoutes } from './runs.js';
 import { registerSettingRoutes } from './settings.js';
 import { registerSessionRoutes } from './sessions.js';
 import { registerToolRoutes } from './tools.js';
+import { registerMessagingRoutes } from './messaging.js';
+import { registerWeixinRoutes } from './weixin.js';
 
 export function createRoutes(context: RoutesContext) {
   const router = createRouter<RoutesContext>();
@@ -18,6 +20,8 @@ export function createRoutes(context: RoutesContext) {
   registerSessionRoutes(router);
   registerSettingRoutes(router);
   registerRunRoutes(router);
+  registerMessagingRoutes(router);
+  registerWeixinRoutes(router);
 
   return router.handler(context);
 }

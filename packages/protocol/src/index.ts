@@ -67,6 +67,12 @@ export type UserMessage = {
   content: string;
   created_at: string;
   attachments?: ImageAttachment[];
+  source?: {
+    kind: 'messaging';
+    platform: string;
+    connection_id: string;
+    message_id: string;
+  };
 };
 
 export type AssistantMessage = {

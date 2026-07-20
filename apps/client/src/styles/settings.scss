@@ -314,6 +314,268 @@
   border-top: 1px solid var(--line-faint);
 }
 
+.messaging-settings {
+  max-width: 720px;
+}
+
+.messaging-heading,
+.weixin-login-header,
+.messaging-connection-row,
+.messaging-connection-main,
+.messaging-connection-actions,
+.messaging-heading-actions,
+.messaging-state,
+.weixin-login-state,
+.weixin-verify-form {
+  display: flex;
+  align-items: center;
+}
+
+.messaging-heading {
+  min-height: 42px;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-faint);
+
+  > div:first-child {
+    display: grid;
+    gap: 2px;
+  }
+
+  h3,
+  h4 {
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--font-size-emphasis);
+    font-weight: 620;
+    letter-spacing: 0;
+  }
+
+  span {
+    color: var(--ink-muted);
+    font-size: var(--font-size-meta);
+  }
+}
+
+.messaging-heading-actions,
+.messaging-connection-actions {
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.messaging-add-button {
+  color: var(--accent-strong);
+  background: var(--accent-faint);
+
+  &:hover {
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+}
+
+.messaging-feedback {
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: var(--font-size-meta);
+
+  &.error {
+    color: var(--text-error);
+  }
+}
+
+.messaging-empty {
+  display: grid;
+  min-height: 128px;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--ink-muted);
+  font-size: var(--font-size-ui);
+
+  svg {
+    opacity: 0.56;
+  }
+}
+
+.messaging-connection-list {
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.messaging-connection-row {
+  min-height: 64px;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--line-faint);
+
+  &:first-child {
+    border-top: 0;
+  }
+}
+
+.messaging-connection-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 10px;
+}
+
+.messaging-connection-icon {
+  @include inline-center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  background: var(--surface-muted-faint);
+}
+
+.messaging-connection-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+
+  strong,
+  span,
+  small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: var(--ink);
+    font-size: var(--font-size-ui);
+    font-weight: 590;
+  }
+
+  span {
+    color: var(--ink-muted);
+    font-size: var(--font-size-meta);
+  }
+
+  small {
+    color: var(--text-error);
+    font-size: var(--font-size-caption);
+  }
+}
+
+.messaging-state {
+  min-width: 86px;
+  justify-content: flex-end;
+  color: var(--ink-muted);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+
+  &::before {
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    content: '';
+  }
+
+  &.is-connected {
+    color: var(--accent-strong);
+  }
+
+  &.is-error,
+  &.is-reauth_required {
+    color: var(--text-error);
+  }
+}
+
+.messaging-delete-button:hover {
+  color: var(--text-error);
+  background: var(--surface-danger-faint);
+}
+
+.weixin-login-flow {
+  display: grid;
+  width: min(100%, 320px);
+  gap: 12px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line-faint);
+  padding-top: 14px;
+
+  &.terminal {
+    width: min(100%, 480px);
+  }
+}
+
+.weixin-login-header {
+  justify-content: space-between;
+  gap: 12px;
+
+  > div {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  h4 {
+    color: var(--ink-soft);
+    font-size: var(--font-size-ui);
+    font-weight: 600;
+  }
+
+  span {
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+  }
+}
+
+.weixin-qr-frame {
+  display: grid;
+  width: 256px;
+  height: 256px;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--tone-surface);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.weixin-login-state {
+  min-height: 44px;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: var(--font-size-ui);
+
+  &.error {
+    color: var(--text-error);
+  }
+}
+
+.weixin-verify-form {
+  gap: 8px;
+
+  input {
+    @include text-control;
+    flex: 1 1 auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-ui);
+  }
+}
+
+.spinning {
+  animation: settings-spin 0.9s linear infinite;
+}
+
+@keyframes settings-spin {
+  to { transform: rotate(360deg); }
+}
+
 .settings-row {
   > span {
     color: var(--ink-soft);

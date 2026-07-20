@@ -1,7 +1,8 @@
 export type { Agent, AgentRunInput, AgentRunResult, RuntimeMessage, RuntimeUserMessage } from './agent.js';
 export { EventBus } from './event-bus.js';
 export { RunManager } from './run-manager.js';
-export type { RuntimeRun } from './run-state.js';
+export type { RunOptions } from './run-manager.js';
+export type { RunOrigin, RuntimeRun } from './run-state.js';
 export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
 export type {
   RuntimeContentManager,

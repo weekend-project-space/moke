@@ -5,6 +5,7 @@ import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import McpSettingsPanel from './McpSettingsPanel.vue'
 import SettingsSidebar from './SettingsSidebar.vue'
 import SkillSettingsPanel from './SkillSettingsPanel.vue'
+import MessagingSettingsPanel from './MessagingSettingsPanel.vue'
 import {
   DEFAULT_BROWSER_PREFERENCES,
   loadBrowserPreferences,
@@ -512,6 +513,8 @@ onMounted(() => {
       :api-base="apiBase"
       @dirty-change="updateSkillSettingsDirty"
     />
+
+    <MessagingSettingsPanel v-else-if="activeSettingsTab === 'messaging'" :api-base="apiBase" />
 
     <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section">
       <div class="settings-section-heading">

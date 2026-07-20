@@ -45,6 +45,53 @@ test('selectRecentHistory uses the requested tail when it starts at a turn bound
   assert.deepEqual(selectRecentHistory(history, 2), history.slice(2));
 });
 
+test('RunManager exposes messaging origin to in-process observers', async () => {
+  const session = createSession();
+  const runs = new Map();
+  const agent: Agent = {
+    async run() {
+      return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+    },
+  };
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  const observed: string[] = [];
+  manager.addObserver((event, run) => {
+    if (event.type === 'agent.done') observed.push(run.origin.kind);
+  });
+  const run = manager.createRun(session, { content: 'start' }, {
+    origin: {
+      kind: 'messaging',
+      platform: 'weixin',
+      connection_id: 'wxconn_1',
+      binding_id: 'bind_1',
+      inbound_message_id: 'message_1',
+    },
+  });
+  await waitFor(() => run.status === 'completed');
+  assert.deepEqual(observed, ['messaging']);
+});
+
+test('RunManager calls beforeStart before agent execution can emit events', async () => {
+  const session = createSession();
+  const runs = new Map();
+  const agent: Agent = {
+    async run() {
+      return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+    },
+  };
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  let attachedRunId = '';
+  manager.addObserver((_event, run) => {
+    assert.equal(attachedRunId, run.id);
+  });
+
+  const run = manager.createRun(session, { content: 'start' }, {
+    beforeStart: (createdRun) => { attachedRunId = createdRun.id; },
+  });
+
+  await waitFor(() => run.status === 'completed');
+});
+
 async function waitFor(predicate: () => boolean) {
   for (let attempt = 0; attempt < 50; attempt++) {
     if (predicate()) return;
@@ -207,9 +254,33 @@ test('RunManager shutdown waits for execution and ignores late messages', async 
   await shutdown;
 
   assert.equal(run.status, 'cancelled');
+  assert.equal(run.cancel_reason, 'shutdown');
   assert.equal(changes, 0);
   assert.deepEqual(session.messages, []);
   assert.throws(() => manager.createRun(session, { content: 'again' }), /shutting down/);
+});
+
+test('RunManager marks an explicit cancellation as user initiated', async () => {
+  const session = createSession();
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run() {
+        await gate;
+        return { toolCalls: 0, message: message({ role: 'assistant', content: 'late' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => run.status === 'running');
+  manager.cancel(run.id);
+  release();
+  await waitFor(() => run.status === 'cancelled');
+  assert.equal(run.cancel_reason, 'user');
 });
 
 test('RunManager resolves persisted image attachments before sending history to the agent', async () => {

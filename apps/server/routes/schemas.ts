@@ -120,3 +120,16 @@ export const browserRespondSchema = z.object({
   result: z.record(z.string(), z.unknown()).optional().default({}),
   error: z.string().max(2000).optional(),
 }).strict();
+
+export const messagingConnectionStatusSchema = z.object({
+  enabled: z.boolean(),
+}).strict();
+
+export const weixinLoginStartSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  connectionId: safeId.optional(),
+}).strict();
+
+export const weixinVerifySchema = z.object({
+  code: z.string().trim().regex(/^\d{1,12}$/),
+}).strict();

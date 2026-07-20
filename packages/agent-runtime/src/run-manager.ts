@@ -13,7 +13,7 @@ import type {
 } from '@moke/protocol';
 import type { Agent, RuntimeMessage } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { RuntimeRun } from './run-state.js';
+import type { RunOrigin, RuntimeRun } from './run-state.js';
 import type {
   RuntimeContentManager,
   ToolApprovalDecision,
@@ -40,11 +40,17 @@ type RunManagerConfig = {
   onSessionChanged?: (session: Session) => void;
 };
 
-type RunOptions = {
+export type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
   reasoningEffort?: ReasoningEffort;
   timeout_ms?: number;
+  origin?: RunOrigin;
+  /**
+   * Called after the run is registered but before agent execution starts.
+   * Adapters use this to atomically associate external queue state with the run.
+   */
+  beforeStart?: (run: RuntimeRun) => void;
 };
 
 type RunMessageInput = {
@@ -121,6 +127,7 @@ export class RunManager {
     }
   >();
   private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
+  private readonly observers = new Set<(event: AgentEvent, run: RuntimeRun) => void>();
 
   constructor(private readonly config: RunManagerConfig) { }
 
@@ -135,9 +142,16 @@ export class RunManager {
       clients: new Set(),
       started_at: Date.now(),
       abort: false,
+      origin: options.origin || { kind: 'local' },
     };
 
     this.config.runs.set(run.id, run);
+    try {
+      options.beforeStart?.(run);
+    } catch (error) {
+      this.config.runs.delete(run.id);
+      throw error;
+    }
     const execution = this.execute(run, session, input, options);
     this.activeExecutions.set(run.id, execution);
     void execution.then(
@@ -151,6 +165,7 @@ export class RunManager {
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
+      this.notifyObservers(event, run);
       if (run.abort) return;
       if (event.type !== 'agent.message.done') {
         return;
@@ -183,6 +198,7 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: this.config.workspace,
+          run,
           abortSignal: abortController.signal,
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
@@ -338,11 +354,12 @@ export class RunManager {
     run.pending_ask = undefined;
     run.status = 'running';
 
-    new EventBus(run).emit('ask_user.answered', {
+    const event = new EventBus(run).emit('ask_user.answered', {
       ask_id: pendingAsk.ask_id,
       call_id: pendingAsk.call_id,
       selected,
     });
+    this.notifyObservers(event, run);
 
     pending.resolve(selected);
 
@@ -370,11 +387,12 @@ export class RunManager {
     run.status = 'running';
     const scope = options.scope || 'session';
     this.recordApproval(run.id, pendingApproval, decision, scope);
-    new EventBus(run).emit('approval.resolved', {
+    const event = new EventBus(run).emit('approval.resolved', {
       approval_id: pendingApproval.approval_id,
       decision,
       scope,
     });
+    this.notifyObservers(event, run);
     const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
@@ -390,11 +408,12 @@ export class RunManager {
     return { status: 200 as const, run };
   }
 
-  cancel(runId: string) {
+  cancel(runId: string, reason: 'user' | 'shutdown' = 'user') {
     const run = this.config.runs.get(runId);
     if (!run) return null;
     run.abort = true;
     run.status = 'cancelled';
+    run.cancel_reason = reason;
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
 
@@ -412,7 +431,7 @@ export class RunManager {
       pending?.reject(new Error('Run cancelled'));
     }
 
-    new EventBus(run).emit('agent.done', {
+    const event = new EventBus(run).emit('agent.done', {
       status: 'cancelled',
       usage: {
         steps: run.seq,
@@ -420,21 +439,37 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
+    this.notifyObservers(event, run);
     this.pruneTerminalRuns();
 
     return run;
   }
 
-  cancelAll() {
+  addObserver(observer: (event: AgentEvent, run: RuntimeRun) => void) {
+    this.observers.add(observer);
+    return () => this.observers.delete(observer);
+  }
+
+  private notifyObservers(event: AgentEvent, run: RuntimeRun) {
+    for (const observer of this.observers) {
+      try {
+        observer(event, run);
+      } catch (error) {
+        console.error(`Run observer failed for ${run.id}`, error);
+      }
+    }
+  }
+
+  cancelAll(reason: 'user' | 'shutdown' = 'user') {
     for (const run of this.config.runs.values()) {
       if (!isActiveRun(run)) continue;
-      this.cancel(run.id);
+      this.cancel(run.id, reason);
     }
   }
 
   async shutdown() {
     this.shuttingDown = true;
-    this.cancelAll();
+    this.cancelAll('shutdown');
     await Promise.allSettled([...this.activeExecutions.values()]);
   }
 

@@ -18,7 +18,15 @@ import { SettingsService } from './services/settings-service.js';
 import { SkillSettingsService } from './services/skill-settings-service.js';
 import { JsonSessionStore } from './storage/session-store.js';
 import { AttachmentStore } from './storage/attachment-store.js';
+import { JsonMessagingStore } from './storage/messaging-store.js';
 import { summarizeSession } from './domain/sessions.js';
+import { SessionApplicationService } from './services/session-application-service.js';
+import { MessagingGateway } from './services/messaging/messaging-gateway.js';
+import { MessagingConnectionManager } from './services/messaging/connection-manager.js';
+import { MessagingDeliveryService } from './services/messaging/delivery-service.js';
+import { DefaultMessagingOutboundService } from './services/messaging/messaging-outbound-service.js';
+import { createSendMessageTool } from './services/messaging/send-message-tool.js';
+import { WeixinLoginService } from './services/messaging/weixin-login-service.js';
 
 export {
   normalizeWindowsDrivePath,
@@ -61,16 +69,20 @@ export async function createApp(): Promise<ServerApp> {
   const skillSettingsService = new SkillSettingsService(workspace);
   const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession });
   const attachmentStore = new AttachmentStore(storePath);
+  const messagingStore = new JsonMessagingStore(storePath);
   const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
+  const approvedMessagingRoots = new Set([workspace]);
   for (const permission of permissionsService.listWorkspaceRoots()) {
     system.approveWorkspaceRoot(permission.path);
+    approvedMessagingRoots.add(permission.path);
   }
 
   sessionStore.initialize();
   attachmentStore.migrateInlineAttachments(sessionStore);
+  messagingStore.initialize();
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
   const runManager = createRunManager({
@@ -79,8 +91,12 @@ export async function createApp(): Promise<ServerApp> {
     workspace,
     approveWorkspaceRoot: (root, scope) => {
       const approval = system.approveWorkspaceRoot(root);
+      approvedMessagingRoots.add(approval.path);
       if (scope === 'once') {
-        return approval.added ? () => system.revokeWorkspaceRoot(root) : undefined;
+        return approval.added ? () => {
+          system.revokeWorkspaceRoot(root);
+          approvedMessagingRoots.delete(approval.path);
+        } : undefined;
       }
       if (scope === 'persistent') {
         permissionsService.upsertWorkspaceRoot(root);
@@ -90,6 +106,33 @@ export async function createApp(): Promise<ServerApp> {
     resolveImageAttachments: (attachments) => attachments.map((attachment) => attachmentStore.resolve(attachment)),
     onSessionChanged: (session) => sessionStore.save(session),
   });
+  const sessionApplicationService = new SessionApplicationService(sessionStore, runManager);
+  // Keep queued messaging work independent from the HTTP server lifecycle.
+  const messagingGateway = new MessagingGateway(messagingStore, sessionApplicationService, attachmentStore);
+  const messagingConnectionManager = new MessagingConnectionManager(messagingStore, messagingGateway);
+  messagingGateway.setRunStartedListener((input) => {
+    messagingConnectionManager.startTypingForBinding(input.connectionId, input.bindingId, input.runId);
+  });
+  const messagingDeliveryService = new MessagingDeliveryService(messagingConnectionManager);
+  const messagingOutboundService = new DefaultMessagingOutboundService(
+    messagingStore,
+    messagingConnectionManager,
+    workspace,
+    () => [...approvedMessagingRoots],
+  );
+  toolRegistry.register(createSendMessageTool(messagingOutboundService));
+  const removeMessagingObserver = runManager.addObserver((event, run) => {
+    messagingDeliveryService.onRunEvent(event, run);
+    const preserveQueuedMessage = event.type === 'agent.done'
+      && event.payload.status === 'cancelled'
+      && run.cancel_reason === 'shutdown';
+    const bindingId = run.origin.kind === 'messaging' ? run.origin.binding_id : undefined;
+    if (bindingId && !preserveQueuedMessage && (event.type === 'agent.done' || event.type === 'agent.error')) {
+      void messagingDeliveryService.waitForTerminal(run.id).then(() =>
+        messagingGateway.completeRun({ bindingId, runId: run.id }));
+    }
+  });
+  const weixinLoginService = new WeixinLoginService(messagingStore, messagingConnectionManager);
 
   const server = http.createServer(
     createRoutes({
@@ -103,17 +146,26 @@ export async function createApp(): Promise<ServerApp> {
       permissionsService,
       settingsService,
       skillSettingsService,
+      messagingStore,
+      messagingConnectionManager,
+      weixinLoginService,
     }),
   );
+
+  await messagingConnectionManager.startAll();
+  await messagingGateway.resumeQueued();
 
   return {
     port,
     server,
     close: async () => {
       const httpClosed = closeHttpServer(server);
+      removeMessagingObserver();
+      const messagingClosed = messagingConnectionManager.close();
       const runsStopped = runManager.shutdown();
       browserBridge.close();
       await mcpManager?.close();
+      await messagingClosed;
       await runsStopped;
       await httpClosed;
       sessionStore.flush();
