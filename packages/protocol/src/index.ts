@@ -237,3 +237,102 @@ type AgentEventPayloadUnion = {
     payload: AgentEventPayloadMap[Type];
   };
 }[AgentEventType];
+
+export type ApiErrorResponse = {
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+};
+
+export type CreateSessionRequest = {
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CreateSessionResponse = {
+  session: Session;
+};
+
+export type ListSessionsResponse = {
+  sessions: SessionSummary[];
+  next_cursor: string | null;
+};
+
+export type GetSessionResponse = {
+  session: SessionSummary;
+  messages: Message[];
+};
+
+export type UpdateSessionRequest = {
+  title?: string;
+  archived?: boolean;
+  pinned?: boolean;
+};
+
+export type UpdateSessionResponse = {
+  session: SessionSummary;
+};
+
+export type ForkSessionRequest = {
+  message_id: string;
+  mode?: 'after';
+};
+
+export type ForkSessionResponse = GetSessionResponse;
+
+export type SendMessageRequest = {
+  message: {
+    role?: 'user';
+    content: string;
+    attachments?: ImageAttachmentUpload[];
+  };
+  options?: {
+    stream?: boolean;
+    max_steps?: number;
+    max_tool_calls?: number;
+    timeout_ms?: number;
+    reasoningEffort?: ReasoningEffort;
+  };
+};
+
+export type SendMessageResponse = {
+  run_id: string;
+  session_id: string;
+  events_url: string;
+};
+
+export type ActiveRunSummary = {
+  session_id: string;
+  run_id: string;
+  status: RunStatus;
+  events_url: string;
+  pending_ask?: PendingAsk;
+  pending_approval?: PendingApproval;
+};
+
+export type ListActiveRunsResponse = {
+  runs: ActiveRunSummary[];
+};
+
+export type GetRunResponse = {
+  run: RunSnapshot;
+};
+
+export type RespondToRunRequest =
+  | { type: 'choose'; request_id: string; option_id: string }
+  | {
+      type: 'approve';
+      request_id: string;
+      decision: 'approved' | 'rejected';
+      scope?: 'once' | 'session' | 'persistent';
+      message?: string;
+    }
+  | { type: 'cancel'; reason?: string };
+
+export type RespondToRunResponse = {
+  run_id: string;
+  request_id?: string;
+  status: RunStatus;
+};

@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/protocol" },
+    { "path": "./packages/agent-sdk" },
     { "path": "./packages/messaging-core" },
     { "path": "./packages/messaging-weixin" },
     { "path": "./packages/agent-runtime" },

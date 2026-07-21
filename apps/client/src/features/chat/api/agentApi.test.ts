@@ -7,7 +7,7 @@ test('agentApi sends a typed message request and normalizes the run response', a
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
     calls.push({ url: String(input), init })
-    return new Response(JSON.stringify({ run_id: 'run_1', events_url: '/events/1' }), {
+    return new Response(JSON.stringify({ run_id: 'run_1', session_id: 'session_1', events_url: '/events/1' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
@@ -20,7 +20,7 @@ test('agentApi sends a typed message request and normalizes the run response', a
     reasoningEffort: 'high',
   })
 
-  assert.deepEqual(run, { runId: 'run_1', eventsUrl: '/events/1' })
+  assert.deepEqual(run, { runId: 'run_1', eventsUrl: '/api/runs/run_1/events' })
   assert.equal(calls[0]?.url, 'http://localhost:4010/api/sessions/session_1/messages')
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     message: { role: 'user', content: 'hello' },

@@ -68,6 +68,24 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     }
 
   });
+
+  router.get('/api/runs/:id', ({ context, json, params }) => {
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
+    return json(200, { run: toRunSnapshot(run) });
+  });
+}
+
+function toRunSnapshot(run: RuntimeRun) {
+  return {
+    id: run.id,
+    session_id: run.session_id,
+    status: run.status,
+    seq: run.seq,
+    events: run.events,
+    ...(run.pending_ask ? { pending_ask: run.pending_ask } : {}),
+    ...(run.pending_approval ? { pending_approval: run.pending_approval } : {}),
+  };
 }
 
 function getRun(context: RoutesContext, id: string) {
