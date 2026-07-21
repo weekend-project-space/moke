@@ -1,7 +1,8 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import {
   WEIXIN_API_BASE_URL,
+  WEIXIN_APP_CLIENT_VERSION,
   WEIXIN_BOT_AGENT,
   WEIXIN_BOT_TYPE,
   WEIXIN_CHANNEL_VERSION,
@@ -123,15 +124,16 @@ export class WeixinApiClient {
     });
   }
 
-  async sendItems(input: { toUserId: string; contextToken?: string; items: WeixinOutboundItem[]; signal?: AbortSignal }) {
+  async sendItems(input: { toUserId: string; contextToken?: string; items: WeixinOutboundItem[]; runId?: string; signal?: AbortSignal }) {
     const response = await this.request<{ ret?: number; errmsg?: string }>('ilink/bot/sendmessage', {
       msg: {
         from_user_id: '',
         to_user_id: input.toUserId,
-        client_id: `moke-${randomUUID()}`,
+        client_id: `openclaw-weixin:${Date.now()}-${randomBytes(4).toString('hex')}`,
         message_type: 2,
         message_state: 2,
         context_token: input.contextToken,
+        ...(input.runId ? { run_id: input.runId } : {}),
         item_list: input.items,
       },
       base_info: baseInfo(),
@@ -232,7 +234,7 @@ export class WeixinApiClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'iLink-App-Id': 'bot',
-      'iLink-App-ClientVersion': '1',
+      'iLink-App-ClientVersion': String(WEIXIN_APP_CLIENT_VERSION),
       'X-WECHAT-UIN': randomWechatUin(),
     };
     if (options.authenticated !== false) {

@@ -87,7 +87,7 @@ export class MessagingConnectionManager {
     await this.sendText(connectionId, binding.conversation_id, text);
   }
 
-  async sendMediaForBinding(connectionId: string, bindingId: string, media: WeixinOutboundMedia, caption?: string) {
+  async sendMediaForBinding(connectionId: string, bindingId: string, media: WeixinOutboundMedia, caption?: string, runId?: string) {
     const binding = this.store.getBinding(bindingId);
     if (!binding || binding.account_id !== connectionId) throw new Error('微信会话绑定不存在');
     const adapter = this.adapters.get(connectionId);
@@ -97,7 +97,7 @@ export class MessagingConnectionManager {
       account_id: connectionId,
       conversation_id: binding.conversation_id,
       ...(contextToken ? { context_token: contextToken } : {}),
-    }, media, caption);
+    }, media, caption, runId);
     this.store.recordOutbound(connectionId);
   }
 

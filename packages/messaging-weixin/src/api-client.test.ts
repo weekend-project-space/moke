@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { WeixinApiClient } from './api-client.js';
 
-const baseInfo = { channel_version: '0.1.0', bot_agent: 'Moke/0.1.0' };
+const baseInfo = { channel_version: '2.4.6', bot_agent: 'OpenClaw' };
 
 test('getUpdates sends authenticated protocol headers and cursor', async () => {
   let received: RequestInit | undefined;
@@ -19,6 +19,7 @@ test('getUpdates sends authenticated protocol headers and cursor', async () => {
   assert.equal(result.get_updates_buf, 'next');
   assert.equal((received?.headers as Record<string, string>).Authorization, 'Bearer token-value');
   assert.equal((received?.headers as Record<string, string>).AuthorizationType, 'ilink_bot_token');
+  assert.equal((received?.headers as Record<string, string>)['iLink-App-ClientVersion'], '132102');
   assert.deepEqual(JSON.parse(String(received?.body)), { get_updates_buf: 'previous', base_info: baseInfo });
 });
 
@@ -49,7 +50,7 @@ test('sendText sends a completed bot message in the Weixin protocol shape', asyn
     context_token: 'context',
     item_list: [{ type: 1, text_item: { text: 'Hello' } }],
   });
-  assert.match(body.msg.client_id, /^moke-[0-9a-f-]{36}$/);
+  assert.match(body.msg.client_id, /^openclaw-weixin:\d+-[0-9a-f]{8}$/);
 });
 
 test('getConfig and sendTyping use the contact context and typing ticket', async () => {

@@ -47,4 +47,6 @@ test('retries a transient CDN upload failure before sending media', async () => 
 
   assert.equal(uploads, 3);
   assert.equal(output.item.type, 2);
+  const imageItem = output.item.image_item as { media: { aes_key: string } };
+  assert.match(Buffer.from(imageItem.media.aes_key, 'base64').toString('ascii'), /^[a-f0-9]{32}$/);
 });

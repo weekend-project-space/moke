@@ -81,7 +81,7 @@ export class WeixinAdapter implements MessagingAdapter {
     }
   }
 
-  async sendMedia(target: MessagingTarget, media: WeixinOutboundMedia, caption?: string) {
+  async sendMedia(target: MessagingTarget, media: WeixinOutboundMedia, caption?: string, runId?: string) {
     if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', '联系人上下文已失效，请等待对方再次发送消息', false);
     const client = this.client();
     const uploaded = await uploadWeixinMedia({
@@ -89,13 +89,19 @@ export class WeixinAdapter implements MessagingAdapter {
       toUserId: target.conversation_id,
       media,
     });
+    if (caption?.trim()) {
+      await client.sendItems({
+        toUserId: target.conversation_id,
+        contextToken: target.context_token,
+        runId,
+        items: [{ type: 1, text_item: { text: caption.trim() } }],
+      });
+    }
     await client.sendItems({
       toUserId: target.conversation_id,
       contextToken: target.context_token,
-      items: [
-        ...(caption?.trim() ? [{ type: 1, text_item: { text: caption.trim() } }] : []),
-        uploaded.item,
-      ],
+      runId,
+      items: [uploaded.item],
     });
     return { delivered_at: new Date().toISOString() };
   }

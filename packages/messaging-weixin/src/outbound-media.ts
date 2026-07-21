@@ -37,7 +37,8 @@ export async function uploadWeixinMedia(input: {
   const encryptedQueryParam = await uploadWithRetry(input.client, uploadUrl, encrypted, input.signal);
   const media = {
     encrypt_query_param: encryptedQueryParam,
-    aes_key: aesKey.toString('base64'),
+    // iLink expects Base64 of the hexadecimal key text, not raw key bytes.
+    aes_key: Buffer.from(aesKey.toString('hex'), 'utf8').toString('base64'),
     encrypt_type: 1,
   };
   const item: WeixinOutboundItem = input.media.type === 'image'

@@ -58,7 +58,7 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
     try {
       for (let index = outbox.receipts.length; index < input.contents.length; index++) {
         const content = input.contents[index];
-        const receipt = await this.sendContent(binding.account_id, input.binding_id, content);
+        const receipt = await this.sendContent(binding.account_id, input.binding_id, content, input.run_id);
         this.store.appendOutboxReceipt(input.idempotency_key, receipt);
       }
       return { receipts: this.store.finishOutbox(input.idempotency_key).receipts };
@@ -69,7 +69,7 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
     }
   }
 
-  private async sendContent(connectionId: string, bindingId: string, content: OutboundContent): Promise<MessagingDeliveryReceipt> {
+  private async sendContent(connectionId: string, bindingId: string, content: OutboundContent, runId?: string): Promise<MessagingDeliveryReceipt> {
     if (content.type === 'text') {
       const text = content.text.trim();
       if (!text) throw new Error('Outbound text cannot be empty');
@@ -78,7 +78,7 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
     }
 
     const media = await this.readWorkspaceMedia(content);
-    await this.connections.sendMediaForBinding(connectionId, bindingId, media, content.caption);
+    await this.connections.sendMediaForBinding(connectionId, bindingId, media, content.caption, runId);
     return { type: content.type, delivered_at: new Date().toISOString() };
   }
 
