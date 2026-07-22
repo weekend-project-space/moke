@@ -26,13 +26,13 @@ export function createSendMessageTool(
 ): RuntimeTool<typeof sendMessageSchema> {
   return {
     name: 'send_message',
-    description: 'Send text, images, or files to the current Weixin conversation. Media paths outside the workspace require directory approval.',
+    description: 'Send text, images, or files to the current external messaging conversation. Media paths outside the workspace require directory approval.',
     risk: 'dangerous',
     schema: sendMessageSchema,
     async handler(input, context) {
       const run = context.run;
-      if (!run || run.origin.kind !== 'messaging' || run.origin.platform !== 'weixin') {
-        throw toolError('send_message is only available in the current Weixin conversation', 'MESSAGING_ORIGIN_REQUIRED');
+      if (!run || run.origin.kind !== 'messaging') {
+        throw toolError('send_message is only available in the current external messaging conversation', 'MESSAGING_ORIGIN_REQUIRED');
       }
       const contents = toOutboundContents(input);
       if (hasMedia(contents)) {
@@ -43,7 +43,7 @@ export function createSendMessageTool(
           input: toRecord(input),
           risk: 'dangerous',
           callId: context.currentToolCall?.callId,
-          reason: 'Send workspace media to the current Weixin conversation',
+          reason: 'Send workspace media to the current external messaging conversation',
         });
         if (!decision.approved) throw toolError(decision.message || 'Media sending was rejected', 'TOOL_ACCESS_REJECTED');
       }

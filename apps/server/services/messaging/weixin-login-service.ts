@@ -33,14 +33,15 @@ export class WeixinLoginService {
 
   async start(input: { name?: string; connectionId?: string }) {
     this.purgeExpired();
-    if (input.connectionId && !this.store.getConnection(input.connectionId)) throw new Error('Messaging connection not found');
+    if (input.connectionId && !this.store.getWeixinConnection(input.connectionId)) throw new Error('Weixin connection not found');
+    if (input.connectionId) await this.connections.stop(input.connectionId, 'reauth');
     const qr = await new WeixinApiClient({}).getQrCode();
     // qrcode identifies this login flow for status polling. qrcode_img_content is
     // the payload users must scan, as confirmed by Tencent's reference channel.
     const qrImage = await renderWeixinQrCode(qr.qrcode_img_content);
     const login: Login = {
       id: `wxl_${randomUUID().slice(0, 8)}`,
-      name: input.name?.trim() || '微信',
+      name: input.name?.trim() || 'WeChat',
       qrcode: qr.qrcode,
       qrImage,
       startedAt: Date.now(),
@@ -64,7 +65,7 @@ export class WeixinLoginService {
       await this.applyStatus(login, status);
     } catch (error) {
       login.status = 'failed';
-      login.error = { code: 'WEIXIN_LOGIN_FAILED', message: error instanceof Error ? error.message : '微信登录失败' };
+      login.error = { code: 'WEIXIN_LOGIN_FAILED', message: error instanceof Error ? error.message : 'WeChat authorization failed' };
     }
     return this.toPublic(login);
   }
@@ -97,14 +98,14 @@ export class WeixinLoginService {
     if (status.status === 'need_verifycode') login.status = 'verify_required';
     if (status.status === 'verify_code_blocked') {
       login.status = 'failed';
-      login.error = { code: 'WEIXIN_VERIFY_BLOCKED', message: '验证码尝试次数过多，请重新开始授权' };
+      login.error = { code: 'WEIXIN_VERIFY_BLOCKED', message: 'Too many verification attempts. Start authorization again.' };
     }
     if (status.status === 'expired') login.status = 'expired';
     if (status.status === 'binded_redirect') login.status = 'already_connected';
     if (status.status !== 'confirmed') return;
     if (!status.bot_token || !status.ilink_bot_id) {
       login.status = 'failed';
-      login.error = { code: 'WEIXIN_INVALID_RESPONSE', message: '微信授权响应缺少账号凭据' };
+      login.error = { code: 'WEIXIN_INVALID_RESPONSE', message: 'The WeChat authorization response is missing account credentials' };
       return;
     }
     const record = login.connectionId
@@ -121,14 +122,14 @@ export class WeixinLoginService {
           apiBaseUrl: status.baseurl || login.baseUrl || 'https://ilinkai.weixin.qq.com',
           token: status.bot_token,
         });
-    login.connection = this.store.getPublicConnection(record.id) || undefined;
+    login.connection = this.store.getPublicWeixinConnection(record.id) || undefined;
     login.status = 'confirmed';
     await this.connections.start(record.id);
   }
 
   private requireLogin(id: string) {
     const login = this.logins.get(id);
-    if (!login) throw new Error('微信登录流程不存在或已过期');
+    if (!login) throw new Error('The WeChat authorization session does not exist or has expired');
     return login;
   }
 
@@ -151,7 +152,7 @@ export class WeixinLoginService {
 }
 
 export function renderWeixinQrCode(content: string) {
-  if (!content.trim()) throw new Error('微信二维码内容为空');
+  if (!content.trim()) throw new Error('WeChat QR code content is empty');
   return QRCode.toDataURL(content, {
     errorCorrectionLevel: 'M',
     margin: 2,

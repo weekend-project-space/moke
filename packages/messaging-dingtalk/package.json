@@ -1,0 +1,25 @@
+{
+  "name": "@moke/messaging-dingtalk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@moke/messaging-core": "0.1.0",
+    "dingtalk-stream": "2.1.6-beta.1"
+  }
+}

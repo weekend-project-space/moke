@@ -84,7 +84,7 @@ export class WeixinApiClient {
       { signal, authenticated: false },
     );
     if (typeof response.qrcode !== 'string' || typeof response.qrcode_img_content !== 'string') {
-      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', '微信二维码响应无效', false);
+      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', 'WeChat returned an invalid QR code response', false);
     }
     return response as WeixinQrCode;
   }
@@ -98,7 +98,7 @@ export class WeixinApiClient {
       { signal, authenticated: false, method: 'GET', timeoutMs: WEIXIN_LONG_POLL_TIMEOUT_MS },
     );
     if (!isQrStatus(response.status)) {
-      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', '微信登录状态响应无效', false);
+      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', 'WeChat returned an invalid authorization status response', false);
     }
     return response as WeixinQrStatus;
   }
@@ -110,7 +110,7 @@ export class WeixinApiClient {
       { signal, timeoutMs },
     );
     if (!Array.isArray(response.msgs) && response.msgs !== undefined) {
-      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', '微信消息响应无效', false);
+      throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', 'WeChat returned an invalid message response', false);
     }
     return response;
   }
@@ -139,7 +139,7 @@ export class WeixinApiClient {
       base_info: baseInfo(),
     }, { signal: input.signal, timeoutMs: 15_000 });
     if (response.ret && response.ret !== 0) {
-      throw new WeixinApiError('WEIXIN_DELIVERY_FAILED', response.errmsg || '微信消息发送失败', response.ret >= 500);
+      throw new WeixinApiError('WEIXIN_DELIVERY_FAILED', response.errmsg || 'Failed to send the WeChat message', response.ret >= 500);
     }
   }
 
@@ -169,14 +169,14 @@ export class WeixinApiClient {
       { signal: input.signal, timeoutMs: 15_000 },
     );
     if (response.ret && response.ret !== 0) {
-      throw new WeixinApiError('WEIXIN_UPLOAD_URL_FAILED', response.errmsg || '微信媒体上传地址获取失败', response.ret >= 500);
+      throw new WeixinApiError('WEIXIN_UPLOAD_URL_FAILED', response.errmsg || 'Failed to get a WeChat media upload URL', response.ret >= 500);
     }
     return response;
   }
 
   async uploadCdn(input: { uploadUrl: string; data: Uint8Array; signal?: AbortSignal }) {
     const url = new URL(input.uploadUrl);
-    if (url.protocol !== 'https:') throw new WeixinApiError('WEIXIN_CDN_URL_INVALID', '微信 CDN 上传地址必须使用 HTTPS', false);
+    if (url.protocol !== 'https:') throw new WeixinApiError('WEIXIN_CDN_URL_INVALID', 'The WeChat CDN upload URL must use HTTPS', false);
     const fetchImpl = this.input.fetch || fetch;
     const response = await fetchImpl(url, {
       method: 'POST',
@@ -185,10 +185,10 @@ export class WeixinApiClient {
       signal: input.signal,
     });
     if (!response.ok) {
-      throw new WeixinApiError('WEIXIN_CDN_UPLOAD_FAILED', `微信 CDN 上传失败 (${response.status})`, response.status >= 500 || response.status === 429);
+      throw new WeixinApiError('WEIXIN_CDN_UPLOAD_FAILED', `WeChat CDN upload failed (${response.status})`, response.status >= 500 || response.status === 429);
     }
     const encryptedParam = response.headers.get('x-encrypted-param');
-    if (!encryptedParam) throw new WeixinApiError('WEIXIN_CDN_UPLOAD_FAILED', '微信 CDN 上传响应缺少下载参数', true);
+    if (!encryptedParam) throw new WeixinApiError('WEIXIN_CDN_UPLOAD_FAILED', 'The WeChat CDN response is missing the download parameter', true);
     return encryptedParam;
   }
 
@@ -199,7 +199,7 @@ export class WeixinApiClient {
       base_info: baseInfo(),
     }, { signal: input.signal, timeoutMs: 10_000 });
     if (response.ret && response.ret !== 0) {
-      throw new WeixinApiError('WEIXIN_CONFIG_FAILED', response.errmsg || '微信输入状态配置获取失败', response.ret >= 500);
+      throw new WeixinApiError('WEIXIN_CONFIG_FAILED', response.errmsg || 'Failed to get WeChat typing configuration', response.ret >= 500);
     }
     return response;
   }
@@ -212,7 +212,7 @@ export class WeixinApiClient {
       base_info: baseInfo(),
     }, { signal: input.signal, timeoutMs: 10_000 });
     if (response.ret && response.ret !== 0) {
-      throw new WeixinApiError('WEIXIN_TYPING_FAILED', response.errmsg || '微信输入状态发送失败', response.ret >= 500);
+      throw new WeixinApiError('WEIXIN_TYPING_FAILED', response.errmsg || 'Failed to send WeChat typing status', response.ret >= 500);
     }
   }
 
@@ -239,7 +239,7 @@ export class WeixinApiClient {
     };
     if (options.authenticated !== false) {
       const token = this.input.token?.trim();
-      if (!token) throw new WeixinApiError('WEIXIN_AUTH_MISSING', '微信授权凭据缺失', false);
+      if (!token) throw new WeixinApiError('WEIXIN_AUTH_MISSING', 'WeChat authorization is missing', false);
       headers.AuthorizationType = 'ilink_bot_token';
       headers.Authorization = `Bearer ${token}`;
     }
@@ -254,21 +254,21 @@ export class WeixinApiClient {
       if (!response.ok) {
         throw new WeixinApiError(
           'WEIXIN_HTTP_ERROR',
-          `微信接口请求失败 (${response.status})`,
+          `WeChat API request failed (${response.status})`,
           response.status >= 500 || response.status === 429,
         );
       }
       try {
         return JSON.parse(raw) as T;
       } catch {
-        throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', '微信接口返回了无效 JSON', false);
+        throw new WeixinApiError('WEIXIN_INVALID_RESPONSE', 'WeChat returned invalid JSON', false);
       }
     } catch (error) {
       if (error instanceof WeixinApiError) throw error;
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new WeixinApiError('WEIXIN_TIMEOUT', '微信接口请求超时', true);
+        throw new WeixinApiError('WEIXIN_TIMEOUT', 'The WeChat API request timed out', true);
       }
-      throw new WeixinApiError('WEIXIN_NETWORK_ERROR', '无法连接微信服务', true);
+      throw new WeixinApiError('WEIXIN_NETWORK_ERROR', 'Could not connect to WeChat', true);
     } finally {
       if (timeout) clearTimeout(timeout);
     }

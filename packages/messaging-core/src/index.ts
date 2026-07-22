@@ -1,4 +1,4 @@
-export type MessagingPlatform = 'weixin';
+export type MessagingPlatform = 'weixin' | 'dingtalk' | 'feishu';
 
 export type MessagingConnectionState =
   | 'stopped'
@@ -25,7 +25,7 @@ export type MessagingInboundEvent = {
   account_id: string;
   conversation: {
     id: string;
-    type: 'direct';
+    type: 'direct' | 'group' | 'channel';
   };
   sender: {
     id: string;

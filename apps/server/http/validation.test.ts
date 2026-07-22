@@ -72,3 +72,32 @@ test('router returns one validation error shape', async () => {
     },
   });
 });
+
+test('router dispatches DELETE requests and sends an empty 204 response', async () => {
+  const router = createRouter<{}>();
+  router.delete('/api/example/:id', ({ json, params }) => {
+    assert.equal(params.id, 'item_1');
+    return json(204, undefined);
+  });
+
+  const request = Readable.from([]) as IncomingMessage;
+  request.method = 'DELETE';
+  request.url = '/api/example/item_1';
+  request.headers = { host: 'localhost' };
+  const responseBody: { status?: number; body?: string } = {};
+  const responseStub = {
+    writableEnded: false,
+    writeHead(status: number) {
+      responseBody.status = status;
+    },
+    end(body?: string) {
+      responseBody.body = body;
+      responseStub.writableEnded = true;
+    },
+  };
+
+  await router.handler({})(request, responseStub as unknown as ServerResponse);
+
+  assert.equal(responseBody.status, 204);
+  assert.equal(responseBody.body, undefined);
+});

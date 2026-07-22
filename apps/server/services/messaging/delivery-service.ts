@@ -10,7 +10,7 @@ export class MessagingDeliveryService {
   constructor(private readonly connections: MessagingConnectionManager) {}
 
   onRunEvent(event: AgentEvent, run: RuntimeRun) {
-    if (run.origin.kind !== 'messaging' || run.origin.platform !== 'weixin') return;
+    if (run.origin.kind !== 'messaging') return;
     const target = run.origin;
     if (event.type === 'agent.message.done') {
       const message = event.payload.message;

@@ -121,7 +121,7 @@ export const browserRespondSchema = z.object({
   error: z.string().max(2000).optional(),
 }).strict();
 
-export const messagingConnectionStatusSchema = z.object({
+export const messagingConnectionUpdateSchema = z.object({
   enabled: z.boolean(),
 }).strict();
 
@@ -130,6 +130,16 @@ export const weixinLoginStartSchema = z.object({
   connectionId: safeId.optional(),
 }).strict();
 
-export const weixinVerifySchema = z.object({
+export const weixinLoginUpdateSchema = z.object({
   code: z.string().trim().regex(/^\d{1,12}$/),
 }).strict();
+
+export const messagingConnectionCreateSchema = z.discriminatedUnion('platform', [
+  z.object({
+    platform: z.literal('dingtalk'),
+    credentials: z.object({
+      clientId: z.string().trim().min(1).max(200),
+      clientSecret: z.string().trim().min(1).max(2000),
+    }).strict(),
+  }).strict(),
+]);

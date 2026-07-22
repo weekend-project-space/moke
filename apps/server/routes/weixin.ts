@@ -1,6 +1,6 @@
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
-import { idParamsSchema, weixinLoginStartSchema, weixinVerifySchema } from './schemas.js';
+import { idParamsSchema, weixinLoginStartSchema, weixinLoginUpdateSchema } from './schemas.js';
 import { parseBody, parseParams } from '../http/validation.js';
 
 export function registerWeixinRoutes(router: Router<RoutesContext>) {
@@ -17,19 +17,20 @@ export function registerWeixinRoutes(router: Router<RoutesContext>) {
     }
   });
 
-  router.post('/api/messaging/weixin/logins/:id/verify', async ({ body, context, json, params }) => {
+  router.patch('/api/messaging/weixin/logins/:id', async ({ body, context, json, params }) => {
     const { id } = parseParams(params, idParamsSchema);
     try {
-      return json(200, { login: await context.weixinLoginService.verify(id, (await parseBody(body, weixinVerifySchema)).code) });
+      return json(200, { login: await context.weixinLoginService.verify(id, (await parseBody(body, weixinLoginUpdateSchema)).code) });
     } catch (error) {
       throw new HttpError(404, 'WEIXIN_LOGIN_NOT_FOUND', error instanceof Error ? error.message : 'Weixin login not found');
     }
   });
 
-  router.post('/api/messaging/weixin/logins/:id/cancel', ({ context, json, params }) => {
+  router.delete('/api/messaging/weixin/logins/:id', ({ context, json, params }) => {
     const { id } = parseParams(params, idParamsSchema);
     try {
-      return json(200, { login: context.weixinLoginService.cancel(id) });
+      context.weixinLoginService.cancel(id);
+      return json(204, undefined);
     } catch (error) {
       throw new HttpError(404, 'WEIXIN_LOGIN_NOT_FOUND', error instanceof Error ? error.message : 'Weixin login not found');
     }

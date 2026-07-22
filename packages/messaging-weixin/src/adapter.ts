@@ -58,7 +58,7 @@ export class WeixinAdapter implements MessagingAdapter {
 
   async send(target: MessagingTarget, message: OutboundMessage): Promise<DeliveryReceipt> {
     if (!target.context_token) {
-      throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', '联系人上下文已失效，请等待对方再次发送消息', false);
+      throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
     }
     const client = this.client();
     await client.sendText({
@@ -70,7 +70,7 @@ export class WeixinAdapter implements MessagingAdapter {
   }
 
   async setTyping(target: MessagingTarget, status: 1 | 2) {
-    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', '联系人上下文已失效，请等待对方再次发送消息', false);
+    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
     const client = this.client();
     try {
       await this.sendTyping(client, target, status);
@@ -82,7 +82,7 @@ export class WeixinAdapter implements MessagingAdapter {
   }
 
   async sendMedia(target: MessagingTarget, media: WeixinOutboundMedia, caption?: string, runId?: string) {
-    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', '联系人上下文已失效，请等待对方再次发送消息', false);
+    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
     const client = this.client();
     const uploaded = await uploadWeixinMedia({
       client,
@@ -118,12 +118,12 @@ export class WeixinAdapter implements MessagingAdapter {
           this.setStatus(context, {
             state: 'reauth_required',
             changed_at: new Date().toISOString(),
-            error: { code: 'WEIXIN_REAUTH_REQUIRED', message: '微信授权已失效，请重新授权' },
+            error: { code: 'WEIXIN_REAUTH_REQUIRED', message: 'WeChat authorization has expired. Reauthorize to reconnect.' },
           });
           return;
         }
         if (response.ret && response.ret !== 0) {
-          throw new WeixinApiError('WEIXIN_REMOTE_ERROR', response.errmsg || '微信长轮询失败', true);
+          throw new WeixinApiError('WEIXIN_REMOTE_ERROR', response.errmsg || 'WeChat polling failed', true);
         }
         for (const message of response.msgs || []) {
           const event = toMessagingInboundEvent({
@@ -143,7 +143,7 @@ export class WeixinAdapter implements MessagingAdapter {
         }
       } catch (error) {
         if (signal.aborted) break;
-        const apiError = error instanceof WeixinApiError ? error : new WeixinApiError('WEIXIN_UNKNOWN_ERROR', '微信连接失败', true);
+        const apiError = error instanceof WeixinApiError ? error : new WeixinApiError('WEIXIN_UNKNOWN_ERROR', 'WeChat connection failed', true);
         if (!apiError.retryable) {
           this.setStatus(context, {
             state: 'error',
@@ -175,7 +175,7 @@ export class WeixinAdapter implements MessagingAdapter {
       contextToken: target.context_token,
     });
     const ticket = config.typing_ticket?.trim();
-    if (!ticket) throw new WeixinApiError('WEIXIN_TYPING_UNAVAILABLE', '微信未返回输入状态凭据', false);
+    if (!ticket) throw new WeixinApiError('WEIXIN_TYPING_UNAVAILABLE', 'WeChat did not return a typing-status credential', false);
     this.typingTickets.set(target.conversation_id, { value: ticket, expiresAt: Date.now() + 12 * 60 * 60_000 });
     return ticket;
   }

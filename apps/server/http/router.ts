@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, readJson, RequestBodyError } from './response.js';
 import { RequestValidationError } from './validation.js';
 
-type Method = 'GET' | 'POST' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type RouteHandler<TContext> = (ctx: RequestContext<TContext>) => unknown | Promise<unknown>;
 
 type Route<TContext> = {
@@ -52,6 +52,7 @@ export function createRouter<TContext>() {
     get: (path: string, handler: RouteHandler<TContext>) => add('GET', path, handler),
     post: (path: string, handler: RouteHandler<TContext>) => add('POST', path, handler),
     patch: (path: string, handler: RouteHandler<TContext>) => add('PATCH', path, handler),
+    delete: (path: string, handler: RouteHandler<TContext>) => add('DELETE', path, handler),
     handler(context: TContext) {
       return async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         try {

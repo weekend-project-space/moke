@@ -20,8 +20,8 @@ export class MessagingGateway {
   }
 
   async accept(event: MessagingInboundEvent): Promise<InboundAck> {
-    if (event.platform !== 'weixin') return { status: 'ignored' };
-    if (this.store.claimInbound(event.account_id, event.message.id) === 'duplicate') return { status: 'duplicate' };
+    if (event.platform !== 'weixin' && event.platform !== 'dingtalk') return { status: 'ignored' };
+    if (this.store.claimInbound(event.account_id, event.message.id, event.platform) === 'duplicate') return { status: 'duplicate' };
 
     try {
       if (event.context_token) {
@@ -32,16 +32,17 @@ export class MessagingGateway {
           messageId: event.message.id,
         });
       }
-      let binding = this.store.findBinding(event.account_id, event.conversation.id);
+      let binding = this.store.findBinding(event.account_id, event.conversation.id, event.platform);
       if (!binding) {
         const session = this.sessions.createSession({
-          title: '微信联系人',
-          metadata: { messaging: { platform: 'weixin', connection_id: event.account_id } },
+          title: event.platform === 'dingtalk' ? 'DingTalk conversation' : 'WeChat contact',
+          metadata: { messaging: { platform: event.platform, connection_id: event.account_id } },
         });
         binding = this.store.createBinding({
           connectionId: event.account_id,
           conversationId: event.conversation.id,
           sessionId: session.id,
+          platform: event.platform,
         });
       }
       const text = event.message.segments
@@ -49,9 +50,9 @@ export class MessagingGateway {
         .filter(Boolean)
         .join('\n')
         .trim();
-      const attachments = await this.resolveImages(event);
+      const attachments = event.platform === 'weixin' ? await this.resolveImages(event) : [];
       if (!text && attachments.length === 0) {
-        this.store.completeInbound(event.account_id, event.message.id);
+        this.store.completeInbound(event.account_id, event.message.id, event.platform);
         return { status: 'ignored' };
       }
       this.store.enqueueInbound(binding.id, {
@@ -60,8 +61,8 @@ export class MessagingGateway {
         ...(attachments.length ? { attachments: attachments.map(toStoredAttachment) } : {}),
       });
       this.store.markBindingInbound(binding.id, event.message.id);
-      this.store.recordInbound(event.account_id);
-      this.store.completeInbound(event.account_id, event.message.id);
+      this.store.recordInbound(event.account_id, event.platform);
+      this.store.completeInbound(event.account_id, event.message.id, event.platform);
       await this.drain(binding.id);
       return { status: 'accepted' };
     } catch (error) {
@@ -107,14 +108,14 @@ export class MessagingGateway {
         attachments,
         source: {
           kind: 'messaging',
-          platform: 'weixin',
+          platform: binding.platform,
           connection_id: binding.account_id,
           message_id: item.message_id,
         },
         options: {
           origin: {
             kind: 'messaging',
-            platform: 'weixin',
+            platform: binding.platform,
             connection_id: binding.account_id,
             binding_id: binding.id,
             inbound_message_id: item.message_id,

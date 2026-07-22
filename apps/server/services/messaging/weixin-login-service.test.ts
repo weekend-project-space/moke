@@ -9,5 +9,5 @@ test('renders Weixin QR content as a local PNG data URL', async () => {
 });
 
 test('rejects an empty Weixin QR payload', () => {
-  assert.throws(() => renderWeixinQrCode('  '), /二维码内容为空/);
+  assert.throws(() => renderWeixinQrCode('  '), /QR code content is empty/);
 });

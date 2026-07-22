@@ -5,7 +5,7 @@ import type { RuntimeRun } from '@moke/agent-runtime';
 import { PathRequiresApprovalError } from '@moke/agent-runtime';
 import { createSendMessageTool } from './send-message-tool.js';
 
-test('send_message binds output to the current Weixin run', async () => {
+test('send_message binds output to the current external messaging run', async () => {
   let request: Record<string, unknown> | undefined;
   const tool = createSendMessageTool({
     async send(input) {
@@ -34,8 +34,30 @@ test('send_message rejects local runs', async () => {
   const tool = createSendMessageTool({ async send() { throw new Error('should not send'); } });
   await assert.rejects(
     () => tool.handler({ text: 'sent' }, { workspace: process.cwd(), run: { id: 'run_1', origin: { kind: 'local' } } as RuntimeRun }),
-    /current Weixin conversation/,
+    /current external messaging conversation/,
   );
+});
+
+test('send_message accepts a DingTalk messaging run', async () => {
+  let request: Record<string, unknown> | undefined;
+  const tool = createSendMessageTool({
+    async send(input) {
+      request = input;
+      return { receipts: [{ type: 'text', delivered_at: '2026-01-01T00:00:00.000Z' }] };
+    },
+  });
+  const run = {
+    id: 'run_ding_1',
+    origin: { kind: 'messaging', platform: 'dingtalk', connection_id: 'dtconn_1', binding_id: 'bind_1', inbound_message_id: 'message_1' },
+  } as RuntimeRun;
+
+  await tool.handler({ text: 'sent' }, {
+    workspace: process.cwd(),
+    run,
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+  });
+
+  assert.equal((request as { binding_id: string }).binding_id, 'bind_1');
 });
 
 test('send_message requires approval before sending media', async () => {
