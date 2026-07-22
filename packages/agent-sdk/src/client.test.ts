@@ -34,6 +34,17 @@ function sse(events: AgentEvent[]) {
   }), { headers: { 'Content-Type': 'text/event-stream' } });
 }
 
+test('health invokes fetch with the global context required by browser implementations', async () => {
+  const fetcher = async function (this: unknown, input: URL | RequestInfo) {
+    assert.equal(this, globalThis);
+    assert.equal(String(input), 'http://127.0.0.1:4010/api/health');
+    return json({ status: 'ok' });
+  } as typeof fetch;
+  const client = new MokeClient({ baseUrl: 'http://127.0.0.1:4010', fetch: fetcher });
+
+  assert.deepEqual(await client.health(), { status: 'ok' });
+});
+
 test('SessionHandle.send maps the message request and returns a RunHandle', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {

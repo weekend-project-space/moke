@@ -10,7 +10,7 @@ export class HttpClient {
 
   constructor(options: MokeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
-    this.fetcher = options.fetch || fetch;
+    this.fetcher = (options.fetch || fetch).bind(globalThis);
     this.token = options.token;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
   }
