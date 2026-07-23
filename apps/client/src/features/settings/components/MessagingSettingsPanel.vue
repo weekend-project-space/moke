@@ -8,6 +8,7 @@ import {
   Radio,
   RefreshCw,
   Send,
+  Settings2,
   Square,
   Trash2,
   X,
@@ -19,14 +20,18 @@ type ConnectionState = 'stopped' | 'starting' | 'connected' | 'reconnecting' | '
 
 type MessagingConnection = {
   id: string
-  platform: 'weixin' | 'dingtalk'
+  platform: 'weixin' | 'dingtalk' | 'feishu'
   name: string
   enabled: boolean
   state: ConnectionState
   last_connected_at?: string
+  bot_name?: string
+  bot_avatar_url?: string
   last_inbound_at?: string
   last_outbound_at?: string
   last_error?: { code: string; message: string; at: string }
+  allowed_user_ids?: string[]
+  card_template_id?: string
 }
 
 type WeixinLogin = {
@@ -40,11 +45,18 @@ type WeixinLogin = {
 const props = defineProps<{ apiBase: string }>()
 
 const connections = ref<MessagingConnection[]>([])
-const setupChannel = ref<'weixin' | 'dingtalk' | null>(null)
+const setupChannel = ref<'weixin' | 'dingtalk' | 'feishu' | null>(null)
 const loginConnectionId = ref<string>()
 const dingtalkClientId = ref('')
 const dingtalkClientSecret = ref('')
+const dingtalkAllowedUsers = ref('')
+const dingtalkCardTemplateId = ref('')
+const editingDingTalkId = ref('')
 const savingDingTalk = ref(false)
+const feishuAppId = ref('')
+const feishuAppSecret = ref('')
+const feishuDomain = ref<'feishu' | 'lark'>('feishu')
+const savingFeishu = ref(false)
 const login = ref<WeixinLogin | null>(null)
 const verifyCode = ref('')
 const loading = ref(false)
@@ -82,21 +94,57 @@ async function saveDingTalkConnection() {
   savingDingTalk.value = true
   error.value = ''
   try {
-    await requestJson('/api/messaging/connections', json('POST', {
-      platform: 'dingtalk',
-      credentials: {
-        clientId: dingtalkClientId.value.trim(),
-        clientSecret: dingtalkClientSecret.value.trim(),
-      },
-    }))
+    const options = {
+      allowedUserIds: dingtalkAllowedUsers.value.split(',').map((value) => value.trim()).filter(Boolean),
+      cardTemplateId: dingtalkCardTemplateId.value.trim(),
+    }
+    if (editingDingTalkId.value) {
+      await requestJson(`/api/messaging/connections/${encodeURIComponent(editingDingTalkId.value)}`, json('PATCH', options))
+    } else {
+      await requestJson('/api/messaging/connections', json('POST', {
+        platform: 'dingtalk',
+        credentials: {
+          clientId: dingtalkClientId.value.trim(),
+          clientSecret: dingtalkClientSecret.value.trim(),
+          ...options,
+        },
+      }))
+    }
     dingtalkClientId.value = ''
     dingtalkClientSecret.value = ''
+    dingtalkAllowedUsers.value = ''
+    dingtalkCardTemplateId.value = ''
+    editingDingTalkId.value = ''
     await loadConnections()
     setupChannel.value = null
   } catch (reason) {
     error.value = messageFrom(reason, uiText.messaging.addDingTalkFailed)
   } finally {
     savingDingTalk.value = false
+  }
+}
+
+async function saveFeishuConnection() {
+  savingFeishu.value = true
+  error.value = ''
+  try {
+    await requestJson('/api/messaging/connections', json('POST', {
+      platform: 'feishu',
+      credentials: {
+        appId: feishuAppId.value.trim(),
+        appSecret: feishuAppSecret.value.trim(),
+        domain: feishuDomain.value,
+      },
+    }))
+    feishuAppId.value = ''
+    feishuAppSecret.value = ''
+    feishuDomain.value = 'feishu'
+    await loadConnections()
+    setupChannel.value = null
+  } catch (reason) {
+    error.value = messageFrom(reason, uiText.messaging.addFeishuFailed)
+  } finally {
+    savingFeishu.value = false
   }
 }
 
@@ -192,8 +240,21 @@ function openDingTalkSetup() {
   error.value = ''
 }
 
+function editDingTalk(connection: MessagingConnection) {
+  editingDingTalkId.value = connection.id
+  dingtalkAllowedUsers.value = connection.allowed_user_ids?.join(', ') || ''
+  dingtalkCardTemplateId.value = connection.card_template_id || ''
+  setupChannel.value = 'dingtalk'
+  error.value = ''
+}
+
+function openFeishuSetup() {
+  setupChannel.value = 'feishu'
+  error.value = ''
+}
+
 async function closeSetup() {
-  if (savingDingTalk.value) return
+  if (savingDingTalk.value || savingFeishu.value) return
   loginRequest += 1
   creatingLogin.value = false
   const current = login.value
@@ -204,6 +265,12 @@ async function closeSetup() {
   verifyCode.value = ''
   dingtalkClientId.value = ''
   dingtalkClientSecret.value = ''
+  dingtalkAllowedUsers.value = ''
+  dingtalkCardTemplateId.value = ''
+  editingDingTalkId.value = ''
+  feishuAppId.value = ''
+  feishuAppSecret.value = ''
+  feishuDomain.value = 'feishu'
   error.value = ''
   setupChannel.value = null
 
@@ -260,7 +327,18 @@ function json(method: 'POST' | 'PATCH', body: unknown): RequestInit {
 }
 
 function platformLabel(platform: MessagingConnection['platform']) {
-  return platform === 'weixin' ? uiText.messaging.weChat : uiText.messaging.dingTalk
+  if (platform === 'weixin') return uiText.messaging.weChat
+  return platform === 'dingtalk' ? uiText.messaging.dingTalk : uiText.messaging.feishu
+}
+
+function setupTitle(channel: NonNullable<typeof setupChannel.value>) {
+  if (channel === 'weixin') return uiText.messaging.addWeChat
+  return channel === 'dingtalk' ? (editingDingTalkId.value ? uiText.messaging.configureDingTalk : uiText.messaging.addDingTalk) : uiText.messaging.addFeishu
+}
+
+function setupDescription(channel: NonNullable<typeof setupChannel.value>) {
+  if (channel === 'weixin') return uiText.messaging.connectWeChatDescription
+  return channel === 'dingtalk' ? uiText.messaging.connectDingTalkDescription : uiText.messaging.connectFeishuDescription
 }
 
 function connectionStateLabel(state: ConnectionState) {
@@ -329,17 +407,30 @@ onBeforeUnmount(stopPolling)
       <article v-for="connection in connections" :key="connection.id" class="messaging-connection-row">
         <div class="messaging-connection-main">
           <div class="messaging-connection-icon" aria-hidden="true">
-            <MessageCircle v-if="connection.platform === 'weixin'" :size="15" />
-            <Radio v-else :size="15" />
+            <img v-if="connection.bot_avatar_url" :src="connection.bot_avatar_url" alt="" />
+            <MessageCircle v-else-if="connection.platform === 'weixin'" :size="15" />
+            <Radio v-else-if="connection.platform === 'dingtalk'" :size="15" />
+            <Send v-else :size="15" />
           </div>
           <div class="messaging-connection-copy">
-            <strong>{{ platformLabel(connection.platform) }}<template v-if="connection.name !== platformLabel(connection.platform)"> · {{ connection.name }}</template></strong>
+            <strong>{{ connection.bot_name || platformLabel(connection.platform) }}<template v-if="!connection.bot_name && connection.name !== platformLabel(connection.platform)"> · {{ connection.name }}</template></strong>
             <span>{{ connectionTime(connection) }}</span>
             <small v-if="connection.last_error">{{ connection.last_error.message }}</small>
           </div>
         </div>
         <span class="messaging-state" :class="`is-${connection.state}`">{{ connectionStateLabel(connection.state) }}</span>
         <div class="messaging-connection-actions">
+          <button
+            v-if="connection.platform === 'dingtalk'"
+            type="button"
+            class="settings-icon-button"
+            :title="uiText.messaging.configureChannel"
+            :aria-label="uiText.messaging.configureChannel"
+            :disabled="busyConnectionId === connection.id"
+            @click="editDingTalk(connection)"
+          >
+            <Settings2 :size="14" />
+          </button>
           <button
             v-if="connection.state === 'connected' || connection.state === 'starting' || connection.state === 'reconnecting'"
             type="button"
@@ -404,12 +495,12 @@ onBeforeUnmount(stopPolling)
         </div>
         <button type="button" class="settings-secondary messaging-channel-action" @click="openDingTalkSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
       </article>
-      <article class="messaging-channel-row is-disabled">
+      <article class="messaging-channel-row">
         <div class="messaging-connection-main">
           <div class="messaging-connection-icon" aria-hidden="true"><Send :size="15" /></div>
           <div class="messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></div>
         </div>
-        <span class="messaging-channel-coming">{{ uiText.messaging.comingSoon }}</span>
+        <button type="button" class="settings-secondary messaging-channel-action" @click="openFeishuSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
       </article>
     </div>
   </section>
@@ -427,14 +518,15 @@ onBeforeUnmount(stopPolling)
           <div class="messaging-modal-title">
             <div class="messaging-modal-icon" aria-hidden="true">
               <MessageCircle v-if="setupChannel === 'weixin'" :size="15" />
-              <Radio v-else :size="15" />
+              <Radio v-else-if="setupChannel === 'dingtalk'" :size="15" />
+              <Send v-else :size="15" />
             </div>
             <div>
-              <h3 id="messaging-setup-title">{{ setupChannel === 'weixin' ? uiText.messaging.addWeChat : uiText.messaging.addDingTalk }}</h3>
-              <span>{{ setupChannel === 'weixin' ? uiText.messaging.connectWeChatDescription : uiText.messaging.connectDingTalkDescription }}</span>
+              <h3 id="messaging-setup-title">{{ setupTitle(setupChannel) }}</h3>
+              <span>{{ setupDescription(setupChannel) }}</span>
             </div>
           </div>
-          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" :disabled="savingDingTalk" @click="closeSetup"><X :size="14" /></button>
+          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" :disabled="savingDingTalk || savingFeishu" @click="closeSetup"><X :size="14" /></button>
         </div>
 
         <template v-if="setupChannel === 'weixin'">
@@ -463,15 +555,36 @@ onBeforeUnmount(stopPolling)
           </div>
         </template>
 
-        <form v-else class="messaging-credentials-form" @submit.prevent="saveDingTalkConnection">
+        <form v-else-if="setupChannel === 'dingtalk'" class="messaging-credentials-form" @submit.prevent="saveDingTalkConnection">
           <div class="messaging-modal-fields">
-            <label>{{ uiText.messaging.clientId }}<input v-model="dingtalkClientId" required maxlength="200" autocomplete="off" /></label>
-            <label>{{ uiText.messaging.clientSecret }}<input v-model="dingtalkClientSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
+            <label v-if="!editingDingTalkId">{{ uiText.messaging.clientId }}<input v-model="dingtalkClientId" required maxlength="200" autocomplete="off" /></label>
+            <label v-if="!editingDingTalkId">{{ uiText.messaging.clientSecret }}<input v-model="dingtalkClientSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
+            <label>{{ uiText.messaging.allowedUsers }}<input v-model="dingtalkAllowedUsers" maxlength="4000" :placeholder="uiText.messaging.allowedUsersPlaceholder" autocomplete="off" /></label>
+            <label>{{ uiText.messaging.cardTemplateId }}<input v-model="dingtalkCardTemplateId" maxlength="300" :placeholder="uiText.messaging.optional" autocomplete="off" /></label>
             <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
           </div>
           <div class="messaging-modal-actions">
             <button type="button" class="settings-secondary" :disabled="savingDingTalk" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
-            <button type="submit" class="settings-primary" :disabled="savingDingTalk || !dingtalkClientId.trim() || !dingtalkClientSecret.trim()">{{ uiText.messaging.saveAndConnect }}</button>
+            <button type="submit" class="settings-primary" :disabled="savingDingTalk || (!editingDingTalkId && (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()))">{{ editingDingTalkId ? uiText.messaging.saveChanges : uiText.messaging.saveAndConnect }}</button>
+          </div>
+        </form>
+
+        <form v-else class="messaging-credentials-form" @submit.prevent="saveFeishuConnection">
+          <div class="messaging-modal-fields">
+            <label>{{ uiText.messaging.appId }}<input v-model="feishuAppId" required maxlength="200" autocomplete="off" /></label>
+            <label>{{ uiText.messaging.appSecret }}<input v-model="feishuAppSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
+            <label>
+              {{ uiText.messaging.region }}
+              <select v-model="feishuDomain">
+                <option value="feishu">{{ uiText.messaging.feishuChina }}</option>
+                <option value="lark">{{ uiText.messaging.larkGlobal }}</option>
+              </select>
+            </label>
+            <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+          </div>
+          <div class="messaging-modal-actions">
+            <button type="button" class="settings-secondary" :disabled="savingFeishu" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
+            <button type="submit" class="settings-primary" :disabled="savingFeishu || !feishuAppId.trim() || !feishuAppSecret.trim()">{{ uiText.messaging.saveAndConnect }}</button>
           </div>
         </form>
       </section>
@@ -567,7 +680,8 @@ onBeforeUnmount(stopPolling)
   font-size: var(--font-size-meta);
 }
 
-.messaging-modal input {
+.messaging-modal input,
+.messaging-modal select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -581,7 +695,8 @@ onBeforeUnmount(stopPolling)
   outline: none;
 }
 
-.messaging-modal input:focus {
+.messaging-modal input:focus,
+.messaging-modal select:focus {
   border-color: var(--focus-control-border);
   box-shadow: 0 0 0 3px var(--focus-control-ring);
 }

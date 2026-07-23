@@ -20,7 +20,7 @@ export class MessagingGateway {
   }
 
   async accept(event: MessagingInboundEvent): Promise<InboundAck> {
-    if (event.platform !== 'weixin' && event.platform !== 'dingtalk') return { status: 'ignored' };
+    if (event.platform !== 'weixin' && event.platform !== 'dingtalk' && event.platform !== 'feishu') return { status: 'ignored' };
     if (this.store.claimInbound(event.account_id, event.message.id, event.platform) === 'duplicate') return { status: 'duplicate' };
 
     try {
@@ -35,7 +35,9 @@ export class MessagingGateway {
       let binding = this.store.findBinding(event.account_id, event.conversation.id, event.platform);
       if (!binding) {
         const session = this.sessions.createSession({
-          title: event.platform === 'dingtalk' ? 'DingTalk conversation' : 'WeChat contact',
+          title: event.platform === 'dingtalk'
+            ? 'DingTalk conversation'
+            : event.platform === 'feishu' ? 'Feishu conversation' : 'WeChat contact',
           metadata: { messaging: { platform: event.platform, connection_id: event.account_id } },
         });
         binding = this.store.createBinding({
@@ -50,7 +52,7 @@ export class MessagingGateway {
         .filter(Boolean)
         .join('\n')
         .trim();
-      const attachments = event.platform === 'weixin' ? await this.resolveImages(event) : [];
+      const attachments = event.platform === 'weixin' || event.platform === 'feishu' ? await this.resolveImages(event) : [];
       if (!text && attachments.length === 0) {
         this.store.completeInbound(event.account_id, event.message.id, event.platform);
         return { status: 'ignored' };
@@ -60,7 +62,7 @@ export class MessagingGateway {
         content: text,
         ...(attachments.length ? { attachments: attachments.map(toStoredAttachment) } : {}),
       });
-      this.store.markBindingInbound(binding.id, event.message.id);
+      this.store.markBindingInbound(binding.id, event.message.id, event.sender.id);
       this.store.recordInbound(event.account_id, event.platform);
       this.store.completeInbound(event.account_id, event.message.id, event.platform);
       await this.drain(binding.id);
@@ -140,15 +142,17 @@ export class MessagingGateway {
     let totalBytes = 0;
     const images = await Promise.all(imageSegments.map(async (segment, index) => {
       try {
-        const data = await downloadWeixinImage({
-          downloadUrl: segment.download_url,
-          encryptedQueryParam: segment.encrypted_query_param,
-          aesKey: segment.aes_key,
-          aeskey: segment.aeskey,
-        });
+        const data = segment.data
+          ? Buffer.from(segment.data)
+          : await downloadWeixinImage({
+              downloadUrl: segment.download_url,
+              encryptedQueryParam: segment.encrypted_query_param,
+              aesKey: segment.aes_key,
+              aeskey: segment.aeskey,
+            });
         totalBytes += data.length;
-        if (totalBytes > 5 * 1024 * 1024) throw new Error('Weixin image attachments are too large');
-        return this.attachments.saveInboundImage(data, `weixin-${event.message.id}-${index + 1}`);
+        if (totalBytes > 5 * 1024 * 1024) throw new Error('Messaging image attachments are too large');
+        return this.attachments.saveInboundImage(data, segment.name || `${event.platform}-${event.message.id}-${index + 1}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`[messaging] image download failed message=${event.message.id}: ${message}`);

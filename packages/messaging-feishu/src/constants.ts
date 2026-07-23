@@ -1,20 +1,20 @@
 import type { MessagingCapabilities } from '@moke/messaging-core';
 
-export const DINGTALK_TEXT_LIMIT = 2_000;
+export const FEISHU_TEXT_LIMIT = 30_000;
 
-export const dingtalkCapabilities: MessagingCapabilities = {
+export const feishuCapabilities: MessagingCapabilities = {
   direct: true,
   group: true,
-  proactive: 'none',
+  proactive: 'all',
   edit_message: false,
   streaming_update: false,
   buttons: false,
-  markdown: false,
-  image: true,
+  markdown: true,
+  image: false,
   file: false,
   audio_receive: false,
   video_receive: false,
   typing: false,
-  quote: false,
-  max_text_length: DINGTALK_TEXT_LIMIT,
+  quote: true,
+  max_text_length: FEISHU_TEXT_LIMIT,
 };

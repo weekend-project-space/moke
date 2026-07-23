@@ -25,6 +25,8 @@ test('messaging store keeps tokens out of public connection records and scopes b
 
     const binding = store.createBinding({ connectionId: connection.id, conversationId: 'user@im.wechat', sessionId: 'sess_1' });
     assert.equal(store.getBinding(binding.id)?.session_id, 'sess_1');
+    store.markBindingInbound(binding.id, 'message_0', 'user@im.wechat');
+    assert.equal(store.getBinding(binding.id)?.last_sender_id, 'user@im.wechat');
     assert.equal(store.claimInbound(connection.id, 'message_1'), 'claimed');
     store.completeInbound(connection.id, 'message_1');
     assert.equal(store.claimInbound(connection.id, 'message_1'), 'duplicate');
@@ -77,6 +79,8 @@ test('stores DingTalk credentials and reply webhooks outside public records', ()
       name: '团队钉钉',
       clientId: 'ding-client-id',
       clientSecret: 'ding-client-secret',
+      allowedUserIds: ['staff_1', 'staff_1'],
+      cardTemplateId: 'template.schema',
     });
     store.saveDingTalkReplyContext({
       connectionId: connection.id,
@@ -87,12 +91,44 @@ test('stores DingTalk credentials and reply webhooks outside public records', ()
     });
 
     assert.equal(JSON.stringify(connection).includes('ding-client-secret'), false);
+    assert.deepEqual(connection.allowed_user_ids, ['staff_1']);
+    assert.equal(connection.card_template_id, 'template.schema');
     assert.equal(store.getDingTalkClientSecret(store.getDingTalkConnection(connection.id)!), 'ding-client-secret');
     assert.deepEqual(store.getDingTalkReplyContext(connection.id, 'conversation_1'), {
       sessionWebhook: 'https://secret.example/webhook',
       sourceMessageId: 'message_1',
       expiresAt: '2026-07-22T00:00:00.000Z',
     });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('stores Feishu credentials outside public connection records', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-messaging-store-'));
+  try {
+    const store = new JsonMessagingStore(join(directory, 'store'));
+    store.initialize();
+    const connection = store.createFeishuConnection({
+      name: 'Team Feishu',
+      appId: 'cli_app_id',
+      appSecret: 'feishu-app-secret',
+      domain: 'lark',
+    });
+
+    assert.equal(connection.platform, 'feishu');
+    assert.equal(connection.domain, 'lark');
+    assert.equal(JSON.stringify(connection).includes('feishu-app-secret'), false);
+    assert.equal(store.getFeishuAppSecret(store.getFeishuConnection(connection.id)!), 'feishu-app-secret');
+    const verified = store.updateFeishuIdentity(connection.id, {
+      openId: 'ou_bot',
+      name: 'Moke Bot',
+      avatarUrl: 'https://example.com/avatar.png',
+    });
+    assert.equal(verified.bot_open_id, 'ou_bot');
+    assert.equal(verified.bot_name, 'Moke Bot');
+    assert.equal(verified.bot_avatar_url, 'https://example.com/avatar.png');
+    assert.ok(verified.verified_at);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -114,6 +150,10 @@ test('manages all platforms through one connection index and removes connection-
       clientId: 'ding-client-id',
       clientSecret: 'ding-client-secret',
     });
+    const feishu = store.createFeishuConnection({
+      appId: 'cli_app_id',
+      appSecret: 'feishu-app-secret',
+    });
     store.saveDingTalkReplyContext({
       connectionId: dingtalk.id,
       conversationId: 'conversation_1',
@@ -128,13 +168,13 @@ test('manages all platforms through one connection index and removes connection-
     });
     store.enqueueInbound(binding.id, { message_id: 'queued_1', content: 'hello' });
 
-    assert.deepEqual(store.listConnections().map((connection) => connection.platform).sort(), ['dingtalk', 'weixin']);
+    assert.deepEqual(store.listConnections().map((connection) => connection.platform).sort(), ['dingtalk', 'feishu', 'weixin']);
     assert.equal(store.setConnectionEnabled(dingtalk.id, false).enabled, false);
     assert.equal(store.updateConnectionState(dingtalk.id, { state: 'connected' }).state, 'connected');
 
     const messagingPath = join(storePath, 'messaging');
     const secretsBeforeDelete = readdirSync(join(messagingPath, 'secrets'));
-    assert.equal(secretsBeforeDelete.length, 3);
+    assert.equal(secretsBeforeDelete.length, 4);
     store.deleteConnection(dingtalk.id);
 
     assert.equal(store.getConnection(dingtalk.id), null);
@@ -142,6 +182,9 @@ test('manages all platforms through one connection index and removes connection-
     assert.equal(existsSync(join(messagingPath, 'connections', `${dingtalk.id}.json`)), false);
     assert.equal(existsSync(join(messagingPath, 'dingtalk', dingtalk.id)), false);
     assert.equal(existsSync(join(messagingPath, 'queues', `${binding.id}.json`)), false);
+    assert.equal(readdirSync(join(messagingPath, 'secrets')).length, 2);
+    store.deleteConnection(feishu.id);
+    assert.equal(existsSync(join(messagingPath, 'feishu', feishu.id)), false);
     assert.equal(readdirSync(join(messagingPath, 'secrets')).length, 1);
   } finally {
     rmSync(directory, { recursive: true, force: true });

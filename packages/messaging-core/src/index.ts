@@ -17,6 +17,8 @@ export type MessageSegment =
       encrypted_query_param?: string;
       aes_key?: string;
       aeskey?: string;
+      data?: Uint8Array;
+      name?: string;
     };
 
 export type MessagingInboundEvent = {

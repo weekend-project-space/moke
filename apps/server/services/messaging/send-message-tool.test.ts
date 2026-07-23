@@ -60,6 +60,26 @@ test('send_message accepts a DingTalk messaging run', async () => {
   assert.equal((request as { binding_id: string }).binding_id, 'bind_1');
 });
 
+test('send_message accepts a Feishu messaging run', async () => {
+  let sent = false;
+  const tool = createSendMessageTool({
+    send: async () => {
+      sent = true;
+      return { receipts: [{ type: 'text', delivered_at: '2026-07-23T00:00:00.000Z' }] };
+    },
+  });
+  const run = {
+    id: 'run_feishu_1',
+    origin: { kind: 'messaging', platform: 'feishu', connection_id: 'fsconn_1', binding_id: 'bind_1', inbound_message_id: 'message_1' },
+  } as RuntimeRun;
+  await tool.handler({ text: 'hello' }, {
+    workspace: process.cwd(),
+    run,
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+  });
+  assert.equal(sent, true);
+});
+
 test('send_message requires approval before sending media', async () => {
   let sends = 0;
   const tool = createSendMessageTool({

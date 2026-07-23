@@ -110,10 +110,33 @@ export async function createApp(): Promise<ServerApp> {
   // Keep queued messaging work independent from the HTTP server lifecycle.
   const messagingGateway = new MessagingGateway(messagingStore, sessionApplicationService, attachmentStore);
   const messagingConnectionManager = new MessagingConnectionManager(messagingStore, messagingGateway);
+  const messagingDeliveryService = new MessagingDeliveryService(messagingConnectionManager);
   messagingGateway.setRunStartedListener((input) => {
     messagingConnectionManager.startTypingForBinding(input.connectionId, input.bindingId, input.runId);
+    messagingDeliveryService.onRunStarted(input);
   });
-  const messagingDeliveryService = new MessagingDeliveryService(messagingConnectionManager);
+  messagingConnectionManager.setCardActionHandler((action) => {
+    const value = action.value;
+    const runId = typeof value.runId === 'string' ? value.runId : '';
+    const requestId = typeof value.requestId === 'string' ? value.requestId : '';
+    let result: { status: number; error?: string };
+    if (typeof value.responderOpenId === 'string' && value.responderOpenId !== action.openId) {
+      result = { status: 403, error: 'Only the person who started this task can respond' };
+    } else if (value.action === 'ask' && typeof value.optionId === 'string') {
+      result = runManager.answer(runId, requestId, value.optionId);
+    } else if (value.action === 'approve' && (value.decision === 'approved' || value.decision === 'rejected')) {
+      const scope = value.scope === 'once' || value.scope === 'persistent' ? value.scope : 'session';
+      result = runManager.approve(runId, requestId, value.decision, { scope });
+    } else {
+      result = { status: 400, error: 'Invalid card action' };
+    }
+    return {
+      toast: {
+        type: result.status === 200 ? 'success' : 'warning',
+        content: result.status === 200 ? 'Response received' : result.error || 'This request is no longer pending',
+      },
+    };
+  });
   const messagingOutboundService = new DefaultMessagingOutboundService(
     messagingStore,
     messagingConnectionManager,

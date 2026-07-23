@@ -7,6 +7,8 @@ import { createRouter } from './router.js';
 import {
   idParamsSchema,
   listSessionsQuerySchema,
+  messagingConnectionCreateSchema,
+  messagingConnectionUpdateSchema,
   runRespondSchema,
 } from '../routes/schemas.js';
 import { parseBody, parseInput, parseParams, parseQuery, RequestValidationError } from './validation.js';
@@ -35,6 +37,31 @@ test('run response schema rejects invalid variants and accepts typed variants', 
   assert.equal(runRespondSchema.safeParse({ type: 'choose', request_id: 'ask_1' }).success, false);
   assert.equal(runRespondSchema.safeParse({ type: 'approve', request_id: 'approval_1', decision: 'approved' }).success, true);
   assert.equal(runRespondSchema.safeParse({ type: 'cancel', reason: 'User cancelled' }).success, true);
+});
+
+test('messaging connection schema accepts Feishu credentials and defaults the domain', () => {
+  assert.deepEqual(messagingConnectionCreateSchema.parse({
+    platform: 'feishu',
+    credentials: { appId: 'cli_app_id', appSecret: 'app-secret' },
+  }), {
+    platform: 'feishu',
+    credentials: { appId: 'cli_app_id', appSecret: 'app-secret', domain: 'feishu' },
+  });
+  assert.equal(messagingConnectionCreateSchema.safeParse({
+    platform: 'feishu',
+    credentials: { appId: '', appSecret: 'app-secret' },
+  }).success, false);
+});
+
+test('messaging connection update accepts DingTalk policy fields', () => {
+  assert.deepEqual(parseInput(messagingConnectionUpdateSchema, {
+    allowedUserIds: ['staff_1'],
+    cardTemplateId: 'template.schema',
+  }), {
+    allowedUserIds: ['staff_1'],
+    cardTemplateId: 'template.schema',
+  });
+  assert.throws(() => parseInput(messagingConnectionUpdateSchema, {}), RequestValidationError);
 });
 
 test('router returns one validation error shape', async () => {

@@ -40,3 +40,18 @@ test('ignores unsupported DingTalk messages', () => {
     message: { conversationId: 'cid_1', msgId: 'msg_1', senderId: 'user_1', msgtype: 'picture' },
   }), null);
 });
+
+test('converts downloaded images and file metadata', () => {
+  const imageData = new Uint8Array([1, 2, 3]);
+  const image = toDingTalkInboundMessage({
+    accountId: 'dtconn_1',
+    message: { conversationId: 'conversation_1', msgId: 'image_1', senderId: 'user_1', msgtype: 'picture', imageData },
+  });
+  const file = toDingTalkInboundMessage({
+    accountId: 'dtconn_1',
+    message: { conversationId: 'conversation_1', msgId: 'file_1', senderId: 'user_1', msgtype: 'file', fileName: 'report.pdf' },
+  });
+
+  assert.deepEqual(image?.event.message.segments, [{ type: 'image', data: imageData, name: 'dingtalk-image_1' }]);
+  assert.deepEqual(file?.event.message.segments, [{ type: 'text', text: '[File: report.pdf]' }]);
+});

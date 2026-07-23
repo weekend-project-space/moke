@@ -10,7 +10,9 @@ export function registerMessagingRoutes(router: Router<RoutesContext>) {
 
   router.post('/api/messaging/connections', async ({ body, context, json }) => {
     const input = await parseBody(body, messagingConnectionCreateSchema);
-    const connection = context.messagingStore.createDingTalkConnection(input.credentials);
+    const connection = input.platform === 'dingtalk'
+      ? context.messagingStore.createDingTalkConnection(input.credentials)
+      : context.messagingStore.createFeishuConnection(input.credentials);
     try {
       await context.messagingConnectionManager.start(connection.id);
     } catch (error) {
@@ -37,13 +39,26 @@ export function registerMessagingRoutes(router: Router<RoutesContext>) {
 
   router.patch('/api/messaging/connections/:id', async ({ body, context, json, params }) => {
     const { id } = parseParams(params, idParamsSchema);
-    const { enabled } = await parseBody(body, messagingConnectionUpdateSchema);
+    const input = await parseBody(body, messagingConnectionUpdateSchema);
     if (!context.messagingStore.getConnection(id)) {
       throw new HttpError(404, 'MESSAGING_CONNECTION_NOT_FOUND', 'Messaging connection not found');
     }
-    context.messagingStore.setConnectionEnabled(id, enabled);
-    if (enabled) await context.messagingConnectionManager.start(id);
-    else await context.messagingConnectionManager.stop(id);
+    const current = context.messagingStore.getConnection(id)!;
+    if ((input.allowedUserIds !== undefined || input.cardTemplateId !== undefined) && current.platform !== 'dingtalk') {
+      throw new HttpError(400, 'MESSAGING_CONFIG_NOT_SUPPORTED', 'These settings are only available for DingTalk');
+    }
+    if (current.platform === 'dingtalk' && (input.allowedUserIds !== undefined || input.cardTemplateId !== undefined)) {
+      context.messagingStore.updateDingTalkOptions(id, input);
+      if (current.enabled) {
+        await context.messagingConnectionManager.stop(id);
+        await context.messagingConnectionManager.start(id);
+      }
+    }
+    if (input.enabled !== undefined) {
+      context.messagingStore.setConnectionEnabled(id, input.enabled);
+      if (input.enabled) await context.messagingConnectionManager.start(id);
+      else await context.messagingConnectionManager.stop(id);
+    }
     return json(200, { connection: context.messagingStore.getPublicConnection(id) });
   });
 

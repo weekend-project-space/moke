@@ -8,7 +8,6 @@ import type {
   OutboundContent,
 } from '@moke/messaging-core';
 import { PathRequiresApprovalError } from '@moke/agent-runtime';
-import type { WeixinOutboundMedia } from '@moke/messaging-weixin';
 import { MessagingConnectionManager } from './connection-manager.js';
 import { JsonMessagingStore } from '../../storage/messaging-store.js';
 
@@ -49,7 +48,7 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
   private async performSend(input: MessagingOutboundRequest): Promise<MessagingOutboundResult> {
     if (!input.contents.length) throw new Error('At least one outbound content item is required');
     const binding = this.store.getBinding(input.binding_id);
-    if (!binding || binding.platform !== 'weixin') throw new Error('Messaging binding is not available for Weixin');
+    if (!binding) throw new Error('Messaging binding is not available');
     const outbox = this.store.beginOutbox(input);
     if (outbox.binding_id !== input.binding_id) throw new Error('Idempotency key belongs to a different messaging binding');
     if (outbox.state === 'completed') return { receipts: outbox.receipts };
@@ -82,7 +81,7 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
     return { type: content.type, delivered_at: new Date().toISOString() };
   }
 
-  private async readWorkspaceMedia(content: Extract<OutboundContent, { type: 'image' | 'file' }>): Promise<WeixinOutboundMedia> {
+  private async readWorkspaceMedia(content: Extract<OutboundContent, { type: 'image' | 'file' }>): Promise<OutboundMedia> {
     const filePath = await resolveAllowedFile(this.workspace, this.approvedRoots, content.path);
     const metadata = await stat(filePath);
     if (!metadata.isFile()) throw new Error(`Outbound path is not a file: ${content.path}`);
@@ -99,6 +98,13 @@ export class DefaultMessagingOutboundService implements MessagingOutboundService
     };
   }
 }
+
+type OutboundMedia = {
+  type: 'image' | 'file';
+  data: Buffer;
+  name: string;
+  mimeType: string;
+};
 
 async function resolveAllowedFile(workspace: string, approvedRoots: () => string[], requestedPath: string) {
   if (!requestedPath.trim()) throw new Error('Outbound media path is required');

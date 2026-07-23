@@ -36,6 +36,8 @@ export type DingTalkConnectionRecord = {
   enabled: boolean;
   client_id: string;
   client_secret_ref: string;
+  allowed_user_ids?: string[];
+  card_template_id?: string;
   state: MessagingConnectionState;
   created_at: string;
   updated_at: string;
@@ -49,8 +51,31 @@ export type DingTalkConnectionRecord = {
 
 export type PublicDingTalkConnection = Omit<DingTalkConnectionRecord, 'client_secret_ref'>;
 
-export type MessagingConnectionRecord = WeixinConnectionRecord | DingTalkConnectionRecord;
-export type PublicMessagingConnection = PublicWeixinConnection | PublicDingTalkConnection;
+export type FeishuConnectionRecord = {
+  id: string;
+  platform: 'feishu';
+  name: string;
+  enabled: boolean;
+  app_id: string;
+  app_secret_ref: string;
+  domain: 'feishu' | 'lark';
+  bot_open_id?: string;
+  bot_name?: string;
+  bot_avatar_url?: string;
+  verified_at?: string;
+  state: MessagingConnectionState;
+  created_at: string;
+  updated_at: string;
+  last_connected_at?: string;
+  last_inbound_at?: string;
+  last_outbound_at?: string;
+  last_error?: { code: string; message: string; at: string };
+};
+
+export type PublicFeishuConnection = Omit<FeishuConnectionRecord, 'app_secret_ref'>;
+
+export type MessagingConnectionRecord = WeixinConnectionRecord | DingTalkConnectionRecord | FeishuConnectionRecord;
+export type PublicMessagingConnection = PublicWeixinConnection | PublicDingTalkConnection | PublicFeishuConnection;
 
 type Binding = {
   id: string;
@@ -61,6 +86,7 @@ type Binding = {
   created_at: string;
   updated_at: string;
   last_inbound_message_id?: string;
+  last_sender_id?: string;
 };
 
 type ContextRecord = {
@@ -111,6 +137,7 @@ export class JsonMessagingStore {
   private readonly secretsPath: string;
   private readonly weixinPath: string;
   private readonly dingtalkPath: string;
+  private readonly feishuPath: string;
 
   constructor(storePath: string) {
     this.root = join(storePath, 'messaging');
@@ -119,6 +146,7 @@ export class JsonMessagingStore {
     this.secretsPath = join(this.root, 'secrets');
     this.weixinPath = join(this.root, 'weixin');
     this.dingtalkPath = join(this.root, 'dingtalk');
+    this.feishuPath = join(this.root, 'feishu');
   }
 
   initialize() {
@@ -127,6 +155,7 @@ export class JsonMessagingStore {
     mkdirSync(this.secretsPath, { recursive: true });
     mkdirSync(this.weixinPath, { recursive: true });
     mkdirSync(this.dingtalkPath, { recursive: true });
+    mkdirSync(this.feishuPath, { recursive: true });
     mkdirSync(this.outboxPath(), { recursive: true });
     if (!existsSync(this.connectionsIndexPath())) writeJson(this.connectionsIndexPath(), []);
     if (!existsSync(this.bindingsPath)) writeJson(this.bindingsPath, []);
@@ -142,7 +171,7 @@ export class JsonMessagingStore {
   getConnection(id: string) {
     assertId(id);
     const record = readJson<unknown>(this.connectionPath(id), null);
-    return isWeixinConnection(record) || isDingTalkConnection(record) ? record : null;
+    return isWeixinConnection(record) || isDingTalkConnection(record) || isFeishuConnection(record) ? record : null;
   }
 
   getPublicConnection(id: string) {
@@ -163,6 +192,11 @@ export class JsonMessagingStore {
   getDingTalkConnection(id: string) {
     const record = this.getConnection(id);
     return record?.platform === 'dingtalk' ? record : null;
+  }
+
+  getFeishuConnection(id: string) {
+    const record = this.getConnection(id);
+    return record?.platform === 'feishu' ? record : null;
   }
 
   createConnection(input: {
@@ -194,7 +228,7 @@ export class JsonMessagingStore {
     return record;
   }
 
-  createDingTalkConnection(input: { name?: string; clientId: string; clientSecret: string }) {
+  createDingTalkConnection(input: { name?: string; clientId: string; clientSecret: string; allowedUserIds?: string[]; cardTemplateId?: string }) {
     const clientId = input.clientId.trim();
     const clientSecret = input.clientSecret.trim();
     if (!clientId || !clientSecret) throw new Error('DingTalk client id and client secret are required');
@@ -208,6 +242,8 @@ export class JsonMessagingStore {
       enabled: true,
       client_id: clientId,
       client_secret_ref: secretRef,
+      ...(input.allowedUserIds?.length ? { allowed_user_ids: normalizeStringList(input.allowedUserIds) } : {}),
+      ...(input.cardTemplateId?.trim() ? { card_template_id: input.cardTemplateId.trim() } : {}),
       state: 'stopped',
       created_at: now,
       updated_at: now,
@@ -220,6 +256,63 @@ export class JsonMessagingStore {
 
   getDingTalkClientSecret(connection: DingTalkConnectionRecord) {
     return this.readSecret(connection.client_secret_ref);
+  }
+
+  updateDingTalkOptions(id: string, input: { allowedUserIds?: string[]; cardTemplateId?: string }) {
+    const record = this.getDingTalkConnection(id);
+    if (!record) throw new Error('DingTalk connection not found');
+    if (input.allowedUserIds !== undefined) record.allowed_user_ids = normalizeStringList(input.allowedUserIds);
+    if (input.cardTemplateId !== undefined) record.card_template_id = input.cardTemplateId.trim() || undefined;
+    record.updated_at = new Date().toISOString();
+    writeJson(this.connectionPath(id), record);
+    return toPublicConnection(record);
+  }
+
+  createFeishuConnection(input: {
+    name?: string;
+    appId: string;
+    appSecret: string;
+    domain?: 'feishu' | 'lark';
+  }) {
+    const appId = input.appId.trim();
+    const appSecret = input.appSecret.trim();
+    if (!appId || !appSecret) throw new Error('Feishu app id and app secret are required');
+    const now = new Date().toISOString();
+    const id = `fsconn_${randomUUID().slice(0, 8)}`;
+    const secretRef = `secret_${id}`;
+    const record: FeishuConnectionRecord = {
+      id,
+      platform: 'feishu',
+      name: input.name?.trim() || 'Feishu',
+      enabled: true,
+      app_id: appId,
+      app_secret_ref: secretRef,
+      domain: input.domain === 'lark' ? 'lark' : 'feishu',
+      state: 'stopped',
+      created_at: now,
+      updated_at: now,
+    };
+    this.writeSecret(secretRef, appSecret);
+    writeJson(this.connectionPath(id), record);
+    writeJson(this.connectionsIndexPath(), [...this.readConnectionIds(), id]);
+    return toPublicConnection(record);
+  }
+
+  getFeishuAppSecret(connection: FeishuConnectionRecord) {
+    return this.readSecret(connection.app_secret_ref);
+  }
+
+  updateFeishuIdentity(id: string, identity: { openId: string; name: string; avatarUrl?: string }) {
+    const record = this.getFeishuConnection(id);
+    if (!record) throw new Error('Feishu connection not found');
+    const now = new Date().toISOString();
+    record.bot_open_id = identity.openId;
+    record.bot_name = identity.name;
+    record.bot_avatar_url = identity.avatarUrl;
+    record.verified_at = now;
+    record.updated_at = now;
+    writeJson(this.connectionPath(id), record);
+    return toPublicConnection(record);
   }
 
   recordDingTalkStreamEvent(id: string, topic: string) {
@@ -270,9 +363,7 @@ export class JsonMessagingStore {
     const record = this.requireConnection(id);
     const bindings = this.readBindings();
     const removedBindings = bindings.filter((binding) => binding.account_id === id);
-    const platformPath = record.platform === 'dingtalk'
-      ? this.dingtalkConnectionPath(id)
-      : this.weixinConnectionPath(id);
+    const platformPath = this.platformConnectionPath(id, record.platform);
 
     for (const secretRef of this.readPlatformSecretRefs(record)) {
       rmSync(this.secretPath(secretRef), { force: true });
@@ -371,11 +462,12 @@ export class JsonMessagingStore {
     return binding;
   }
 
-  markBindingInbound(bindingId: string, messageId: string) {
+  markBindingInbound(bindingId: string, messageId: string, senderId?: string) {
     const bindings = this.readBindings();
     const binding = bindings.find((candidate) => candidate.id === bindingId);
     if (!binding) return;
     binding.last_inbound_message_id = messageId;
+    if (senderId?.trim()) binding.last_sender_id = senderId.trim();
     binding.updated_at = new Date().toISOString();
     writeJson(this.bindingsPath, bindings);
   }
@@ -577,6 +669,7 @@ export class JsonMessagingStore {
     if (record.platform === 'dingtalk') {
       return Object.values(this.readDingTalkReplyContexts(record.id)).map((context) => context.secret_ref);
     }
+    if (record.platform === 'feishu') return [];
     return Object.values(this.readContextRecords(record.id)).map((context) => context.secret_ref);
   }
 
@@ -595,10 +688,16 @@ export class JsonMessagingStore {
   private secretPath(id: string) { assertId(id); return join(this.secretsPath, `${id}.json`); }
   private weixinConnectionPath(id: string) { assertId(id); return join(this.weixinPath, id); }
   private dingtalkConnectionPath(id: string) { assertId(id); return join(this.dingtalkPath, id); }
+  private feishuConnectionPath(id: string) { assertId(id); return join(this.feishuPath, id); }
+  private platformConnectionPath(id: string, platform: MessagingPlatform) {
+    if (platform === 'dingtalk') return this.dingtalkConnectionPath(id);
+    if (platform === 'feishu') return this.feishuConnectionPath(id);
+    return this.weixinConnectionPath(id);
+  }
   private contextPath(id: string) { return join(this.weixinConnectionPath(id), 'context-tokens.json'); }
   private dingtalkReplyContextPath(id: string) { return join(this.dingtalkConnectionPath(id), 'reply-contexts.json'); }
   private dedupePath(id: string, platform: MessagingPlatform) {
-    return join(platform === 'dingtalk' ? this.dingtalkConnectionPath(id) : this.weixinConnectionPath(id), 'dedupe.json');
+    return join(this.platformConnectionPath(id, platform), 'dedupe.json');
   }
   private queuesPath() { return join(this.root, 'queues'); }
   private outboxPath() { return join(this.root, 'outbox'); }
@@ -610,18 +709,25 @@ export class JsonMessagingStore {
 
 function toPublicConnection(record: WeixinConnectionRecord): PublicWeixinConnection;
 function toPublicConnection(record: DingTalkConnectionRecord): PublicDingTalkConnection;
+function toPublicConnection(record: FeishuConnectionRecord): PublicFeishuConnection;
 function toPublicConnection(record: MessagingConnectionRecord): PublicMessagingConnection;
 function toPublicConnection(record: MessagingConnectionRecord): PublicMessagingConnection {
   if (record.platform === 'dingtalk') {
     const { client_secret_ref: _secret, ...publicRecord } = record;
     return { ...publicRecord, name: publicRecord.name === '钉钉' ? 'DingTalk' : publicRecord.name };
   }
+  if (record.platform === 'feishu') {
+    const { app_secret_ref: _secret, ...publicRecord } = record;
+    return { ...publicRecord, name: publicRecord.name === '飞书' ? 'Feishu' : publicRecord.name };
+  }
   const { bot_token_secret_ref: _secret, ...publicRecord } = record;
   return { ...publicRecord, name: publicRecord.name === '微信' ? 'WeChat' : publicRecord.name };
 }
 
 function connectionSecretRef(record: MessagingConnectionRecord) {
-  return record.platform === 'dingtalk' ? record.client_secret_ref : record.bot_token_secret_ref;
+  if (record.platform === 'dingtalk') return record.client_secret_ref;
+  if (record.platform === 'feishu') return record.app_secret_ref;
+  return record.bot_token_secret_ref;
 }
 
 function readJson<T>(path: string, fallback: T): T {
@@ -651,6 +757,10 @@ function assertId(value: string) {
 
 function shortHash(value: string) {
   return createHash('sha256').update(value).digest('hex').slice(0, 24);
+}
+
+function normalizeStringList(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, 100);
 }
 
 function isBinding(value: unknown): value is Binding {
@@ -684,6 +794,18 @@ function isDingTalkConnection(value: unknown): value is DingTalkConnectionRecord
     && typeof candidate.enabled === 'boolean'
     && typeof candidate.client_id === 'string'
     && typeof candidate.client_secret_ref === 'string';
+}
+
+function isFeishuConnection(value: unknown): value is FeishuConnectionRecord {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<FeishuConnectionRecord>;
+  return candidate.platform === 'feishu'
+    && typeof candidate.id === 'string'
+    && typeof candidate.name === 'string'
+    && typeof candidate.enabled === 'boolean'
+    && typeof candidate.app_id === 'string'
+    && typeof candidate.app_secret_ref === 'string'
+    && (candidate.domain === 'feishu' || candidate.domain === 'lark');
 }
 
 function isQueuedMessage(value: unknown): value is QueuedInboundMessage {

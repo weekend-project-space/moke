@@ -122,8 +122,10 @@ export const browserRespondSchema = z.object({
 }).strict();
 
 export const messagingConnectionUpdateSchema = z.object({
-  enabled: z.boolean(),
-}).strict();
+  enabled: z.boolean().optional(),
+  allowedUserIds: z.array(z.string().trim().min(1).max(200)).max(100).optional(),
+  cardTemplateId: z.string().trim().max(300).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, 'At least one connection setting is required');
 
 export const weixinLoginStartSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -140,6 +142,16 @@ export const messagingConnectionCreateSchema = z.discriminatedUnion('platform', 
     credentials: z.object({
       clientId: z.string().trim().min(1).max(200),
       clientSecret: z.string().trim().min(1).max(2000),
+      allowedUserIds: z.array(z.string().trim().min(1).max(200)).max(100).optional(),
+      cardTemplateId: z.string().trim().max(300).optional(),
+    }).strict(),
+  }).strict(),
+  z.object({
+    platform: z.literal('feishu'),
+    credentials: z.object({
+      appId: z.string().trim().min(1).max(200),
+      appSecret: z.string().trim().min(1).max(2000),
+      domain: z.enum(['feishu', 'lark']).optional().default('feishu'),
     }).strict(),
   }).strict(),
 ]);

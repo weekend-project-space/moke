@@ -15,6 +15,7 @@
     "@moke/mcp-client": "0.1.0",
     "@moke/messaging-core": "0.1.0",
     "@moke/messaging-dingtalk": "0.1.0",
+    "@moke/messaging-feishu": "0.1.0",
     "@moke/messaging-weixin": "0.1.0",
     "@moke/protocol": "0.1.0",
     "qrcode": "^1.5.4",
