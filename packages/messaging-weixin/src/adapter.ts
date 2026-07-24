@@ -1,24 +1,27 @@
+import { MessagingDeliveryError, splitMessagingText } from '@moke/messaging-core';
 import type {
   AdapterContext,
   AdapterStatus,
   DeliveryReceipt,
   MessagingAdapter,
+  MessagingDeliveryResult,
+  MessagingDeliveryTarget,
+  MessagingOutboundOperation,
   MessagingTarget,
   OutboundMessage,
 } from '@moke/messaging-core';
-import { WEIXIN_LONG_POLL_TIMEOUT_MS } from './constants.js';
+import { WEIXIN_LONG_POLL_TIMEOUT_MS, WEIXIN_TEXT_LIMIT } from './constants.js';
 import { WeixinApiClient, WeixinApiError } from './api-client.js';
 import { uploadWeixinMedia, type WeixinOutboundMedia } from './outbound-media.js';
 import { toMessagingInboundEvent } from './message-converter.js';
 import { weixinCapabilities } from './constants.js';
+import { downloadWeixinImage } from './media.js';
 
 export type WeixinAdapterConfig = {
   accountId: string;
   botUserId?: string;
   token: string;
   baseUrl?: string;
-  loadCursor(): Promise<string>;
-  saveCursor(cursor: string): Promise<void>;
   client?: WeixinApiClient;
 };
 
@@ -28,12 +31,14 @@ export class WeixinAdapter implements MessagingAdapter {
   private controller: AbortController | undefined;
   private loop: Promise<void> | undefined;
   private status: AdapterStatus = { state: 'stopped', changed_at: new Date().toISOString() };
+  private context: AdapterContext | undefined;
   private readonly typingTickets = new Map<string, { value: string; expiresAt: number }>();
 
   constructor(private readonly config: WeixinAdapterConfig) {}
 
   async start(context: AdapterContext) {
     if (this.loop) return;
+    this.context = context;
     this.controller = new AbortController();
     this.setStatus(context, { state: 'starting', changed_at: new Date().toISOString() });
     this.loop = this.poll(context, this.controller.signal).finally(() => {
@@ -49,6 +54,7 @@ export class WeixinAdapter implements MessagingAdapter {
     if (this.status.state !== 'reauth_required' && this.status.state !== 'error') {
       this.status = { state: 'stopped', changed_at: new Date().toISOString() };
     }
+    this.context = undefined;
     void reason;
   }
 
@@ -56,9 +62,63 @@ export class WeixinAdapter implements MessagingAdapter {
     return this.status;
   }
 
+  async deliver(
+    target: MessagingDeliveryTarget,
+    operation: MessagingOutboundOperation,
+    previousReference?: Record<string, string>,
+  ): Promise<MessagingDeliveryResult> {
+    const contextToken = this.context?.state.get<string>(`weixin.context:${target.conversation.id}`);
+    const legacyTarget: MessagingTarget = {
+      account_id: target.account_id,
+      conversation_id: target.conversation.id,
+      ...(contextToken ? { context_token: contextToken } : {}),
+    };
+
+    if (operation.kind === 'activity') {
+      await this.setTyping(legacyTarget, operation.active ? 1 : 2);
+      return { receipts: [], ...(previousReference ? { reference: previousReference } : {}) };
+    }
+    if (operation.kind === 'status') {
+      return { receipts: [], ...(previousReference ? { reference: previousReference } : {}) };
+    }
+    if (operation.kind === 'interaction') {
+      const text = operation.resolved
+        ? `${operation.detail}\n\n${operation.resolved.label}`
+        : `${operation.title}\n\n${operation.detail}\n\n${operation.options.map((option, index) => `${index + 1}. ${option.label}`).join('\n')}\n\nOpen Moke to respond.`;
+      const receipts = [];
+      for (const part of splitMessagingText(text, WEIXIN_TEXT_LIMIT)) receipts.push({ type: 'text' as const, ...(await this.send(legacyTarget, { text: part })) });
+      return { receipts };
+    }
+    if (operation.kind === 'result') {
+      if (operation.message_already_delivered) return { receipts: [], ...(previousReference ? { reference: previousReference } : {}) };
+      const receipts = [];
+      for (const part of splitMessagingText(operation.text, WEIXIN_TEXT_LIMIT)) receipts.push({ type: 'text' as const, ...(await this.send(legacyTarget, { text: part })) });
+      return { receipts };
+    }
+
+    const receipts = [];
+    for (const content of operation.contents) {
+      if (content.type === 'text') {
+        for (const part of splitMessagingText(content.text, WEIXIN_TEXT_LIMIT)) {
+          const receipt = await this.send(legacyTarget, { text: part, reply_to_id: operation.reply_to_id });
+          receipts.push({ type: 'text' as const, ...receipt });
+        }
+        continue;
+      }
+      const receipt = await this.sendMedia(legacyTarget, {
+        type: content.type,
+        data: Buffer.from(content.data),
+        name: content.name,
+        mimeType: content.mime_type,
+      }, content.caption);
+      receipts.push({ type: content.type, ...receipt });
+    }
+    return { receipts };
+  }
+
   async send(target: MessagingTarget, message: OutboundMessage): Promise<DeliveryReceipt> {
     if (!target.context_token) {
-      throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
+      throw new MessagingDeliveryError('CONVERSATION_CONTEXT_EXPIRED', 'The contact context has expired. Wait for the contact to send another message.', false);
     }
     const client = this.client();
     await client.sendText({
@@ -70,7 +130,7 @@ export class WeixinAdapter implements MessagingAdapter {
   }
 
   async setTyping(target: MessagingTarget, status: 1 | 2) {
-    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
+    if (!target.context_token) throw new MessagingDeliveryError('CONVERSATION_CONTEXT_EXPIRED', 'The contact context has expired. Wait for the contact to send another message.', false);
     const client = this.client();
     try {
       await this.sendTyping(client, target, status);
@@ -82,7 +142,7 @@ export class WeixinAdapter implements MessagingAdapter {
   }
 
   async sendMedia(target: MessagingTarget, media: WeixinOutboundMedia, caption?: string, runId?: string) {
-    if (!target.context_token) throw new WeixinApiError('WEIXIN_CONTEXT_UNAVAILABLE', 'The contact context has expired. Wait for the contact to send another message.', false);
+    if (!target.context_token) throw new MessagingDeliveryError('CONVERSATION_CONTEXT_EXPIRED', 'The contact context has expired. Wait for the contact to send another message.', false);
     const client = this.client();
     const uploaded = await uploadWeixinMedia({
       client,
@@ -107,7 +167,7 @@ export class WeixinAdapter implements MessagingAdapter {
   }
 
   private async poll(context: AdapterContext, signal: AbortSignal) {
-    let cursor = await this.config.loadCursor();
+    let cursor = context.state.get<string>('weixin.cursor') || '';
     let retryDelay = 1_000;
     const client = this.client();
     while (!signal.aborted) {
@@ -131,10 +191,14 @@ export class WeixinAdapter implements MessagingAdapter {
             botUserId: this.config.botUserId,
             message,
           });
-          if (event) await context.emit(event);
+           if (event) {
+             if (event.context_token) context.state.set(`weixin.context:${event.conversation.id}`, event.context_token);
+             const { context_token: _contextToken, ...message } = await this.resolveInboundImages(event);
+             await context.emit({ type: 'message', message });
+           }
         }
         if (typeof response.get_updates_buf === 'string' && response.get_updates_buf !== cursor) {
-          await this.config.saveCursor(response.get_updates_buf);
+           context.state.set('weixin.cursor', response.get_updates_buf);
           cursor = response.get_updates_buf;
         }
         retryDelay = 1_000;
@@ -187,6 +251,26 @@ export class WeixinAdapter implements MessagingAdapter {
       typingTicket: ticket,
       status,
     });
+  }
+
+  private async resolveInboundImages(event: Awaited<ReturnType<typeof toMessagingInboundEvent>>) {
+    if (!event) throw new Error('Weixin inbound event is missing');
+    const segments = await Promise.all(event.message.segments.map(async (segment) => {
+      if (segment.type !== 'image' || segment.data) return segment;
+      try {
+        const data = await downloadWeixinImage({
+          downloadUrl: segment.download_url,
+          encryptedQueryParam: segment.encrypted_query_param,
+          aesKey: segment.aes_key,
+          aeskey: segment.aeskey,
+        });
+        return { ...segment, data: new Uint8Array(data) };
+      } catch (error) {
+        console.warn(`[messaging] WeChat image download failed message=${event.message.id}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    }));
+    return { ...event, message: { ...event.message, segments: segments.filter((segment): segment is NonNullable<typeof segment> => segment !== null) } };
   }
 
   private setStatus(context: AdapterContext, status: AdapterStatus) {

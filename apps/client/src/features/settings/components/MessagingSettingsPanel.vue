@@ -3,17 +3,17 @@ import {
   CircleAlert,
   Link2,
   LoaderCircle,
-  MessageCircle,
   Plus,
-  Radio,
   RefreshCw,
-  Send,
   Settings2,
   Square,
   Trash2,
   X,
 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import dingTalkIcon from '../../../assets/dingtalk.svg'
+import feishuIcon from '../../../assets/feishu.svg'
+import weChatIcon from '../../../assets/wechat.svg'
 import { uiText } from '../../../text/uiText'
 
 type ConnectionState = 'stopped' | 'starting' | 'connected' | 'reconnecting' | 'reauth_required' | 'error'
@@ -40,6 +40,12 @@ type WeixinLogin = {
   qr_image?: string
   expires_at: string
   error?: { code: string; message: string }
+}
+
+const channelIcons: Record<MessagingConnection['platform'], string> = {
+  weixin: weChatIcon,
+  dingtalk: dingTalkIcon,
+  feishu: feishuIcon,
 }
 
 const props = defineProps<{ apiBase: string }>()
@@ -407,10 +413,7 @@ onBeforeUnmount(stopPolling)
       <article v-for="connection in connections" :key="connection.id" class="messaging-connection-row">
         <div class="messaging-connection-main">
           <div class="messaging-connection-icon" aria-hidden="true">
-            <img v-if="connection.bot_avatar_url" :src="connection.bot_avatar_url" alt="" />
-            <MessageCircle v-else-if="connection.platform === 'weixin'" :size="15" />
-            <Radio v-else-if="connection.platform === 'dingtalk'" :size="15" />
-            <Send v-else :size="15" />
+            <img class="messaging-brand-icon" :src="channelIcons[connection.platform]" alt="" />
           </div>
           <div class="messaging-connection-copy">
             <strong>{{ connection.bot_name || platformLabel(connection.platform) }}<template v-if="!connection.bot_name && connection.name !== platformLabel(connection.platform)"> · {{ connection.name }}</template></strong>
@@ -483,21 +486,21 @@ onBeforeUnmount(stopPolling)
     <div class="messaging-channel-list">
       <article class="messaging-channel-row">
         <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><MessageCircle :size="15" /></div>
+          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></div>
           <div class="messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></div>
         </div>
         <button type="button" class="settings-secondary messaging-channel-action" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><Plus :size="14" />{{ uiText.messaging.add }}</button>
       </article>
       <article class="messaging-channel-row">
         <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><Radio :size="15" /></div>
+          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.dingtalk" alt="" /></div>
           <div class="messaging-connection-copy"><strong>{{ uiText.messaging.dingTalk }}</strong><span>{{ uiText.messaging.dingTalkDescription }}</span></div>
         </div>
         <button type="button" class="settings-secondary messaging-channel-action" @click="openDingTalkSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
       </article>
       <article class="messaging-channel-row">
         <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><Send :size="15" /></div>
+          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.feishu" alt="" /></div>
           <div class="messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></div>
         </div>
         <button type="button" class="settings-secondary messaging-channel-action" @click="openFeishuSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
@@ -517,9 +520,7 @@ onBeforeUnmount(stopPolling)
         <div class="messaging-modal-heading">
           <div class="messaging-modal-title">
             <div class="messaging-modal-icon" aria-hidden="true">
-              <MessageCircle v-if="setupChannel === 'weixin'" :size="15" />
-              <Radio v-else-if="setupChannel === 'dingtalk'" :size="15" />
-              <Send v-else :size="15" />
+              <img class="messaging-brand-icon" :src="channelIcons[setupChannel]" alt="" />
             </div>
             <div>
               <h3 id="messaging-setup-title">{{ setupTitle(setupChannel) }}</h3>
@@ -648,6 +649,11 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-sm);
   color: var(--ink-soft);
   background: var(--surface-muted-faint);
+}
+
+.messaging-modal-icon .messaging-brand-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .messaging-modal-heading h3 {

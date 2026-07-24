@@ -1,4 +1,4 @@
-import type { MessagingCapabilities } from '@moke/messaging-core';
+import type { MessagingCapability } from '@moke/messaging-core';
 
 export const WEIXIN_API_BASE_URL = 'https://ilinkai.weixin.qq.com';
 export const WEIXIN_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c';
@@ -10,19 +10,11 @@ export const WEIXIN_APP_CLIENT_VERSION = (2 << 16) | (4 << 8) | 6;
 export const WEIXIN_LONG_POLL_TIMEOUT_MS = 35_000;
 export const WEIXIN_TEXT_LIMIT = 2_000;
 
-export const weixinCapabilities: MessagingCapabilities = {
-  direct: true,
-  group: false,
-  proactive: 'recent-contact-only',
-  edit_message: false,
-  streaming_update: false,
-  buttons: false,
-  markdown: false,
-  image: true,
-  file: false,
-  audio_receive: false,
-  video_receive: false,
-  typing: true,
-  quote: true,
-  max_text_length: WEIXIN_TEXT_LIMIT,
-};
+export const weixinCapabilities: ReadonlySet<MessagingCapability> = new Set([
+  'receive.text',
+  'receive.image',
+  'send.text',
+  'send.image',
+  'send.file',
+  'activity',
+]);

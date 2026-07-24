@@ -7,8 +7,7 @@ test('sends text only through the saved current DingTalk session webhook', async
   let tokenRequests = 0;
   let authorization = '';
   const adapter = new DingTalkAdapter({
-    accountId: 'dtconn_1', clientId: 'id', clientSecret: 'secret', saveReplyContext: async () => undefined,
-    loadReplyContext: () => ({ sessionWebhook: 'https://example.test/webhook' }),
+    accountId: 'dtconn_1', clientId: 'id', clientSecret: 'secret',
     fetcher: async (url, init) => {
       if (String(url).endsWith('/oauth2/accessToken')) {
         tokenRequests += 1;
@@ -19,6 +18,9 @@ test('sends text only through the saved current DingTalk session webhook', async
       return new Response(JSON.stringify({ errcode: 0 }), { status: 200 });
     },
   });
+  (adapter as unknown as { context: { state: { get<T>(key: string): T | undefined } } }).context = {
+    state: { get: <T>(key: string) => key === 'dingtalk.reply:conversation_1' ? ({ sessionWebhook: 'https://example.test/webhook' } as T) : undefined },
+  };
   await adapter.sendText('conversation_1', 'hello');
   await adapter.sendText('conversation_1', 'again');
   assert.deepEqual(JSON.parse(body), { msgtype: 'markdown', markdown: { title: 'Moke', text: 'again' } });

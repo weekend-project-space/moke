@@ -46,10 +46,39 @@ export type InboundAck = {
   status: 'accepted' | 'duplicate' | 'ignored';
 };
 
+export type InteractionAck = {
+  status: 'accepted' | 'already_resolved' | 'rejected' | 'invalid';
+  message: string;
+};
+
+export type MessagingInteractionAction = {
+  account_id: string;
+  conversation_id?: string;
+  sender_id?: string;
+  interaction_id: string;
+  option_id: string;
+};
+
+export type MessagingAdapterEvent =
+  | { type: 'message'; message: MessagingInboundEvent }
+  | { type: 'interaction'; action: MessagingInteractionAction };
+
+export type MessagingAdapterAck = InboundAck | InteractionAck;
+
 export type MessagingTarget = {
   account_id: string;
   conversation_id: string;
   context_token?: string;
+};
+
+export type MessagingDeliveryTarget = {
+  account_id: string;
+  binding_id: string;
+  conversation: {
+    id: string;
+    type: 'direct' | 'group' | 'channel';
+  };
+  sender_id?: string;
 };
 
 export type OutboundMessage = {
@@ -61,6 +90,43 @@ export type OutboundContent =
   | { type: 'text'; text: string }
   | { type: 'image'; path: string; caption?: string }
   | { type: 'file'; path: string; name?: string; caption?: string };
+
+/** Content passed to an adapter after the server has validated and read media. */
+export type MessagingDeliveryContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: Uint8Array; name: string; mime_type: string; caption?: string }
+  | { type: 'file'; data: Uint8Array; name: string; mime_type: string; caption?: string };
+
+/** Platform-neutral outbound intent. Adapter packages render this intent for their platform. */
+export type MessagingOutboundOperation =
+  | { kind: 'message'; contents: MessagingDeliveryContent[]; reply_to_id?: string }
+  | { kind: 'activity'; active: boolean }
+  | {
+      kind: 'status';
+      phase: 'working' | 'waiting_input' | 'waiting_approval';
+      title: string;
+      detail?: string;
+    }
+  | {
+      kind: 'interaction';
+      interaction_id: string;
+      title: string;
+      detail: string;
+      options: Array<{ id: string; label: string }>;
+      resolved?: { label: string };
+    }
+  | {
+      kind: 'result';
+      outcome: 'completed' | 'failed' | 'cancelled';
+      text: string;
+      message_already_delivered: boolean;
+    };
+
+export type MessagingDeliveryResult = {
+  receipts: MessagingDeliveryReceipt[];
+  /** Adapter-owned, JSON-persistable reference used to update a presentation. */
+  reference?: Record<string, string>;
+};
 
 export type MessagingOutboundRequest = {
   binding_id: string;
@@ -84,22 +150,16 @@ export type DeliveryReceipt = {
   delivered_at: string;
 };
 
-export type MessagingCapabilities = {
-  direct: boolean;
-  group: boolean;
-  proactive: 'none' | 'recent-contact-only' | 'all';
-  edit_message: boolean;
-  streaming_update: boolean;
-  buttons: boolean;
-  markdown: boolean;
-  image: boolean;
-  file: boolean;
-  audio_receive: boolean;
-  video_receive: boolean;
-  typing: boolean;
-  quote: boolean;
-  max_text_length: number;
-};
+export type MessagingCapability =
+  | 'receive.text'
+  | 'receive.image'
+  | 'receive.file'
+  | 'send.text'
+  | 'send.image'
+  | 'send.file'
+  | 'activity'
+  | 'status'
+  | 'interaction';
 
 export type MessagingAccount = {
   id: string;
@@ -120,15 +180,43 @@ export type AdapterStatus = {
 export type AdapterContext = {
   account: MessagingAccount;
   signal: AbortSignal;
-  emit(event: MessagingInboundEvent): Promise<InboundAck>;
+  emit(event: MessagingAdapterEvent): Promise<MessagingAdapterAck>;
   updateStatus(status: AdapterStatus): Promise<void> | void;
+  state: {
+    get<T>(key: string): T | undefined;
+    set<T>(key: string, value: T): void;
+    delete(key: string): void;
+  };
 };
 
 export type MessagingAdapter = {
   readonly platform: MessagingPlatform;
-  readonly capabilities: MessagingCapabilities;
+  readonly capabilities: ReadonlySet<MessagingCapability>;
   start(context: AdapterContext): Promise<void>;
   stop(reason: 'user' | 'shutdown' | 'reauth' | 'error'): Promise<void>;
   getStatus(): AdapterStatus;
-  send(target: MessagingTarget, message: OutboundMessage): Promise<DeliveryReceipt>;
+  deliver(
+    target: MessagingDeliveryTarget,
+    operation: MessagingOutboundOperation,
+    previousReference?: Record<string, string>,
+  ): Promise<MessagingDeliveryResult>;
 };
+
+export class MessagingDeliveryError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'MessagingDeliveryError';
+  }
+}
+
+export function splitMessagingText(value: string, limit: number) {
+  const characters = Array.from(value);
+  if (!Number.isFinite(limit) || limit < 1 || characters.length <= limit) return [value];
+  const parts: string[] = [];
+  for (let index = 0; index < characters.length; index += limit) parts.push(characters.slice(index, index + limit).join(''));
+  return parts;
+}

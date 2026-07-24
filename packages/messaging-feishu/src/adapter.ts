@@ -1,14 +1,18 @@
 import * as Lark from '@larksuiteoapi/node-sdk';
 
+import { MessagingDeliveryError, splitMessagingText } from '@moke/messaging-core';
 import type {
   AdapterContext,
   AdapterStatus,
   DeliveryReceipt,
   MessagingAdapter,
+  MessagingDeliveryResult,
+  MessagingDeliveryTarget,
+  MessagingOutboundOperation,
   MessagingTarget,
   OutboundMessage,
 } from '@moke/messaging-core';
-import { feishuCapabilities } from './constants.js';
+import { FEISHU_TEXT_LIMIT, feishuCapabilities } from './constants.js';
 import { toFeishuInboundEvent } from './message-converter.js';
 
 const HANDSHAKE_TIMEOUT_MS = 15_000;
@@ -39,7 +43,6 @@ export type FeishuAdapterConfig = {
   appId: string;
   appSecret: string;
   domain?: FeishuDomain;
-  onCardAction?(action: FeishuCardAction): Promise<unknown> | unknown;
 };
 
 export class FeishuAdapter implements MessagingAdapter {
@@ -68,10 +71,21 @@ export class FeishuAdapter implements MessagingAdapter {
     dispatcher.register({
       'im.message.receive_v1': async (data: unknown) => {
         const event = toFeishuInboundEvent({ accountId: this.config.accountId, message: await normalizeMessageEvent(this.client, data) });
-        if (event) await context.emit(event);
+        if (event) await context.emit({ type: 'message', message: event });
       },
       'card.action.trigger': async (data: unknown) => {
-        return this.config.onCardAction?.(normalizeCardAction(data));
+        const action = normalizeCardAction(data);
+        const ack = await context.emit({
+          type: 'interaction',
+          action: {
+            account_id: this.config.accountId,
+            ...(action.chatId ? { conversation_id: action.chatId } : {}),
+            ...(action.openId ? { sender_id: action.openId } : {}),
+            interaction_id: typeof action.value.interactionId === 'string' ? action.value.interactionId : '',
+            option_id: typeof action.value.optionId === 'string' ? action.value.optionId : '',
+          },
+        });
+        return 'message' in ack ? { toast: { type: ack.status === 'accepted' ? 'success' : 'warning', content: ack.message } } : undefined;
       },
     } as never);
 
@@ -121,8 +135,70 @@ export class FeishuAdapter implements MessagingAdapter {
 
   getIdentity() { return this.identity; }
 
+  async deliver(
+    target: MessagingDeliveryTarget,
+    operation: MessagingOutboundOperation,
+    previousReference?: Record<string, string>,
+  ): Promise<MessagingDeliveryResult> {
+    const legacyTarget: MessagingTarget = { account_id: target.account_id, conversation_id: target.conversation.id };
+    if (operation.kind === 'activity') return { receipts: [], ...(previousReference ? { reference: previousReference } : {}) };
+    if (operation.kind === 'message') {
+      const receipts = [];
+      for (const content of operation.contents) {
+        if (content.type === 'text') {
+          for (const text of splitMessagingText(content.text, FEISHU_TEXT_LIMIT)) {
+            const receipt = await this.send(legacyTarget, { text, reply_to_id: operation.reply_to_id });
+            receipts.push({ type: 'text' as const, ...receipt });
+          }
+        } else {
+          const receipt = await this.sendMedia(legacyTarget, {
+            type: content.type,
+            data: Buffer.from(content.data),
+            name: content.name,
+            mimeType: content.mime_type,
+          });
+          receipts.push({ type: content.type, ...receipt });
+          if (content.caption?.trim()) {
+            const caption = await this.send(legacyTarget, { text: content.caption.trim() });
+            receipts.push({ type: 'text' as const, ...caption });
+          }
+        }
+      }
+      return { receipts };
+    }
+
+    if (operation.kind === 'status') {
+      const card = feishuStatusCard(operation.title, operation.detail || '');
+      const reference = await this.upsertCard(target.conversation.id, card, previousReference);
+      return { receipts: [], reference };
+    }
+    if (operation.kind === 'interaction') {
+      const card = operation.resolved
+        ? feishuResolvedInteractionCard(operation.title, operation.detail, operation.resolved.label)
+        : feishuInteractionCard(operation);
+      const reference = await this.upsertCard(target.conversation.id, card, previousReference);
+      return { receipts: [], reference };
+    }
+
+    const reference = previousReference?.message_id
+      ? await this.upsertCard(target.conversation.id, feishuStatusCard(
+          operation.outcome === 'completed' ? 'Completed' : operation.outcome === 'failed' ? 'Failed' : 'Cancelled',
+          operation.outcome === 'completed' ? 'Response sent.' : operation.text,
+          true,
+        ), previousReference)
+      : undefined;
+    const receipts = [];
+    if (!operation.message_already_delivered && operation.text.trim()) {
+      for (const text of splitMessagingText(operation.text, FEISHU_TEXT_LIMIT)) {
+        const receipt = await this.send(legacyTarget, { text });
+        receipts.push({ type: 'text' as const, ...receipt });
+      }
+    }
+    return { receipts, ...(reference ? { reference } : {}) };
+  }
+
   async send(target: MessagingTarget, message: OutboundMessage): Promise<DeliveryReceipt> {
-    if (this.status.state !== 'connected') throw new Error('Feishu connection is not active');
+    if (this.status.state !== 'connected') throw new MessagingDeliveryError('CONNECTION_NOT_ACTIVE', 'Feishu connection is not active', true);
     const content = JSON.stringify({ zh_cn: { content: [[{ tag: 'md', text: message.text }]] } });
     const response = message.reply_to_id
       ? await this.client.im.message.reply({
@@ -140,7 +216,7 @@ export class FeishuAdapter implements MessagingAdapter {
   }
 
   async sendMedia(target: MessagingTarget, media: FeishuOutboundMedia): Promise<DeliveryReceipt> {
-    if (this.status.state !== 'connected') throw new Error('Feishu connection is not active');
+    if (this.status.state !== 'connected') throw new MessagingDeliveryError('CONNECTION_NOT_ACTIVE', 'Feishu connection is not active', true);
     const resourceKey = media.type === 'image'
       ? (await this.client.im.image.create({ data: { image_type: 'message', image: media.data } }))?.image_key
       : (await this.client.im.file.create({ data: {
@@ -148,7 +224,7 @@ export class FeishuAdapter implements MessagingAdapter {
           file_name: media.name,
           file: media.data,
         } }))?.file_key;
-    if (!resourceKey) throw new Error(`Feishu ${media.type} upload returned no resource key`);
+    if (!resourceKey) throw new MessagingDeliveryError('FEISHU_MEDIA_UPLOAD_FAILED', `Feishu ${media.type} upload returned no resource key`, true);
     const response = await this.client.im.message.create({
       params: { receive_id_type: 'chat_id' },
       data: {
@@ -169,7 +245,7 @@ export class FeishuAdapter implements MessagingAdapter {
       data: { receive_id: chatId, msg_type: 'interactive', content: JSON.stringify(card) },
     });
     const messageId = response.data?.message_id;
-    if (!messageId) throw new Error('Feishu card creation returned no message id');
+    if (!messageId) throw new MessagingDeliveryError('FEISHU_CARD_CREATE_FAILED', 'Feishu card creation returned no message id', true);
     return messageId;
   }
 
@@ -178,6 +254,15 @@ export class FeishuAdapter implements MessagingAdapter {
       path: { message_id: messageId },
       data: { content: JSON.stringify(card) },
     });
+  }
+
+  private async upsertCard(chatId: string, card: Record<string, unknown>, previousReference?: Record<string, string>) {
+    const messageId = previousReference?.message_id;
+    if (messageId) {
+      await this.updateCard(messageId, card);
+      return previousReference;
+    }
+    return { message_id: await this.createCard(chatId, card) };
   }
 
   private setStatus(context: AdapterContext, status: AdapterStatus) {
@@ -288,4 +373,37 @@ function detectFeishuFileType(name: string): 'opus' | 'mp4' | 'pdf' | 'doc' | 'x
   if (extension === 'xls' || extension === 'xlsx') return 'xls';
   if (extension === 'ppt' || extension === 'pptx') return 'ppt';
   return 'stream';
+}
+
+function feishuStatusCard(title: string, content: string, terminal = false) {
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: title }, template: terminal ? 'grey' : 'blue' },
+    elements: [{ tag: 'markdown', content }],
+  };
+}
+
+function feishuInteractionCard(operation: Extract<MessagingOutboundOperation, { kind: 'interaction' }>) {
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: operation.title }, template: 'blue' },
+    elements: [
+      { tag: 'markdown', content: operation.detail },
+      {
+        tag: 'action',
+        actions: operation.options.map((option) => ({
+          tag: 'button', text: { tag: 'plain_text', content: option.label }, type: 'primary',
+          value: { interactionId: operation.interaction_id, optionId: option.id },
+        })),
+      },
+    ],
+  };
+}
+
+function feishuResolvedInteractionCard(title: string, detail: string, result: string) {
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: title }, template: 'grey' },
+    elements: [{ tag: 'markdown', content: `${detail}\n\n**${result}**` }],
+  };
 }

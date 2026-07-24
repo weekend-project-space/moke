@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import QRCode from 'qrcode';
 import { WeixinApiClient, type WeixinQrStatus } from '@moke/messaging-weixin';
-import { JsonMessagingStore, type PublicWeixinConnection } from '../../storage/messaging-store.js';
-import { MessagingConnectionManager } from './connection-manager.js';
+import type { PublicWeixinConnection } from '../../storage/messaging-store.js';
+import { MessagingRuntime } from './messaging-runtime.js';
 
 const LOGIN_TTL_MS = 5 * 60_000;
 
@@ -27,14 +27,16 @@ export class WeixinLoginService {
   private readonly logins = new Map<string, Login>();
 
   constructor(
-    private readonly store: JsonMessagingStore,
-    private readonly connections: MessagingConnectionManager,
+    private readonly messaging: MessagingRuntime,
   ) {}
 
   async start(input: { name?: string; connectionId?: string }) {
     this.purgeExpired();
-    if (input.connectionId && !this.store.getWeixinConnection(input.connectionId)) throw new Error('Weixin connection not found');
-    if (input.connectionId) await this.connections.stop(input.connectionId, 'reauth');
+    if (input.connectionId) {
+      const connection = this.messaging.getConnection(input.connectionId);
+      if (!connection || connection.platform !== 'weixin') throw new Error('Weixin connection not found');
+      await this.messaging.stopConnection(input.connectionId, 'reauth');
+    }
     const qr = await new WeixinApiClient({}).getQrCode();
     // qrcode identifies this login flow for status polling. qrcode_img_content is
     // the payload users must scan, as confirmed by Tencent's reference channel.
@@ -108,23 +110,15 @@ export class WeixinLoginService {
       login.error = { code: 'WEIXIN_INVALID_RESPONSE', message: 'The WeChat authorization response is missing account credentials' };
       return;
     }
-    const record = login.connectionId
-      ? this.store.replaceConnectionAuth(login.connectionId, {
-          ilinkBotId: status.ilink_bot_id,
-          userId: status.ilink_user_id,
-          apiBaseUrl: status.baseurl || login.baseUrl || 'https://ilinkai.weixin.qq.com',
-          token: status.bot_token,
-        })
-      : this.store.createConnection({
-          name: login.name,
-          ilinkBotId: status.ilink_bot_id,
-          userId: status.ilink_user_id,
-          apiBaseUrl: status.baseurl || login.baseUrl || 'https://ilinkai.weixin.qq.com',
-          token: status.bot_token,
-        });
-    login.connection = this.store.getPublicWeixinConnection(record.id) || undefined;
+    login.connection = await this.messaging.completeWeixinLogin({
+      ...(login.connectionId ? { connectionId: login.connectionId } : {}),
+      name: login.name,
+      ilinkBotId: status.ilink_bot_id,
+      userId: status.ilink_user_id,
+      apiBaseUrl: status.baseurl || login.baseUrl || 'https://ilinkai.weixin.qq.com',
+      token: status.bot_token,
+    });
     login.status = 'confirmed';
-    await this.connections.start(record.id);
   }
 
   private requireLogin(id: string) {

@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
 import { ToolExecutionError, type RuntimeTool } from '@moke/agent-runtime';
-import type { OutboundContent } from '@moke/messaging-core';
-import type { MessagingOutboundMediaPathValidator, MessagingOutboundService } from './messaging-outbound-service.js';
+import type { MessagingOutboundRequest, MessagingOutboundResult, OutboundContent } from '@moke/messaging-core';
+
+export type MessagingOutboundService = {
+  send(input: MessagingOutboundRequest): Promise<MessagingOutboundResult>;
+};
+
+export type MessagingOutboundMediaPathValidator = {
+  validateMediaPaths(contents: OutboundContent[]): Promise<void>;
+};
 
 const mediaSchema = z.object({
   path: z.string().min(1),

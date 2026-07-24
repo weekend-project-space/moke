@@ -21,12 +21,13 @@ import { AttachmentStore } from './storage/attachment-store.js';
 import { JsonMessagingStore } from './storage/messaging-store.js';
 import { summarizeSession } from './domain/sessions.js';
 import { SessionApplicationService } from './services/session-application-service.js';
-import { MessagingGateway } from './services/messaging/messaging-gateway.js';
-import { MessagingConnectionManager } from './services/messaging/connection-manager.js';
-import { MessagingDeliveryService } from './services/messaging/delivery-service.js';
-import { DefaultMessagingOutboundService } from './services/messaging/messaging-outbound-service.js';
+import { MessagingConnectionPool } from './services/messaging/connection-pool.js';
+import { MessagingRuntime } from './services/messaging/messaging-runtime.js';
 import { createSendMessageTool } from './services/messaging/send-message-tool.js';
 import { WeixinLoginService } from './services/messaging/weixin-login-service.js';
+import { WeixinAdapter } from '@moke/messaging-weixin';
+import { DingTalkAdapter } from '@moke/messaging-dingtalk';
+import { FeishuAdapter } from '@moke/messaging-feishu';
 
 export {
   normalizeWindowsDrivePath,
@@ -107,55 +108,50 @@ export async function createApp(): Promise<ServerApp> {
     onSessionChanged: (session) => sessionStore.save(session),
   });
   const sessionApplicationService = new SessionApplicationService(sessionStore, runManager);
-  // Keep queued messaging work independent from the HTTP server lifecycle.
-  const messagingGateway = new MessagingGateway(messagingStore, sessionApplicationService, attachmentStore);
-  const messagingConnectionManager = new MessagingConnectionManager(messagingStore, messagingGateway);
-  const messagingDeliveryService = new MessagingDeliveryService(messagingConnectionManager);
-  messagingGateway.setRunStartedListener((input) => {
-    messagingConnectionManager.startTypingForBinding(input.connectionId, input.bindingId, input.runId);
-    messagingDeliveryService.onRunStarted(input);
-  });
-  messagingConnectionManager.setCardActionHandler((action) => {
-    const value = action.value;
-    const runId = typeof value.runId === 'string' ? value.runId : '';
-    const requestId = typeof value.requestId === 'string' ? value.requestId : '';
-    let result: { status: number; error?: string };
-    if (typeof value.responderOpenId === 'string' && value.responderOpenId !== action.openId) {
-      result = { status: 403, error: 'Only the person who started this task can respond' };
-    } else if (value.action === 'ask' && typeof value.optionId === 'string') {
-      result = runManager.answer(runId, requestId, value.optionId);
-    } else if (value.action === 'approve' && (value.decision === 'approved' || value.decision === 'rejected')) {
-      const scope = value.scope === 'once' || value.scope === 'persistent' ? value.scope : 'session';
-      result = runManager.approve(runId, requestId, value.decision, { scope });
-    } else {
-      result = { status: 400, error: 'Invalid card action' };
-    }
-    return {
-      toast: {
-        type: result.status === 200 ? 'success' : 'warning',
-        content: result.status === 200 ? 'Response received' : result.error || 'This request is no longer pending',
-      },
-    };
-  });
-  const messagingOutboundService = new DefaultMessagingOutboundService(
+  const messagingConnectionPool = new MessagingConnectionPool(messagingStore);
+  messagingConnectionPool
+    .register('weixin', (connection, secret) => {
+      if (connection.platform !== 'weixin') throw new Error('Invalid WeChat connection');
+      return new WeixinAdapter({
+        accountId: connection.id,
+        botUserId: connection.ilink_bot_id,
+        token: secret,
+        baseUrl: connection.api_base_url,
+      });
+    })
+    .register('dingtalk', (connection, secret) => {
+      if (connection.platform !== 'dingtalk') throw new Error('Invalid DingTalk connection');
+      return new DingTalkAdapter({
+        accountId: connection.id,
+        clientId: connection.client_id,
+        clientSecret: secret,
+        allowedUserIds: connection.allowed_user_ids,
+        cardTemplateId: connection.card_template_id,
+      });
+    })
+    .register('feishu', (connection, secret) => {
+      if (connection.platform !== 'feishu') throw new Error('Invalid Feishu connection');
+      return new FeishuAdapter({
+        accountId: connection.id,
+        appId: connection.app_id,
+        appSecret: secret,
+        domain: connection.domain,
+      });
+    });
+  const messagingRuntime = new MessagingRuntime(
     messagingStore,
-    messagingConnectionManager,
+    messagingConnectionPool,
+    sessionApplicationService,
+    runManager,
+    attachmentStore,
     workspace,
     () => [...approvedMessagingRoots],
   );
-  toolRegistry.register(createSendMessageTool(messagingOutboundService));
+  toolRegistry.register(createSendMessageTool(messagingRuntime));
   const removeMessagingObserver = runManager.addObserver((event, run) => {
-    messagingDeliveryService.onRunEvent(event, run);
-    const preserveQueuedMessage = event.type === 'agent.done'
-      && event.payload.status === 'cancelled'
-      && run.cancel_reason === 'shutdown';
-    const bindingId = run.origin.kind === 'messaging' ? run.origin.binding_id : undefined;
-    if (bindingId && !preserveQueuedMessage && (event.type === 'agent.done' || event.type === 'agent.error')) {
-      void messagingDeliveryService.waitForTerminal(run.id).then(() =>
-        messagingGateway.completeRun({ bindingId, runId: run.id }));
-    }
+    messagingRuntime.onRunEvent(event, run);
   });
-  const weixinLoginService = new WeixinLoginService(messagingStore, messagingConnectionManager);
+  const weixinLoginService = new WeixinLoginService(messagingRuntime);
 
   const server = http.createServer(
     createRoutes({
@@ -169,14 +165,12 @@ export async function createApp(): Promise<ServerApp> {
       permissionsService,
       settingsService,
       skillSettingsService,
-      messagingStore,
-      messagingConnectionManager,
+      messagingRuntime,
       weixinLoginService,
     }),
   );
 
-  await messagingConnectionManager.startAll();
-  await messagingGateway.resumeQueued();
+  await messagingRuntime.start();
 
   return {
     port,
@@ -184,7 +178,7 @@ export async function createApp(): Promise<ServerApp> {
     close: async () => {
       const httpClosed = closeHttpServer(server);
       removeMessagingObserver();
-      const messagingClosed = messagingConnectionManager.close();
+      const messagingClosed = messagingRuntime.close();
       const runsStopped = runManager.shutdown();
       browserBridge.close();
       await mcpManager?.close();
