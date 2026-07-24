@@ -13,7 +13,7 @@ export const settingsNavigationItems: SettingsNavigationItem[] = [
   { id: 'model', label: 'Model', icon: Bot },
   { id: 'mcp', label: 'MCP', icon: Boxes },
   { id: 'skills', label: 'Skills', icon: BookOpenText },
-  { id: 'messaging', label: 'Messaging', icon: MessageCircleMore },
+  { id: 'messaging', label: 'Channels', icon: MessageCircleMore },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
   { id: 'browser', label: 'Browser', icon: Compass },
 ]
