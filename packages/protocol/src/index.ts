@@ -32,6 +32,13 @@ export type AgentEventType = keyof AgentEventPayloadMap;
 
 export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
 
+export type TokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_input_tokens?: number;
+  uncached_input_tokens?: number;
+};
+
 export type AgentStepPhase = 'reason' | 'act' | 'respond';
 
 export type AgentStep = {
@@ -72,6 +79,8 @@ export type UserMessage = {
   role: 'user';
   content: string;
   created_at: string;
+  /** Internal context is retained for the model but not rendered in the conversation. */
+  visibility?: 'public' | 'internal';
   attachments?: ImageAttachment[];
   source?: {
     kind: 'messaging';
@@ -229,6 +238,10 @@ export type AgentEventPayloadMap = {
       steps: number;
       tool_calls: number;
       duration_ms: number;
+      input_tokens?: number;
+      output_tokens?: number;
+      cached_input_tokens?: number;
+      uncached_input_tokens?: number;
     };
   };
   'agent.error': {

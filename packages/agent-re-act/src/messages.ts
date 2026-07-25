@@ -1,15 +1,15 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 
 import type { Message, ResolvedImageAttachment } from '@moke/protocol';
-import type { RuntimeMessage, ToolContext } from '@moke/agent-runtime';
+import type { RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 
 export function createSystemPrompt(customTools: AgentToolSpec[]) {
   const customToolList = customTools.map((tool) => `${tool.name}: ${tool.description}`).join('\n');
   const skillGuidance = customTools.some((tool) => tool.name === 'activate_skill')
     ? `
-Skills:
-- Available skills are listed in the system context with their names and descriptions.
+  Skills:
+  - Available skills are listed in the run context with their names and descriptions.
 - For code review, implementation planning, frontend design, MCP work, or other specialized tasks, activate a relevant skill by its catalog id before continuing.
 - Do not activate skills for greetings, small talk, or simple direct answers.`
     : '';
@@ -33,15 +33,23 @@ Guidelines:
 - Never invent file contents you did not observe.`;
 }
 
-export function createSystemMessage(
-  runtimeTools: AgentToolSpec[],
-  context: ToolContext,
-) {
-  const basePrompt = createSystemPrompt(runtimeTools);
-  const extraContext = context.contentManager?.buildContext();
-  if (!extraContext) return new SystemMessage(basePrompt);
+export function createSystemMessage(runtimeTools: AgentToolSpec[]) {
+  return new SystemMessage(createSystemPrompt(runtimeTools));
+}
 
-  return new SystemMessage(`${basePrompt}\n\n${extraContext}`);
+export function createRuntimeContextMessages(
+  items: RuntimeContextItem[],
+  trustedRole: 'system' | 'developer' = 'system',
+) {
+  return items.map((item) => {
+    if (item.authority === 'user') return new HumanMessage(item.content);
+    return new SystemMessage({
+      content: item.content,
+      ...(trustedRole === 'developer'
+        ? { additional_kwargs: { __openai_role__: 'developer' } }
+        : {}),
+    });
+  });
 }
 
 export function createFinalMessage(content: string, reasoning?: string): Message {

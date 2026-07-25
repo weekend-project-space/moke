@@ -3,7 +3,13 @@ import test from 'node:test';
 
 import { AIMessageChunk } from '@langchain/core/messages';
 
-import { createHistoryMessages, createSystemPrompt, getMessageText, getReasoningText } from './messages.js';
+import {
+  createHistoryMessages,
+  createRuntimeContextMessages,
+  createSystemPrompt,
+  getMessageText,
+  getReasoningText,
+} from './messages.js';
 import type { AgentToolSpec } from './control-tools.js';
 
 test('system prompt keeps hidden reasoning private by default', () => {
@@ -38,6 +44,20 @@ test('assistant reasoning is not included in model history', () => {
 
   assert.equal(history.length, 1);
   assert.equal(getMessageText(history[0]), 'Visible answer');
+});
+
+test('runtime context preserves authority without mutating the base prompt', () => {
+  const compatible = createRuntimeContextMessages([
+    { authority: 'trusted', content: 'Trusted instructions' },
+    { authority: 'user', content: 'User instructions' },
+  ]);
+  const openai = createRuntimeContextMessages([
+    { authority: 'trusted', content: 'Trusted instructions' },
+  ], 'developer');
+
+  assert.equal(compatible[0].getType(), 'system');
+  assert.equal(compatible[1].getType(), 'human');
+  assert.deepEqual(openai[0].additional_kwargs, { __openai_role__: 'developer' });
 });
 
 test('reasoning text preserves streaming whitespace', () => {

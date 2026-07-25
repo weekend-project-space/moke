@@ -427,6 +427,14 @@ function resultFromSnapshot(run: RunSnapshot): RunResult {
         steps: event.payload.usage.steps,
         toolCalls: event.payload.usage.tool_calls,
         durationMs: event.payload.usage.duration_ms,
+        ...(event.payload.usage.input_tokens !== undefined ? { inputTokens: event.payload.usage.input_tokens } : {}),
+        ...(event.payload.usage.output_tokens !== undefined ? { outputTokens: event.payload.usage.output_tokens } : {}),
+        ...(event.payload.usage.cached_input_tokens !== undefined
+          ? { cachedInputTokens: event.payload.usage.cached_input_tokens }
+          : {}),
+        ...(event.payload.usage.uncached_input_tokens !== undefined
+          ? { uncachedInputTokens: event.payload.usage.uncached_input_tokens }
+          : {}),
       };
     } else if (event.type === 'agent.error') {
       error = event.payload;

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AgentRunInput, AgentRunResult } from '@moke/agent-runtime';
-import { ToolExecutionError } from '@moke/agent-runtime';
-import type { AgentStep, AgentStepPhase, ToolCall } from '@moke/protocol';
+import { normalizeRuntimeToolResult, ToolExecutionError } from '@moke/agent-runtime';
+import type { AgentStep, AgentStepPhase, TokenUsage, ToolCall } from '@moke/protocol';
 import {
   ASK_USER_TOOL_NAME,
   askUserTool,
@@ -61,6 +61,13 @@ function createAgentStep(index: number, phase: AgentStepPhase): AgentStep {
   };
 }
 
+function addTokenUsage(total: TokenUsage, usage?: TokenUsage) {
+  if (!usage) return;
+  for (const key of ['input_tokens', 'output_tokens', 'cached_input_tokens', 'uncached_input_tokens'] as const) {
+    if (usage[key] !== undefined) total[key] = (total[key] || 0) + usage[key];
+  }
+}
+
 export class ReActAgent {
   constructor(
     private readonly config: {
@@ -103,6 +110,7 @@ export class ReActAgent {
     let finalContentStreamed = false;
     let hasObservation = false;
     let finalReasoning = '';
+    const usage: TokenUsage = {};
 
     eventBus.emit('agent.started', { input });
     eventBus.emit('agent.plan', {
@@ -137,6 +145,7 @@ export class ReActAgent {
       throwIfAborted(context.abortSignal);
 
       const calls = stepResult.toolCalls;
+      addTokenUsage(usage, stepResult.usage);
       if (calls.length === 0) {
         const content = stripThinkBlocks(stepResult.content);
         finalContent = content || '我暂时没有更多可补充的信息。';
@@ -188,7 +197,7 @@ export class ReActAgent {
 
         const startedAt = Date.now();
         try {
-          const output =
+          const rawOutput =
             isAskUserCall
               ? await this.askUser(call.args || {}, callId, context)
               : await toolRegistry.execute(call.name, call.args || {}, {
@@ -200,6 +209,7 @@ export class ReActAgent {
                     risk: runtimeTool?.risk || 'safe',
                   },
                 });
+          const { publicOutput, modelOutput, context: appendedContext } = normalizeRuntimeToolResult(rawOutput);
           throwIfAborted(context.abortSignal);
           hasObservation = true;
           const approvals = context.consumeApprovals?.(callId) || [];
@@ -208,13 +218,13 @@ export class ReActAgent {
             call_id: callId,
             status: 'ok',
             duration_ms: Date.now() - startedAt,
-            output,
+            output: publicOutput,
           }, { step: actStep });
           eventBus.emit('agent.message.done', {
             message: {
               id: messageId(),
               role: 'tool',
-              content: JSON.stringify(output),
+              content: JSON.stringify(publicOutput),
               created_at: now(),
               tool_call_id: callId,
               name: call.name,
@@ -225,8 +235,21 @@ export class ReActAgent {
           modelAdapter.appendToolResult(modelMessages, {
             callId,
             name: call.name,
-            output,
+            output: modelOutput,
           });
+          modelAdapter.appendContext(modelMessages, appendedContext);
+          for (const contextItem of appendedContext) {
+            if (contextItem.scope !== 'session' || contextItem.authority !== 'user') continue;
+            eventBus.emit('agent.message.done', {
+              message: {
+                id: messageId(),
+                role: 'user',
+                content: contextItem.content,
+                created_at: now(),
+                visibility: 'internal',
+              },
+            }, { step: actStep });
+          }
         } catch (error) {
           throwIfAborted(context.abortSignal);
           const output = createToolErrorOutput(error, call.name);
@@ -272,7 +295,11 @@ export class ReActAgent {
     if (!finalContentStreamed) eventBus.emit('agent.message.delta', { channel: 'answer', content }, { step: respondStep });
     eventBus.emit('agent.message.done', { message }, { step: respondStep });
 
-    return { toolCalls, message };
+    return {
+      toolCalls,
+      message,
+      ...(Object.keys(usage).length > 0 ? { usage } : {}),
+    };
   }
 
   private async askUser(input: Record<string, unknown>, callId: string, context: AgentRunInput['context']) {

@@ -1,4 +1,4 @@
-import type { RuntimeRun } from '@moke/agent-runtime';
+import { isPublicAgentEvent, type RuntimeRun } from '@moke/agent-runtime';
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';
@@ -62,6 +62,7 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
 
     for (const event of run.events) {
       if (event.seq <= afterSeq) continue;
+      if (!isPublicAgentEvent(event)) continue;
       raw.res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     }
 
@@ -118,7 +119,7 @@ function toRunSnapshot(run: RuntimeRun) {
     session_id: run.session_id,
     status: run.status,
     seq: run.seq,
-    events: run.events,
+    events: run.events.filter(isPublicAgentEvent),
     ...(run.pending_ask ? { pending_ask: run.pending_ask } : {}),
     ...(run.pending_approval ? { pending_approval: run.pending_approval } : {}),
   };

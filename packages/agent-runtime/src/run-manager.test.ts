@@ -263,7 +263,11 @@ test('RunManager persists a returned final message after intermediate tool messa
       input.eventBus.emit('agent.message.done', {
         message: message({ role: 'tool', content: 'tool output', tool_call_id: 'call_1', name: 'test' }),
       });
-      return { toolCalls: 1, message: finalMessage };
+      return {
+        toolCalls: 1,
+        message: finalMessage,
+        usage: { input_tokens: 100, output_tokens: 20, cached_input_tokens: 75, uncached_input_tokens: 25 },
+      };
     },
   };
   const manager = new RunManager({
@@ -280,6 +284,49 @@ test('RunManager persists a returned final message after intermediate tool messa
     { role: 'tool', content: 'tool output' },
     { role: 'assistant', content: 'final' },
   ]);
+  const done = run.events.find((event) => event.type === 'agent.done');
+  assert.equal(done?.type === 'agent.done' ? done.payload.usage?.cached_input_tokens : undefined, 75);
+});
+
+test('RunManager carries internal session context into the next run history', async () => {
+  const session = createSession();
+  let invocation = 0;
+  let nextRunHistory: Message[] = [];
+  const agent: Agent = {
+    async run(input) {
+      invocation++;
+      if (invocation === 1) {
+        input.eventBus.emit('agent.message.done', {
+          message: message({
+            role: 'user',
+            content: '<active_skill id="openwalk-usage">instructions</active_skill>',
+            visibility: 'internal',
+          }),
+        });
+      } else {
+        nextRunHistory = input.history || [];
+      }
+      return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+    },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent,
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+
+  const firstRun = manager.createRun(session, { content: 'start' });
+  await waitFor(() => firstRun.status === 'completed');
+  const secondRun = manager.createRun(session, { content: 'continue' });
+  await waitFor(() => secondRun.status === 'completed');
+
+  const persisted = session.messages.find((item) => item.visibility === 'internal');
+  const restored = nextRunHistory.find((item) => item.visibility === 'internal');
+  assert.equal(restored?.id, persisted?.id);
+  assert.equal(restored?.role, 'user');
+  assert.equal(restored?.content, '<active_skill id="openwalk-usage">instructions</active_skill>');
+  assert.equal(restored?.visibility, 'internal');
 });
 
 test('RunManager shutdown waits for execution and ignores late messages', async () => {

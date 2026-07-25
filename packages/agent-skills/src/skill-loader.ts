@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { LoadedSkill, SkillManifest } from './skill-types.js';
+import type { LoadedSkill, SkillAuthority, SkillManifest } from './skill-types.js';
 import { SkillRepository } from './skill-repository.js';
 
 const DEFAULT_SKILL_DIR = '.moke/skills';
@@ -10,10 +10,10 @@ export class SkillLoader {
   readonly skillsDir: string;
   private readonly repository: SkillRepository;
 
-  constructor(root: string, skillsDir = DEFAULT_SKILL_DIR) {
+  constructor(root: string, skillsDir = DEFAULT_SKILL_DIR, authority: SkillAuthority = 'user') {
     this.root = path.resolve(root);
     this.skillsDir = path.resolve(this.root, skillsDir);
-    this.repository = new SkillRepository(this.root, skillsDir);
+    this.repository = new SkillRepository(this.root, skillsDir, undefined, authority);
   }
 
   async list(): Promise<SkillManifest[]> {

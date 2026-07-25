@@ -1,5 +1,5 @@
-import type { AgentStep, ResolvedImageAttachment, ToolCall } from '@moke/protocol';
-import type { AgentRunInput, RuntimeMessage } from '@moke/agent-runtime';
+import type { AgentStep, ResolvedImageAttachment, TokenUsage, ToolCall } from '@moke/protocol';
+import type { AgentRunInput, RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 
 export type ModelConversationState = {
@@ -27,6 +27,7 @@ export type ModelStepResult = {
   message: unknown;
   reasoning: string;
   toolCalls: ToolCall[];
+  usage?: TokenUsage;
 };
 
 export type ModelAdapter = {
@@ -43,6 +44,7 @@ export type ModelAdapter = {
     output: unknown;
     status?: 'error' | 'success';
   }): void;
+  appendContext(state: ModelConversationState, context: RuntimeContextItem[]): void;
   streamStep(input: ModelStepInput): Promise<ModelStepResult>;
 };
 
@@ -52,7 +54,7 @@ export type ResponseContentItem =
   | { type: 'output_text'; text: string };
 
 export type ResponsesInputItem =
-  | { role: 'system' | 'user' | 'assistant'; content: string | ResponseContentItem[] }
+  | { role: 'developer' | 'system' | 'user' | 'assistant'; content: string | ResponseContentItem[] }
   | { type: 'function_call'; call_id: string; name: string; arguments: string }
   | { type: 'function_call_output'; call_id: string; output: string };
 

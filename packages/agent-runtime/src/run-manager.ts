@@ -210,6 +210,7 @@ export class RunManager {
           steps: run.seq,
           tool_calls: result.toolCalls,
           duration_ms: Date.now() - run.started_at,
+          ...result.usage,
         },
       });
     } catch (error) {

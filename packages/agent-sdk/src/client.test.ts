@@ -431,7 +431,18 @@ test('RunHandle.result reads a completed run snapshot', async () => {
   const done = event({
     seq: 2,
     type: 'agent.done',
-    payload: { status: 'completed', usage: { steps: 2, tool_calls: 1, duration_ms: 8 } },
+    payload: {
+      status: 'completed',
+      usage: {
+        steps: 2,
+        tool_calls: 1,
+        duration_ms: 8,
+        input_tokens: 100,
+        output_tokens: 20,
+        cached_input_tokens: 75,
+        uncached_input_tokens: 25,
+      },
+    },
   });
   const message = event({
     seq: 1,
@@ -452,7 +463,15 @@ test('RunHandle.result reads a completed run snapshot', async () => {
 
   assert.equal(result.status, 'completed');
   assert.equal(result.message?.content, 'done');
-  assert.deepEqual(result.usage, { steps: 2, toolCalls: 1, durationMs: 8 });
+  assert.deepEqual(result.usage, {
+    steps: 2,
+    toolCalls: 1,
+    durationMs: 8,
+    inputTokens: 100,
+    outputTokens: 20,
+    cachedInputTokens: 75,
+    uncachedInputTokens: 25,
+  });
 });
 
 test('withHandlers creates an immutable session policy and prompt overrides bound handlers', async () => {

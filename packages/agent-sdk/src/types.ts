@@ -81,6 +81,10 @@ export type RunResult = {
     steps: number;
     toolCalls: number;
     durationMs: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    cachedInputTokens?: number;
+    uncachedInputTokens?: number;
   };
   error?: { code: string; message: string };
 };

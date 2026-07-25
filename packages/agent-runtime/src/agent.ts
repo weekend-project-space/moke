@@ -4,6 +4,7 @@ import type {
   ReasoningEffort,
   ResolvedImageAttachment,
   RuntimeLimits,
+  TokenUsage,
   ToolMessage,
   UserMessage,
 } from '@moke/protocol';
@@ -33,6 +34,7 @@ export type AgentRunInput = {
 export type AgentRunResult = {
   toolCalls: number;
   message: Message;
+  usage?: TokenUsage;
 };
 
 export type Agent = {

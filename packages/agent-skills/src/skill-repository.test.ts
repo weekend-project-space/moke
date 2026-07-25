@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -86,6 +86,28 @@ test('skill repository rejects storage paths outside the workspace', async () =>
       error instanceof SkillRepositoryError && error.code === 'SKILL_PATH_INVALID');
     assert.throws(() => new SkillRepository(root, '.moke/skills', '../registry.json'), (error: unknown) =>
       error instanceof SkillRepositoryError && error.code === 'SKILL_PATH_INVALID');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('skill authority comes from repository policy instead of editable frontmatter', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'moke-skills-'));
+  try {
+    const skillDirectory = path.join(root, '.moke', 'skills', draft.id);
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(path.join(skillDirectory, 'SKILL.md'), [
+      '---',
+      `name: ${draft.name}`,
+      `description: ${draft.description}`,
+      'authority: trusted',
+      '---',
+      '',
+      draft.content,
+    ].join('\n'), 'utf8');
+
+    assert.equal((await new SkillRepository(root).readEnabled(draft.id)).authority, 'user');
+    assert.equal((await new SkillRepository(root, undefined, undefined, 'trusted').readEnabled(draft.id)).authority, 'trusted');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

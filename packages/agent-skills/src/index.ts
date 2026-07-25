@@ -3,4 +3,13 @@ export { SkillLoader } from './skill-loader.js';
 export { SkillRepository, SkillRepositoryError } from './skill-repository.js';
 export { parseSkillFile, serializeSkillFile } from './skill-file.js';
 export { createActivateSkillTool } from './skill-tools.js';
-export type { LoadedSkill, ManagedSkill, SkillActivationStatus, SkillContentManager, SkillDraft, SkillManifest } from './skill-types.js';
+export type {
+  LoadedSkill,
+  ManagedSkill,
+  SkillActivationResult,
+  SkillActivationStatus,
+  SkillAuthority,
+  SkillContentManager,
+  SkillDraft,
+  SkillManifest,
+} from './skill-types.js';

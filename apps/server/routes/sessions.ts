@@ -1,4 +1,4 @@
-import type { Session } from '@moke/protocol';
+import type { Message, Session } from '@moke/protocol';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { AttachmentStoreError, toStoredAttachment } from '../storage/attachment-store.js';
@@ -64,7 +64,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const session = getSession(context, sessionId);
     return json(200, {
       session: { ...summarizeSession(session), metadata: session.metadata },
-      messages: session.messages,
+      messages: publicMessages(session.messages),
     });
   });
 
@@ -79,7 +79,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     context.sessionStore.save(forkedSession);
     return json(200, {
       session: summarizeSession(forkedSession),
-      messages: forkedSession.messages,
+      messages: publicMessages(forkedSession.messages),
     });
   });
 
@@ -128,4 +128,8 @@ function getSession(context: RoutesContext, id: string) {
   const session = context.sessionStore.get(id);
   if (!session) throw new HttpError(404, 'SESSION_NOT_FOUND', 'Session not found');
   return session;
+}
+
+function publicMessages(messages: Message[]) {
+  return messages.filter((message) => message.role !== 'user' || message.visibility !== 'internal');
 }

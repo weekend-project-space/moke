@@ -1,10 +1,28 @@
 import type { ToolApprovalRecord } from '@moke/protocol';
 import type { RuntimeRun } from './run-state.js';
 
+export type RuntimeContextItem = {
+  authority: 'trusted' | 'user';
+  content: string;
+  scope?: 'run' | 'session';
+};
+
+export type RuntimeSkillActivationResult = {
+  status: 'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
+  content?: string;
+  truncated?: boolean;
+};
+
 export type RuntimeContentManager = {
-  addSkill: (skill: { id: string; name: string; description: string; path: string; content: string }) =>
-    'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
-  buildContext: () => string;
+  addSkill: (skill: {
+    id: string;
+    name: string;
+    description: string;
+    path: string;
+    content: string;
+    authority: 'trusted' | 'user' | 'external';
+  }) => RuntimeSkillActivationResult;
+  buildInitialContext: () => RuntimeContextItem[];
 };
 
 export type WorkspacePathApprovalRequest = {

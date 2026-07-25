@@ -1,11 +1,13 @@
 import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { AgentStep, ResolvedImageAttachment } from '@moke/protocol';
-import type { AgentRunInput, RuntimeMessage } from '@moke/agent-runtime';
+import type { AgentStep, ResolvedImageAttachment, TokenUsage } from '@moke/protocol';
+import type { AgentRunInput, RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
   createHistoryMessages,
+  createRuntimeContextMessages,
+  createSystemPrompt,
   createSystemMessage,
   createThinkTagSplitter,
   createUserMessage,
@@ -58,6 +60,54 @@ function resolveResponsesUrl(apiBaseUrl: string) {
 
 function stringifyToolOutput(output: unknown) {
   return typeof output === 'string' ? output : JSON.stringify(output);
+}
+
+function tokenCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+export function normalizeTokenUsage(value: unknown, fallback?: unknown): TokenUsage | undefined {
+  const usage = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const metadata = fallback && typeof fallback === 'object' ? fallback as Record<string, unknown> : {};
+  const inputDetails = usage.input_tokens_details && typeof usage.input_tokens_details === 'object'
+    ? usage.input_tokens_details as Record<string, unknown>
+    : usage.prompt_tokens_details && typeof usage.prompt_tokens_details === 'object'
+      ? usage.prompt_tokens_details as Record<string, unknown>
+      : metadata.input_token_details && typeof metadata.input_token_details === 'object'
+        ? metadata.input_token_details as Record<string, unknown>
+        : {};
+  const inputTokens = tokenCount(usage.input_tokens ?? usage.prompt_tokens ?? metadata.input_tokens);
+  const outputTokens = tokenCount(usage.output_tokens ?? usage.completion_tokens ?? metadata.output_tokens);
+  const cachedInputTokens = tokenCount(
+    usage.prompt_cache_hit_tokens ?? inputDetails.cached_tokens ?? inputDetails.cache_read,
+  );
+  const uncachedInputTokens = tokenCount(
+    usage.prompt_cache_miss_tokens ?? inputDetails.cache_creation,
+  ) ?? (inputTokens !== undefined && cachedInputTokens !== undefined
+    ? Math.max(0, inputTokens - cachedInputTokens)
+    : undefined);
+  const normalized = {
+    ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+    ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
+    ...(uncachedInputTokens !== undefined ? { uncached_input_tokens: uncachedInputTokens } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function messageTokenUsage(message: AIMessageChunk) {
+  const responseMetadata = message.response_metadata as Record<string, unknown>;
+  return normalizeTokenUsage(responseMetadata.usage, message.usage_metadata);
+}
+
+function responsesTokenUsage(output: unknown[]) {
+  for (let index = output.length - 1; index >= 0; index--) {
+    const item = output[index];
+    if (!item || typeof item !== 'object') continue;
+    const usage = normalizeTokenUsage((item as Record<string, unknown>).usage);
+    if (usage) return usage;
+  }
+  return undefined;
 }
 
 function createJsonSchemaForTool(runtimeTool: AgentToolSpec): Record<string, unknown> {
@@ -140,6 +190,13 @@ function createResponsesHistoryMessages(history: RuntimeMessage[]): ResponsesInp
   return messages;
 }
 
+function createResponsesContextItems(context: RuntimeContextItem[]): ResponsesInputItem[] {
+  return context.map((item) => ({
+    role: item.authority === 'trusted' ? 'developer' : 'user',
+    content: item.content,
+  }));
+}
+
 async function readErrorMessage(response: Response) {
   try {
     const data = (await response.json()) as { error?: { message?: unknown }; message?: unknown };
@@ -220,10 +277,12 @@ async function streamChatModel(input: {
     throw new Error('LLM stream completed without output');
   }
 
+  const message = chunks.slice(1).reduce((combined, chunk) => combined.concat(chunk), chunks[0]);
   return {
     contentStreamed,
-    message: chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]),
+    message,
     reasoning,
+    usage: messageTokenUsage(message),
   };
 }
 
@@ -245,7 +304,8 @@ export class ChatCompletionsAdapter implements ModelAdapter {
   }): ModelConversationState {
     return {
       langchain: [
-        createSystemMessage(input.runtimeTools, input.context),
+        createSystemMessage(input.runtimeTools),
+        ...createRuntimeContextMessages(input.context.contentManager?.buildInitialContext() || []),
         ...createHistoryMessages(input.history),
         createUserMessage(input.input, input.attachments),
       ],
@@ -268,10 +328,12 @@ export class ChatCompletionsAdapter implements ModelAdapter {
     );
   }
 
+  appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
+    state.langchain?.push(...createRuntimeContextMessages(context));
+  }
+
   async streamStep(input: ModelStepInput): Promise<ModelStepResult> {
     if (!input.messages.langchain) throw new Error('Chat adapter state is missing');
-    input.messages.langchain[0] = createSystemMessage(input.runtimeTools, input.context);
-
     const stepResult = await streamChatModel({
       eventBus: input.eventBus,
       messages: input.messages.langchain,
@@ -289,6 +351,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
       contentStreamed: stepResult.contentStreamed,
       message: aiMessage,
       reasoning: stepResult.reasoning,
+      usage: stepResult.usage,
       toolCalls: isAI(aiMessage)
         ? (aiMessage.tool_calls || []).map((call) => ({
             id: call.id || '',
@@ -313,13 +376,13 @@ export class ResponsesAdapter implements ModelAdapter {
     attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState {
-    const system = createSystemMessage(input.runtimeTools, input.context);
     return {
       responses: [
         {
-          role: 'system',
-          content: getMessageText(system),
+          role: 'developer',
+          content: createSystemPrompt(input.runtimeTools),
         },
+        ...createResponsesContextItems(input.context.contentManager?.buildInitialContext() || []),
         ...createResponsesHistoryMessages(input.history),
         {
           role: 'user',
@@ -342,13 +405,12 @@ export class ResponsesAdapter implements ModelAdapter {
     });
   }
 
+  appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
+    state.responses?.push(...createResponsesContextItems(context));
+  }
+
   async streamStep(input: ModelStepInput): Promise<ModelStepResult> {
     if (!input.messages.responses) throw new Error('Responses adapter state is missing');
-    input.messages.responses[0] = {
-      role: 'system',
-      content: getMessageText(createSystemMessage(input.runtimeTools, input.context)),
-    };
-
     const outputItems: unknown[] = [];
     const textParts: string[] = [];
     let contentStreamed = false;
@@ -428,6 +490,7 @@ export class ResponsesAdapter implements ModelAdapter {
       message: outputItems,
       reasoning: '',
       toolCalls,
+      usage: responsesTokenUsage(outputItems),
     };
   }
 }
