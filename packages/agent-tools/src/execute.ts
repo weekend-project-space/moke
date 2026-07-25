@@ -15,7 +15,6 @@ export function createExecuteTool(system: ExecutableSystemBackend): RuntimeTool<
   return {
     name: 'execute',
     description: 'Run a shell command in the workspace environment.',
-    risk: 'dangerous',
     schema: executeSchema,
     async handler(input, context) {
       const commandText = input.args?.length ? [input.command, ...input.args].join(' ') : input.command;
@@ -34,7 +33,6 @@ export function createExecuteTool(system: ExecutableSystemBackend): RuntimeTool<
         const decision = await context.approveTool({
           tool: 'execute',
           input,
-          risk: 'dangerous',
           callId: context.currentToolCall?.callId,
           reason: `\u590d\u6742\u547d\u4ee4\u9700\u8981\u786e\u8ba4\uff1a${complexityReason(complexity.issues[0].code)}`,
         });

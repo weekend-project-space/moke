@@ -285,7 +285,6 @@ Response:
       "name": "mcp__moke_local__project_info",
       "original_name": "project_info",
       "description": "Return basic read-only information about the current Moke workspace.",
-      "risk": "safe",
       "source": {
         "type": "mcp",
         "server_id": "moke_local"
@@ -386,7 +385,6 @@ Emitted after runtime setup.
   "type": "agent.plan",
   "payload": {
     "intent": "code_review",
-    "risk": "safe",
     "steps": [
       "Scan project structure",
       "Read important files",
@@ -463,7 +461,6 @@ Emitted before a tool is executed.
     "input": {
       "query": "package.json"
     },
-    "risk": "safe",
     "source": {
       "type": "local"
     }
@@ -482,7 +479,6 @@ MCP tools use the same event shape with MCP source metadata:
     "input": {
       "path": "README.md"
     },
-    "risk": "safe",
     "source": {
       "type": "mcp",
       "server_id": "filesystem"
@@ -530,7 +526,6 @@ Emitted when the Agent needs user approval before continuing. The first supporte
     "call_id": "call_01",
     "kind": "tool",
     "reason": "Agent wants to modify files",
-    "risk": "write",
     "action": {
       "tool": "write_file",
       "input": {
@@ -551,7 +546,6 @@ Workspace path approval:
     "call_id": "call_02",
     "kind": "workspace_path",
     "reason": "Command path requires approval: E:\\notes\\a.md",
-    "risk": "write",
     "action": {
       "tool": "write_file",
       "input": {
@@ -759,7 +753,6 @@ MCP tool behavior:
 ```txt
 input_schema       converted to runtime validation for common JSON Schema fields
 max_output_chars   truncates serialized tool output
-tool_risks         marks MCP tools as safe, write, or dangerous
 disabled_tools     hides configured tools from the Agent
 roots              optional allowed root paths exposed through roots/list
 ```

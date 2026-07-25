@@ -16,7 +16,6 @@ export function createActivateSkillTool(loader: SkillLoader): RuntimeTool<typeof
   return {
     name: 'activate_skill',
     description: 'Activate an available agent skill for the current session.',
-    risk: 'safe',
     schema: activateSkillSchema,
     async handler(input, context) {
       const skill = await loader.read(input.id);

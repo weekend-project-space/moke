@@ -571,7 +571,7 @@ function approvalChoices() {
 }
 
 function approvalDetail(approval: PendingApproval) {
-  return `${approval.reason}\n\nTool: ${approval.action.tool}\nRisk: ${approval.risk}`;
+  return `${approval.reason}\n\nTool: ${approval.action.tool}`;
 }
 
 function retryDelay(attempt: number) {

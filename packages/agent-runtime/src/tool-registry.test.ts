@@ -11,7 +11,6 @@ test('ToolRegistry runs approval cleanup after an approved retry', async () => {
   const registry = new ToolRegistry().register({
     name: 'needs_path',
     description: 'Needs path approval',
-    risk: 'dangerous',
     schema: z.object({}),
     async handler() {
       attempts += 1;

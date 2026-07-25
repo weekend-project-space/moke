@@ -483,7 +483,6 @@ test('withHandlers creates an immutable session policy and prompt overrides boun
       call_id: 'call_1',
       kind: 'tool',
       reason: 'Allow write?',
-      risk: 'write',
       action: { tool: 'write_file', input: { path: 'README.md' } },
       created_at: '2026-07-21T00:00:00.000Z',
     },

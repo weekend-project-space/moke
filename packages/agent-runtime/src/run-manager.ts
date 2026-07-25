@@ -245,12 +245,11 @@ export class RunManager {
     input: WorkspacePathApprovalRequest,
   ): Promise<WorkspacePathApprovalDecision> {
     const approvalId = id('apv');
-    run.pending_approval = {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'workspace_path',
       reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
-      risk: input.risk,
       action: {
         tool: input.tool,
         input: input.input,
@@ -259,9 +258,10 @@ export class RunManager {
       suggested_root: input.suggestedRoot,
       created_at: new Date().toISOString(),
     };
+    run.pending_approval = pendingApproval;
     this.setStatus(run, 'awaiting_approval');
 
-    eventBus.emit('approval.required', run.pending_approval);
+    eventBus.emit('approval.required', pendingApproval);
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
@@ -277,21 +277,21 @@ export class RunManager {
     input: ToolApprovalRequest,
   ): Promise<ToolApprovalDecision> {
     const approvalId = id('apv');
-    run.pending_approval = {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'tool',
       reason: input.reason,
-      risk: input.risk,
       action: {
         tool: input.tool,
         input: input.input,
       },
       created_at: new Date().toISOString(),
     };
+    run.pending_approval = pendingApproval;
     this.setStatus(run, 'awaiting_approval');
 
-    eventBus.emit('approval.required', run.pending_approval);
+    eventBus.emit('approval.required', pendingApproval);
     return new Promise<ToolApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,

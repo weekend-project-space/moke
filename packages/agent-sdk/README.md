@@ -237,7 +237,7 @@ const result = await session.prompt(
         console.log(`${session.id}/${run.id}: ${request.reason}`);
 
         return {
-          decision: request.risk === 'safe' ? 'approved' : 'rejected',
+          decision: 'approved',
           scope: 'once',
         };
       },

@@ -191,7 +191,6 @@ export class ReActAgent {
           call_id: callId,
           tool: call.name,
           input: call.args || {},
-          risk: runtimeTool?.risk || 'safe',
           source: runtimeTool?.source || { type: 'local' },
         }, { step: actStep });
 
@@ -206,7 +205,6 @@ export class ReActAgent {
                     callId,
                     tool: call.name,
                     input: toToolCallArgs(call.args),
-                    risk: runtimeTool?.risk || 'safe',
                   },
                 });
           const { publicOutput, modelOutput, context: appendedContext } = normalizeRuntimeToolResult(rawOutput);

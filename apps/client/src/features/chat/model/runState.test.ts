@@ -52,7 +52,6 @@ test('runState keeps pending data inside its matching lifecycle state', () => {
     approval_id: 'approval_1',
     kind: 'tool' as const,
     reason: 'Write data',
-    risk: 'write' as const,
     action: { tool: 'write_file', input: {} },
     created_at: '2026-01-01T00:00:00.000Z',
   }

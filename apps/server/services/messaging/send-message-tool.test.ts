@@ -21,7 +21,7 @@ test('send_message binds output to the current external messaging run', async ()
   const output = await tool.handler({ text: 'sent' }, {
     workspace: process.cwd(),
     run,
-    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
   });
 
   assert.equal((request as { binding_id: string }).binding_id, 'bind_1');
@@ -54,7 +54,7 @@ test('send_message accepts a DingTalk messaging run', async () => {
   await tool.handler({ text: 'sent' }, {
     workspace: process.cwd(),
     run,
-    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
   });
 
   assert.equal((request as { binding_id: string }).binding_id, 'bind_1');
@@ -75,7 +75,7 @@ test('send_message accepts a Feishu messaging run', async () => {
   await tool.handler({ text: 'hello' }, {
     workspace: process.cwd(),
     run,
-    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
   });
   assert.equal(sent, true);
 });
@@ -97,7 +97,7 @@ test('send_message requires approval before sending media', async () => {
     () => tool.handler({ images: [{ path: 'output/image.png' }] }, {
       workspace: process.cwd(),
       run,
-      currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+      currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
       approveTool: async () => ({ approved: false, message: 'rejected' }),
     }),
     /rejected/,
@@ -122,7 +122,7 @@ test('send_message sends media after approval', async () => {
   await tool.handler({ images: [{ path: 'output/image.png' }] }, {
     workspace: process.cwd(),
     run,
-    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+    currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
     approveTool: async () => {
       approved = true;
       return { approved: true };
@@ -155,7 +155,7 @@ test('send_message checks a media path before requesting media approval', async 
     () => tool.handler({ images: [{ path: 'C:\\Temp\\image.png' }] }, {
       workspace: process.cwd(),
       run,
-      currentToolCall: { callId: 'call_1', tool: 'send_message', input: {}, risk: 'dangerous' },
+      currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
       approveTool: async () => {
         mediaApprovalRequested = true;
         return { approved: true };

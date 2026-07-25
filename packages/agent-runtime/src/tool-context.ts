@@ -28,7 +28,6 @@ export type RuntimeContentManager = {
 export type WorkspacePathApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -49,7 +48,6 @@ export type WorkspacePathApprovalDecision = {
 export type ToolApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -73,7 +71,6 @@ export type ToolContext = {
     callId: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: 'safe' | 'write' | 'dangerous';
   };
   askUser?: (input: {
     callId: string;

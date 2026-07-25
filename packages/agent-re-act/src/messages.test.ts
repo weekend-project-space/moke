@@ -23,7 +23,7 @@ test('system prompt keeps hidden reasoning private by default', () => {
 
 test('system prompt guides the model to activate a listed skill', () => {
   const prompt = createSystemPrompt([
-    { name: 'activate_skill', description: 'Activate a skill.', risk: 'safe', schema: {} } as AgentToolSpec,
+    { name: 'activate_skill', description: 'Activate a skill.', schema: {} } as AgentToolSpec,
   ]);
 
   assert.match(prompt, /Available skills are listed/);

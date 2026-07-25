@@ -12,7 +12,6 @@ export function createGlobTool(system: SystemBackend): RuntimeTool<typeof globSc
   return {
     name: 'glob',
     description: 'Find files matching a glob pattern in the workspace.',
-    risk: 'safe',
     schema: globSchema,
     async handler(input) {
       return system.glob(input.pattern, {

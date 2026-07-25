@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import type { RiskLevel } from '@moke/protocol';
 import type { RuntimeContextItem, ToolContext } from './tool-context.js';
 import { isPathRequiresApprovalError } from './workspace-approval.js';
 
@@ -20,7 +19,6 @@ export type RuntimeTool<
   name: string;
   original_name?: string;
   description: string;
-  risk: RiskLevel;
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -107,7 +105,6 @@ export class ToolRegistry {
         callId: context.currentToolCall?.callId || '',
         tool: name,
         input: normalizedInput,
-        risk: tool.risk,
       },
     };
 
@@ -119,7 +116,6 @@ export class ToolRegistry {
       const decision = await context.approveWorkspacePath({
         tool: name,
         input: normalizedInput,
-        risk: tool.risk,
         source: tool.source,
         callId: context.currentToolCall?.callId,
         path: error.details.path,

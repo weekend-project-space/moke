@@ -12,7 +12,6 @@ export function createReadFileTool(system: SystemBackend): RuntimeTool<typeof re
   return {
     name: 'read_file',
     description: 'Read a text file from the workspace.',
-    risk: 'safe',
     schema: readFileSchema,
     async handler(input) {
       const result = await system.readFile(input.path, {

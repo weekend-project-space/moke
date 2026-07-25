@@ -1,5 +1,3 @@
-export type RiskLevel = 'safe' | 'write' | 'dangerous';
-
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export type RunStatus =
@@ -153,7 +151,6 @@ export type PendingApproval = {
   call_id?: string;
   kind: 'workspace_path' | 'tool';
   reason: string;
-  risk: RiskLevel;
   action: {
     tool: string;
     input: Record<string, unknown>;
@@ -205,7 +202,6 @@ export type AgentEventPayloadMap = {
     call_id: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: RiskLevel;
     source?: {
       type: 'local' | 'mcp';
       server_id?: string;

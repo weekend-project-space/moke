@@ -34,7 +34,6 @@ export function createSendMessageTool(
   return {
     name: 'send_message',
     description: 'Send text, images, or files to the current external messaging conversation. Media paths outside the workspace require directory approval.',
-    risk: 'dangerous',
     schema: sendMessageSchema,
     async handler(input, context) {
       const run = context.run;
@@ -48,7 +47,6 @@ export function createSendMessageTool(
         const decision = await context.approveTool({
           tool: 'send_message',
           input: toRecord(input),
-          risk: 'dangerous',
           callId: context.currentToolCall?.callId,
           reason: 'Send workspace media to the current external messaging conversation',
         });

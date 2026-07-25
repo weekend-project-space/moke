@@ -219,7 +219,6 @@ test('RunManager emits approval resolution after a decision', async () => {
         callId: 'call_1',
         tool: 'execute',
         input: { command: 'npm test' },
-        risk: 'write',
         reason: 'Run tests',
       });
       recordedApprovals = input.context.consumeApprovals?.('call_1') || [];
