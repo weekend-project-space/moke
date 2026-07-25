@@ -1,13 +1,8 @@
 import { z } from 'zod';
 
-import { ToolExecutionError, type ToolRegistry } from '@moke/agent-runtime';
+import type { ToolRegistry } from '@moke/agent-runtime';
 
-export const FINISH_TOOL_NAME = 'finish';
 export const ASK_USER_TOOL_NAME = 'ask_user';
-
-export const finishSchema = z.object({
-  content: z.string().min(1),
-});
 
 export const askUserSchema = z.object({
   question: z.string().min(1),
@@ -24,42 +19,14 @@ export const askUserSchema = z.object({
 
 type RuntimeToolSpec = ReturnType<ToolRegistry['list']>[number];
 
-export type AgentToolSpec = RuntimeToolSpec & {
-  control?: true;
-};
-
-export const finishTool: AgentToolSpec = {
-  name: FINISH_TOOL_NAME,
-  description: 'Finish the current agent run with the final answer. Call this when you have enough information to respond.',
-  risk: 'safe',
-  schema: finishSchema,
-  control: true,
-};
+export type AgentToolSpec = RuntimeToolSpec;
 
 export const askUserTool: AgentToolSpec = {
   name: ASK_USER_TOOL_NAME,
   description: 'Pause the current run to ask the user one question with 2 to 5 concrete options.',
   risk: 'safe',
   schema: askUserSchema,
-  control: true,
 };
-
-export function readFinishContent(input: unknown) {
-  const result = finishSchema.safeParse(input);
-  if (result.success) return result.data.content.trim();
-
-  throw new ToolExecutionError('Finish input invalid', {
-    error: {
-      code: 'FINISH_INPUT_INVALID',
-      message: z.prettifyError(result.error),
-      tool: FINISH_TOOL_NAME,
-    },
-  });
-}
-
-export function isControlTool(name: string) {
-  return name === FINISH_TOOL_NAME || name === ASK_USER_TOOL_NAME;
-}
 
 export function normalizeAskOptions(value: unknown) {
   if (!Array.isArray(value)) {

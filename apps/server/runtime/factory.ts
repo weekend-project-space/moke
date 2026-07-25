@@ -1,10 +1,9 @@
 import { ReActAgent } from '@moke/agent-re-act';
-import { RunManager, ToolRegistry, type RuntimeRun } from '@moke/agent-runtime';
+import { RunManager, ToolRegistry, type RuntimeContentManager, type RuntimeRun } from '@moke/agent-runtime';
 import { LocalSystemBackend, registerAgentTools } from '@moke/agent-tools';
 import {
   ContentManager,
-  createListSkillsTool,
-  createReadSkillTool,
+  createActivateSkillTool,
   SkillLoader,
 } from '@moke/agent-skills';
 import { registerBrowserTools } from '@moke/browser-tools';
@@ -17,18 +16,22 @@ export function createToolRegistry(workspace: string, browserBridge: BrowserBrid
   const browserBackend = new BrowserBridgeBackend(browserBridge);
   const skillLoader = new SkillLoader(workspace);
   const toolRegistry = new ToolRegistry()
-    .register(createListSkillsTool(skillLoader))
-    .register(createReadSkillTool(skillLoader));
+    .register(createActivateSkillTool(skillLoader));
 
   registerAgentTools(toolRegistry, system);
   registerBrowserTools(toolRegistry, browserBackend);
 
-  return { system, toolRegistry };
+  return {
+    system,
+    toolRegistry,
+    createSkillContentManager: async () => new ContentManager({ catalog: await skillLoader.list() }),
+  };
 }
 
 export function createRunManager(input: {
   runs: Map<string, RuntimeRun>;
   toolRegistry: ToolRegistry;
+  createSkillContentManager: () => RuntimeContentManager | Promise<RuntimeContentManager>;
   workspace: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   getModelSettings: () => Partial<ChatModelSettings>;
@@ -42,7 +45,7 @@ export function createRunManager(input: {
     agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
     workspace: input.workspace,
-    createSkillContentManager: () => new ContentManager(),
+    createSkillContentManager: input.createSkillContentManager,
     approveWorkspaceRoot: input.approveWorkspaceRoot,
     resolveImageAttachments: input.resolveImageAttachments,
     onSessionChanged: input.onSessionChanged,

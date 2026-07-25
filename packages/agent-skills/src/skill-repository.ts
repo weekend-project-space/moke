@@ -26,8 +26,8 @@ export class SkillRepository {
 
   constructor(root: string, skillsDir = DEFAULT_SKILL_DIR, registryPath = DEFAULT_SKILL_REGISTRY) {
     this.root = path.resolve(root);
-    this.skillsDir = path.resolve(this.root, skillsDir);
-    this.registryPath = path.resolve(this.root, registryPath);
+    this.skillsDir = resolveWorkspacePath(this.root, skillsDir, 'Skill directory');
+    this.registryPath = resolveWorkspacePath(this.root, registryPath, 'Skill registry');
   }
 
   async listAll(): Promise<ManagedSkill[]> {
@@ -67,7 +67,7 @@ export class SkillRepository {
   async readEnabled(nameOrId: string): Promise<LoadedSkill> {
     const skill = (await this.listEnabled()).find((item) => item.id === nameOrId || item.name === nameOrId);
     if (!skill) throw new SkillRepositoryError('SKILL_NOT_FOUND', `Skill not found: ${nameOrId}`);
-    const raw = await readFile(path.join(this.root, skill.path), 'utf8');
+    const raw = await readFile(this.skillFile(skill.id), 'utf8');
     const parsed = parseSkillFile(raw, skill.id);
     return { ...skill, content: parsed.content };
   }
@@ -290,4 +290,13 @@ async function writeAtomic(filePath: string, content: string) {
     await rm(temporaryPath, { force: true });
     throw error;
   }
+}
+
+function resolveWorkspacePath(root: string, target: string, label: string) {
+  const resolved = path.resolve(root, target);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new SkillRepositoryError('SKILL_PATH_INVALID', `${label} must be inside the workspace`);
+  }
+  return resolved;
 }

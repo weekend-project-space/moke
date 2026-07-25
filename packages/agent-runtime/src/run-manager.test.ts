@@ -92,6 +92,36 @@ test('RunManager calls beforeStart before agent execution can emit events', asyn
   await waitFor(() => run.status === 'completed');
 });
 
+test('RunManager fails a run when skill context initialization fails', async () => {
+  const session = createSession();
+  const runs = new Map();
+  let agentCalled = false;
+  const errors: string[] = [];
+  const manager = new RunManager({
+    runs,
+    agent: {
+      async run() {
+        agentCalled = true;
+        return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+    createSkillContentManager: async () => {
+      throw new Error('skill catalog unavailable');
+    },
+  });
+  manager.addObserver((event) => {
+    if (event.type === 'agent.error') errors.push(event.payload.message);
+  });
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => run.status === 'failed');
+
+  assert.equal(agentCalled, false);
+  assert.deepEqual(errors, ['skill catalog unavailable']);
+});
+
 test('RunManager emits the simplified lifecycle whenever a run status changes', async () => {
   const session = createSession();
   const runs = new Map();

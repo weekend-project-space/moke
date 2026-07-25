@@ -71,7 +71,7 @@ export async function createApp(): Promise<ServerApp> {
   const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession });
   const attachmentStore = new AttachmentStore(storePath);
   const messagingStore = new JsonMessagingStore(storePath);
-  const { system, toolRegistry } = createToolRegistry(workspace, browserBridge);
+  const { system, toolRegistry, createSkillContentManager } = createToolRegistry(workspace, browserBridge);
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
@@ -89,6 +89,7 @@ export async function createApp(): Promise<ServerApp> {
   const runManager = createRunManager({
     runs,
     toolRegistry,
+    createSkillContentManager,
     workspace,
     approveWorkspaceRoot: (root, scope) => {
       const approval = system.approveWorkspaceRoot(root);

@@ -78,3 +78,15 @@ test('skill repository keeps malformed skill directories repairable', async () =
     assert.equal(repaired.valid, true);
   });
 });
+
+test('skill repository rejects storage paths outside the workspace', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'moke-skills-'));
+  try {
+    assert.throws(() => new SkillRepository(root, '../outside'), (error: unknown) =>
+      error instanceof SkillRepositoryError && error.code === 'SKILL_PATH_INVALID');
+    assert.throws(() => new SkillRepository(root, '.moke/skills', '../registry.json'), (error: unknown) =>
+      error instanceof SkillRepositoryError && error.code === 'SKILL_PATH_INVALID');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

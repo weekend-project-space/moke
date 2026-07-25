@@ -1,7 +1,7 @@
 import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
-import type { RunHandle, RunLifecycleEvent, RunStatus } from '@moke/agent-sdk'
+import type { RunHandle, RunLifecycleEvent } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
-import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
@@ -11,8 +11,6 @@ import {
   createSessionRunState,
   finishRunState,
   isRunActive,
-  markRunConnected,
-  markRunReconnecting,
   pendingApprovalFrom,
   pendingAskFrom,
   resumeRun,
@@ -21,6 +19,8 @@ import {
   type SessionRunState,
 } from '../model/runState'
 import { createStreamingTextBuffer } from '../services/streamingTextBuffer'
+import { useRunSubscriptions } from './useRunSubscriptions'
+import { useSessionCatalog } from './useSessionCatalog'
 
 type UseAgentSessionOptions = {
   apiBase: string
@@ -41,26 +41,33 @@ export type SendMessageInput = {
 export function useAgentSession(options: UseAgentSessionOptions) {
   const sessionId = ref('')
   const messages = ref<Message[]>([])
-  const sessions = ref<SessionSummary[]>([])
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const submittingAskId = ref('')
   const submittingApprovalId = ref('')
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
-  const activeRuns = reactive<Record<string, { runId: string; status: RunStatus }>>({})
   const currentRun = shallowRef<RunHandle>()
   const sessionLoadGuard = createLatestRequestGuard()
   const api = options.api || createAgentApi(options.apiBase)
-  const pendingLocalSessions = new Set<string>()
-  const localRunIds = new Set<string>()
-  let stopRunLifecycle: (() => void) | undefined
-  let stopSessionRun: (() => void) | undefined
-  let watchedSessionId = ''
   let sessionsRefreshTimer: number | undefined
   const streamingTextBuffer = createStreamingTextBuffer({
     onFlush: (targetSessionId, text) => {
       ensureRunState(targetSessionId).streamingText = text
     },
   })
+  const subscriptions = useRunSubscriptions({
+    api,
+    sessionId,
+    sessionRunStates,
+    currentRun,
+    streamingTextBuffer,
+    onEvent: handleRunEvent,
+    onExternalRun: (targetSessionId) => { void refreshSessionMessagesIfActive(targetSessionId) },
+    onActiveRun: () => scheduleSessionsRefresh(),
+    onTerminalRun: () => scheduleSessionsRefresh(),
+    reconnectingMessage: uiText.app.reconnecting,
+    disconnectedMessage: uiText.app.disconnectedFromMoke,
+  })
+  const { activeRuns, pendingLocalSessions, localRunIds } = subscriptions
   const emptyRunState = createSessionRunState()
   const currentRunState = computed(() => (sessionId.value ? sessionRunStates[sessionId.value] : undefined) || emptyRunState)
   const runId = computed(() => currentRunState.value.runId)
@@ -78,13 +85,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     Object.keys(activeRuns),
   )
 
-  const sortedSessions = computed(() =>
-    [...sessions.value].sort((left, right) => {
-      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
-      return Date.parse(right.updated_at) - Date.parse(left.updated_at)
-    }),
-  )
-
   function ensureRunState(targetSessionId: string) {
     if (!sessionRunStates[targetSessionId]) sessionRunStates[targetSessionId] = createSessionRunState()
     return sessionRunStates[targetSessionId]
@@ -95,70 +95,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     delete sessionRunStates[targetSessionId]
   }
 
-  function startRunLifecycle() {
-    if (stopRunLifecycle) return
-    stopRunLifecycle = api.onRunLifecycle(handleRunLifecycle, {
-      onReconnect: clearActiveRuns,
-      onError: clearActiveRuns,
-    })
-  }
-
-  function clearActiveRuns() {
-    for (const targetSessionId of Object.keys(activeRuns)) delete activeRuns[targetSessionId]
-  }
-
-  function handleRunLifecycle(event: RunLifecycleEvent) {
-    const previous = activeRuns[event.sessionId]
-    if (isTerminalRunStatus(event.type)) {
-      localRunIds.delete(event.runId)
-      if (previous?.runId === event.runId) delete activeRuns[event.sessionId]
-      scheduleSessionsRefresh()
-      return
-    }
-
-    activeRuns[event.sessionId] = { runId: event.runId, status: event.type }
-    if (previous?.runId === event.runId) return
-
-    scheduleSessionsRefresh()
-    const isLocalRun = pendingLocalSessions.has(event.sessionId) || localRunIds.has(event.runId)
-    if (event.sessionId === sessionId.value && !isLocalRun) {
-      void refreshSessionMessagesIfActive(event.sessionId)
-    }
-  }
-
-  function watchSessionRun(targetSessionId: string) {
-    if (targetSessionId && watchedSessionId === targetSessionId && stopSessionRun) return
-    stopSessionRun?.()
-    stopSessionRun = undefined
-    watchedSessionId = targetSessionId
-    currentRun.value = undefined
-    if (!targetSessionId) return
-
-    stopSessionRun = api.onSessionRunEvent(targetSessionId, (event, run) => {
-      if (sessionId.value !== targetSessionId) return
-      const state = ensureRunState(targetSessionId)
-      if (state.runId !== run.id) {
-        streamingTextBuffer.clear(targetSessionId)
-        state.events = []
-        state.seenEventKeys.clear()
-        connectRun(state, run.id)
-      }
-      currentRun.value = run
-      markRunConnected(state)
-      handleRunEvent(targetSessionId, event)
-    }, {
-      onReconnect: (run) => {
-        if (sessionId.value !== targetSessionId || currentRun.value?.id !== run.id) return
-        const state = sessionRunStates[targetSessionId]
-        if (state && isRunActive(state)) markRunReconnecting(state, uiText.app.reconnecting)
-      },
-      onError: () => {
-        if (sessionId.value !== targetSessionId) return
-        const state = sessionRunStates[targetSessionId]
-        if (state && isRunActive(state)) finishRunState(state, uiText.app.disconnectedFromMoke)
-      },
-    })
-  }
+  const catalog = useSessionCatalog({
+    api,
+    isOnline: () => serverStatus.value === 'online',
+    ensureOnline: checkServer,
+    isSessionRunning: (targetSessionId) => Boolean(sessionRunStates[targetSessionId] && isRunActive(sessionRunStates[targetSessionId])),
+  })
+  const { sessions, sortedSessions, loadSessions, updateSession, renameSession, pinSession } = catalog
 
   function scheduleSessionsRefresh() {
     if (sessionsRefreshTimer !== undefined) return
@@ -175,7 +118,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       try {
         if (await api.checkHealth()) {
           serverStatus.value = 'online'
-          startRunLifecycle()
+          subscriptions.start()
           return true
         }
       } catch {
@@ -198,47 +141,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       sessionId.value = nextSessionId
       messages.value = []
       resetRunState(nextSessionId)
-      watchSessionRun(nextSessionId)
+      subscriptions.watch(nextSessionId)
       await loadSessions()
       return true
     } catch {
       return false
     }
-  }
-
-  async function loadSessions() {
-    if (serverStatus.value !== 'online') return
-
-    try {
-      sessions.value = await api.listSessions()
-    } catch {
-      // Keep the last successful session list during transient failures.
-    }
-  }
-
-  async function updateSession(id: string, payload: Record<string, unknown>, optionsOverride: { allowWhileRunning?: boolean } = {}) {
-    if (!id || (!optionsOverride.allowWhileRunning && sessionRunStates[id] && isRunActive(sessionRunStates[id]))) return false
-    if (serverStatus.value !== 'online' && !(await checkServer())) return false
-
-    try {
-      await api.updateSession(id, payload)
-    } catch {
-      return false
-    }
-
-    await loadSessions()
-    return true
-  }
-
-  async function renameSession(id: string, title: string) {
-    const trimmedTitle = title.trim()
-    if (!trimmedTitle) return false
-    return updateSession(id, { title: trimmedTitle })
-  }
-
-  async function pinSession(id: string, pinned: boolean) {
-    if (!id) return false
-    return updateSession(id, { pinned }, { allowWhileRunning: true })
   }
 
   async function archiveSession(id: string) {
@@ -263,7 +171,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       sessionId.value = id
       messages.value = loadedMessages
-      watchSessionRun(id)
+      subscriptions.watch(id)
 
       if (optionsOverride.notify !== false) {
         await nextTick()
@@ -303,7 +211,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessionId.value = forked.sessionId
     messages.value = forked.messages
     resetRunState(forked.sessionId)
-    watchSessionRun(forked.sessionId)
+    subscriptions.watch(forked.sessionId)
     await nextTick()
     await options.onMessagesLoaded?.()
     return true
@@ -354,17 +262,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   function disposeAgentSession() {
-    stopSessionRun?.()
-    stopSessionRun = undefined
-    watchedSessionId = ''
-    currentRun.value = undefined
-    stopRunLifecycle?.()
-    stopRunLifecycle = undefined
+    subscriptions.dispose()
     window.clearTimeout(sessionsRefreshTimer)
     sessionsRefreshTimer = undefined
-    clearActiveRuns()
-    pendingLocalSessions.clear()
-    localRunIds.clear()
   }
 
   function finishRunEffects(targetSessionId: string) {

@@ -10,10 +10,11 @@ export type LoadedSkill = SkillManifest & {
   content: string;
 };
 
+export type SkillActivationStatus = 'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
+
 export type SkillContentManager = {
-  addSkill(skill: LoadedSkill): void;
+  addSkill(skill: LoadedSkill): SkillActivationStatus;
   buildContext(): string;
-  reset(): void;
 };
 
 export type ManagedSkill = SkillManifest & {

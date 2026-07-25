@@ -5,13 +5,9 @@ import { ToolExecutionError } from '@moke/agent-runtime';
 import type { AgentStep, AgentStepPhase, ToolCall } from '@moke/protocol';
 import {
   ASK_USER_TOOL_NAME,
-  FINISH_TOOL_NAME,
   askUserTool,
   createStepLimitContent,
-  finishTool,
-  isControlTool,
   normalizeAskOptions,
-  readFinishContent,
   type AgentToolSpec,
 } from './control-tools.js';
 import { createFinalMessage, stripThinkBlocks } from './messages.js';
@@ -58,10 +54,6 @@ function toToolCallArgs(args: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
 }
 
-export function shouldPersistToolMessages(name: string) {
-  return name !== FINISH_TOOL_NAME;
-}
-
 function createAgentStep(index: number, phase: AgentStepPhase): AgentStep {
   return {
     index,
@@ -96,7 +88,7 @@ export class ReActAgent {
 
     const limits = normalizeLimits(rawLimits);
     const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
-    const runtimeTools: AgentToolSpec[] = [finishTool, askUserTool, ...toolRegistry.list()];
+    const runtimeTools: AgentToolSpec[] = [askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));
     const modelAdapter = createModelAdapter(modelSettings, runtimeTools);
     const modelMessages = modelAdapter.createInitialState({
@@ -158,7 +150,6 @@ export class ReActAgent {
         callId: call.id || `call_${randomUUID().slice(0, 8)}`,
       }));
       const persistedToolCalls: ToolCall[] = callEntries
-        .filter(({ call }) => shouldPersistToolMessages(call.name))
         .map(({ call, callId }) => ({
           id: callId,
           name: call.name,
@@ -180,14 +171,12 @@ export class ReActAgent {
       eventBus.emit('agent.state', { state: 'act' }, { step: actStep });
       for (const { call, callId } of callEntries) {
         throwIfAborted(context.abortSignal);
-        const isFinishCall = call.name === FINISH_TOOL_NAME;
-        const isControlCall = isControlTool(call.name);
-        const persistsToolMessages = shouldPersistToolMessages(call.name);
-        if (!isControlCall && toolCalls >= limits.max_tool_calls) {
+        const isAskUserCall = call.name === ASK_USER_TOOL_NAME;
+        if (!isAskUserCall && toolCalls >= limits.max_tool_calls) {
           throw new Error('Maximum tool calls exceeded');
         }
 
-        if (!isControlCall) toolCalls++;
+        if (!isAskUserCall) toolCalls++;
         const runtimeTool = toolSpecs.get(call.name);
         eventBus.emit('tool.call', {
           call_id: callId,
@@ -199,30 +188,8 @@ export class ReActAgent {
 
         const startedAt = Date.now();
         try {
-          if (isFinishCall) {
-            finalContent = stripThinkBlocks(readFinishContent(call.args || {}));
-            finalReasoning = stepResult.reasoning;
-            const output = {
-              status: 'finished',
-              content: finalContent,
-            };
-
-            eventBus.emit('tool.result', {
-              call_id: callId,
-              status: 'ok',
-              duration_ms: Date.now() - startedAt,
-              output,
-            }, { step: actStep });
-            modelAdapter.appendToolResult(modelMessages, {
-              callId,
-              name: call.name,
-              output,
-            });
-            break;
-          }
-
           const output =
-            call.name === ASK_USER_TOOL_NAME
+            isAskUserCall
               ? await this.askUser(call.args || {}, callId, context)
               : await toolRegistry.execute(call.name, call.args || {}, {
                   ...context,
@@ -243,20 +210,18 @@ export class ReActAgent {
             duration_ms: Date.now() - startedAt,
             output,
           }, { step: actStep });
-          if (persistsToolMessages) {
-            eventBus.emit('agent.message.done', {
-              message: {
-                id: messageId(),
-                role: 'tool',
-                content: JSON.stringify(output),
-                created_at: now(),
-                tool_call_id: callId,
-                name: call.name,
-                status: 'success',
-                ...(approvals.length ? { approvals } : {}),
-              },
-            }, { step: actStep });
-          }
+          eventBus.emit('agent.message.done', {
+            message: {
+              id: messageId(),
+              role: 'tool',
+              content: JSON.stringify(output),
+              created_at: now(),
+              tool_call_id: callId,
+              name: call.name,
+              status: 'success',
+              ...(approvals.length ? { approvals } : {}),
+            },
+          }, { step: actStep });
           modelAdapter.appendToolResult(modelMessages, {
             callId,
             name: call.name,
@@ -272,20 +237,18 @@ export class ReActAgent {
             duration_ms: Date.now() - startedAt,
             output,
           }, { step: actStep });
-          if (persistsToolMessages) {
-            eventBus.emit('agent.message.done', {
-              message: {
-                id: messageId(),
-                role: 'tool',
-                content: JSON.stringify(output),
-                created_at: now(),
-                tool_call_id: callId,
-                name: call.name,
-                status: 'error',
-                ...(approvals.length ? { approvals } : {}),
-              },
-            }, { step: actStep });
-          }
+          eventBus.emit('agent.message.done', {
+            message: {
+              id: messageId(),
+              role: 'tool',
+              content: JSON.stringify(output),
+              created_at: now(),
+              tool_call_id: callId,
+              name: call.name,
+              status: 'error',
+              ...(approvals.length ? { approvals } : {}),
+            },
+          }, { step: actStep });
           modelAdapter.appendToolResult(modelMessages, {
             callId,
             name: call.name,

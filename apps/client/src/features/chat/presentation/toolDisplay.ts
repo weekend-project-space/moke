@@ -198,11 +198,8 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
     case 'hide_browser':
       objectLabel = uiText.tool.browserPanel
       break
-    case 'active_skill':
-      objectLabel = firstString(args, ['name', 'skill']) || uiText.tool.skillConfig
-      break
-    case 'list_skills':
-      objectLabel = uiText.tool.availableSkills
+    case 'activate_skill':
+      objectLabel = firstString(args, ['id', 'name', 'skill']) || uiText.tool.skillConfig
       break
     default:
       objectLabel = name
@@ -240,7 +237,6 @@ function isViewTool(name: string) {
     'cat',
     'hover',
     'list_pages',
-    'list_skills',
     'ls',
     'read_file',
     'sed',
@@ -260,7 +256,6 @@ function viewActionLabel(name: string) {
   if (name === 'list_pages' || name === 'take_snapshot' || name === 'take_screenshot' || name === 'hover') {
     return uiText.tool.viewPage
   }
-  if (name === 'list_skills') return uiText.tool.viewTools
   return uiText.tool.viewFile
 }
 

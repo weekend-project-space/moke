@@ -3,39 +3,24 @@ import { z } from 'zod';
 import type { RuntimeTool } from '@moke/agent-runtime';
 import type { SkillLoader } from './skill-loader.js';
 
-const listSkillsSchema = z.object({});
-const readSkillSchema = z.object({
-  name: z.string().min(1),
+const activateSkillSchema = z.object({
+  id: z.string().min(1),
 });
 
-export function createListSkillsTool(loader: SkillLoader): RuntimeTool<typeof listSkillsSchema> {
+export function createActivateSkillTool(loader: SkillLoader): RuntimeTool<typeof activateSkillSchema> {
   return {
-    name: 'list_skills',
-    description: 'List available agent skills with descriptions.',
+    name: 'activate_skill',
+    description: 'Activate an available agent skill for the current run.',
     risk: 'safe',
-    schema: listSkillsSchema,
-    async handler() {
-      return {
-        skills: await loader.list(),
-      };
-    },
-  };
-}
-
-export function createReadSkillTool(loader: SkillLoader): RuntimeTool<typeof readSkillSchema> {
-  return {
-    name: 'active_skill',
-    description: 'Read and activate an agent skill by name.',
-    risk: 'safe',
-    schema: readSkillSchema,
+    schema: activateSkillSchema,
     async handler(input, context) {
-      const skill = await loader.read(input.name);
-      context.contentManager?.addSkill(skill);
+      const skill = await loader.read(input.id);
+      const status = context.contentManager?.addSkill(skill) || 'unavailable';
 
       return {
+        id: skill.id,
         name: skill.name,
-        description: skill.description,
-        activated: Boolean(context.contentManager),
+        status,
       };
     },
   };

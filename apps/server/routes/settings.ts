@@ -52,7 +52,17 @@ export function registerSettingRoutes(router: Router<RoutesContext>) {
     return json(200, await withSkillErrors(async () => context.skillSettingsService.setEnabled(id, await parseBody(body, skillStatusSchema))));
   });
 
+  router.patch('/api/settings/skills/:id/status', async ({ body, context, json, params }) => {
+    const { id } = parseParams(params, idParamsSchema);
+    return json(200, await withSkillErrors(async () => context.skillSettingsService.setEnabled(id, await parseBody(body, skillStatusSchema))));
+  });
+
   router.post('/api/settings/skills/:id/delete', async ({ context, json, params }) => {
+    const { id } = parseParams(params, idParamsSchema);
+    return json(200, await withSkillErrors(() => context.skillSettingsService.remove(id)));
+  });
+
+  router.delete('/api/settings/skills/:id', async ({ context, json, params }) => {
     const { id } = parseParams(params, idParamsSchema);
     return json(200, await withSkillErrors(() => context.skillSettingsService.remove(id)));
   });

@@ -1,7 +1,7 @@
 import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { AgentStep, ResolvedImageAttachment, ToolCall } from '@moke/protocol';
+import type { AgentStep, ResolvedImageAttachment } from '@moke/protocol';
 import type { AgentRunInput, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
@@ -14,50 +14,18 @@ import {
   isAI,
 } from './messages.js';
 import { createChatModel, type ChatModelSettings, withTimeout } from './llm-client.js';
+import {
+  type ModelAdapter,
+  type ModelConversationState,
+  type ModelStepInput,
+  type ModelStepResult,
+  type ResponseContentItem,
+  type ResponsesInputItem,
+  toToolCallArgs,
+} from './model-adapter-types.js';
+import { collectResponseOutput, collectTextValue, readSseEvents } from './responses-stream.js';
 
-export type ModelStepInput = {
-  eventBus: AgentRunInput['eventBus'];
-  input: string;
-  attachments: ResolvedImageAttachment[];
-  context: AgentRunInput['context'];
-  history: RuntimeMessage[];
-  messages: ModelConversationState;
-  runtimeTools: AgentToolSpec[];
-  showRawReasoning: boolean;
-  step?: AgentStep;
-  signal?: AbortSignal;
-  timeoutMs: number;
-};
-
-export type ModelStepResult = {
-  content: string;
-  contentStreamed: boolean;
-  message: unknown;
-  reasoning: string;
-  toolCalls: ToolCall[];
-};
-
-export type ModelConversationState = {
-  langchain?: BaseMessage[];
-  responses?: ResponsesInputItem[];
-};
-
-export type ModelAdapter = {
-  createInitialState(input: {
-    context: AgentRunInput['context'];
-    history: RuntimeMessage[];
-    input: string;
-    attachments: ResolvedImageAttachment[];
-    runtimeTools: AgentToolSpec[];
-  }): ModelConversationState;
-  appendToolResult(state: ModelConversationState, input: {
-    callId: string;
-    name: string;
-    output: unknown;
-    status?: 'error' | 'success';
-  }): void;
-  streamStep(input: ModelStepInput): Promise<ModelStepResult>;
-};
+export type { ModelAdapter, ModelConversationState, ModelStepInput, ModelStepResult } from './model-adapter-types.js';
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('Run cancelled');
@@ -76,30 +44,11 @@ function createModelTool(runtimeTool: AgentToolSpec) {
   );
 }
 
-function toToolCallArgs(args: unknown): Record<string, unknown> {
-  return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
-}
-
-type ResponseContentItem =
-  | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string }
-  | { type: 'output_text'; text: string };
-
-type ResponsesInputItem =
-  | { role: 'system' | 'user' | 'assistant'; content: string | ResponseContentItem[] }
-  | { type: 'function_call'; call_id: string; name: string; arguments: string }
-  | { type: 'function_call_output'; call_id: string; output: string };
-
 type ResponsesFunctionTool = {
   type: 'function';
   name: string;
   description?: string;
   parameters: Record<string, unknown>;
-};
-
-type ResponsesStreamEvent = {
-  event: string;
-  data: unknown;
 };
 
 function resolveResponsesUrl(apiBaseUrl: string) {
@@ -189,122 +138,6 @@ function createResponsesHistoryMessages(history: RuntimeMessage[]): ResponsesInp
   }
 
   return messages;
-}
-
-function parseJsonRecord(input: string): Record<string, unknown> {
-  try {
-    const value = JSON.parse(input);
-    return toToolCallArgs(value);
-  } catch {
-    return {};
-  }
-}
-
-function collectTextValue(value: unknown): string {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map(collectTextValue).filter(Boolean).join('');
-  if (typeof value !== 'object') return '';
-
-  const record = value as Record<string, unknown>;
-  return collectTextValue(record.text) || collectTextValue(record.content) || collectTextValue(record.delta);
-}
-
-function collectResponseOutput(input: unknown) {
-  const toolCalls: ToolCall[] = [];
-  const seenToolCalls = new Set<string>();
-  const text: string[] = [];
-
-  function visit(value: unknown) {
-    if (!value || typeof value !== 'object') return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-
-    const record = value as Record<string, unknown>;
-    if (record.type === 'function_call' || record.type === 'function_call_output') {
-      const callId = typeof record.call_id === 'string' ? record.call_id : typeof record.id === 'string' ? record.id : '';
-      const name = typeof record.name === 'string' ? record.name : '';
-      const rawArgs = typeof record.arguments === 'string' ? record.arguments : '{}';
-      const key = `${callId}:${name}:${rawArgs}`;
-      if (record.type === 'function_call' && name && !seenToolCalls.has(key)) {
-        seenToolCalls.add(key);
-        toolCalls.push({
-          id: callId,
-          name,
-          args: parseJsonRecord(rawArgs),
-        });
-      }
-    }
-
-    if (record.type === 'output_text' || record.type === 'text') {
-      const valueText = collectTextValue(record);
-      if (valueText) text.push(valueText);
-    }
-
-    visit(record.content);
-    visit(record.output);
-  }
-
-  visit(input);
-  return {
-    content: text.join(''),
-    toolCalls,
-  };
-}
-
-async function* readSseEvents(response: Response): AsyncGenerator<ResponsesStreamEvent> {
-  if (!response.body) return;
-
-  const decoder = new TextDecoder();
-  const reader = response.body.getReader();
-  let buffer = '';
-
-  function parseBlock(block: string): ResponsesStreamEvent | undefined {
-    let event = 'message';
-    const data: string[] = [];
-
-    for (const line of block.split(/\r?\n/)) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
-    }
-
-    const rawData = data.join('\n');
-    if (!rawData || rawData === '[DONE]') return undefined;
-
-    try {
-      return { event, data: JSON.parse(rawData) };
-    } catch {
-      return { event, data: rawData };
-    }
-  }
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let separatorIndex = buffer.search(/\r?\n\r?\n/);
-      while (separatorIndex >= 0) {
-        const block = buffer.slice(0, separatorIndex);
-        const separator = buffer.slice(separatorIndex).match(/^\r?\n\r?\n/)?.[0] || '\n\n';
-        buffer = buffer.slice(separatorIndex + separator.length);
-        const event = parseBlock(block);
-        if (event) yield event;
-        separatorIndex = buffer.search(/\r?\n\r?\n/);
-      }
-    }
-
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-      const event = parseBlock(buffer);
-      if (event) yield event;
-    }
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 async function readErrorMessage(response: Response) {

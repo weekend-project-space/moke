@@ -13,8 +13,10 @@ import type {
   Session,
   ToolApprovalRecord,
 } from '@moke/protocol';
-import type { Agent, RuntimeMessage } from './agent.js';
+import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
+import { resolveHistory, selectRecentHistory } from './history.js';
+import { RunObservers } from './run-observers.js';
 import type { RunOrigin, RuntimeRun } from './run-state.js';
 import type {
   RuntimeContentManager,
@@ -34,7 +36,7 @@ type RunManagerConfig = {
   agent: Agent;
   toolRegistry: ToolRegistry;
   workspace: string;
-  createSkillContentManager?: () => RuntimeContentManager;
+  createSkillContentManager?: () => RuntimeContentManager | Promise<RuntimeContentManager>;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   resolveImageAttachments?: (
     attachments: ImageAttachment[],
@@ -62,28 +64,7 @@ type RunMessageInput = {
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
 
-export function selectRecentHistory(messages: Message[], maxMessages = 999) {
-  if (messages.length <= maxMessages) return messages.slice();
-
-  const cutoff = Math.max(0, messages.length - maxMessages);
-  let start = cutoff;
-  const cutoffMessage = messages[start];
-  if (cutoffMessage?.role !== 'tool') return messages.slice(start);
-
-  const firstToolCallId = cutoffMessage.tool_call_id;
-  while (start > 0) {
-    start--;
-    const candidate = messages[start];
-    if (candidate.role === 'assistant' && candidate.tool_calls?.some((call) => call.id === firstToolCallId)) {
-      return messages.slice(start);
-    }
-    if (candidate.role === 'user') break;
-  }
-
-  start = cutoff;
-  while (start < messages.length && messages[start]?.role === 'tool') start++;
-  return messages.slice(start);
-}
+export { selectRecentHistory } from './history.js';
 
 function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
@@ -129,8 +110,7 @@ export class RunManager {
     }
   >();
   private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
-  private readonly observers = new Set<(event: AgentEvent, run: RuntimeRun) => void>();
-  private readonly lifecycleObservers = new Set<(event: RunLifecycleEvent) => void>();
+  private readonly observers = new RunObservers();
 
   constructor(private readonly config: RunManagerConfig) { }
 
@@ -155,7 +135,7 @@ export class RunManager {
       this.config.runs.delete(run.id);
       throw error;
     }
-    this.notifyLifecycle(run);
+    this.observers.notifyInitial(run);
     const execution = this.execute(run, session, input, options);
     this.activeExecutions.set(run.id, execution);
     void execution.then(
@@ -169,7 +149,7 @@ export class RunManager {
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
-      this.notifyObservers(event, run);
+      this.observers.notify(event, run);
       if (run.abort) return;
       if (event.type !== 'agent.message.done') {
         return;
@@ -187,10 +167,13 @@ export class RunManager {
       max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
-    const history = await this.resolveHistory(selectRecentHistory(session.messages.slice(0, -1)));
-    const contentManager = this.config.createSkillContentManager?.();
+    const history = await resolveHistory(
+      selectRecentHistory(session.messages.slice(0, -1)),
+      this.config.resolveImageAttachments,
+    );
 
     try {
+      const contentManager = await this.config.createSkillContentManager?.();
       const result = await this.config.agent.run({
         input: input.content,
         attachments: input.attachments,
@@ -363,7 +346,7 @@ export class RunManager {
       call_id: pendingAsk.call_id,
       selected,
     });
-    this.notifyObservers(event, run);
+    this.observers.notify(event, run);
 
     pending.resolve(selected);
 
@@ -396,7 +379,7 @@ export class RunManager {
       decision,
       scope,
     });
-    this.notifyObservers(event, run);
+    this.observers.notify(event, run);
     const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
@@ -443,51 +426,22 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
-    this.notifyObservers(event, run);
+    this.observers.notify(event, run);
     this.pruneTerminalRuns();
 
     return run;
   }
 
   addObserver(observer: (event: AgentEvent, run: RuntimeRun) => void) {
-    this.observers.add(observer);
-    return () => this.observers.delete(observer);
+    return this.observers.addEventObserver(observer);
   }
 
   addLifecycleObserver(observer: (event: RunLifecycleEvent) => void) {
-    this.lifecycleObservers.add(observer);
-    return () => this.lifecycleObservers.delete(observer);
-  }
-
-  private notifyObservers(event: AgentEvent, run: RuntimeRun) {
-    for (const observer of this.observers) {
-      try {
-        observer(event, run);
-      } catch (error) {
-        console.error(`Run observer failed for ${run.id}`, error);
-      }
-    }
+    return this.observers.addLifecycleObserver(observer);
   }
 
   private setStatus(run: RuntimeRun, status: RunStatus) {
-    if (run.status === status) return;
-    run.status = status;
-    this.notifyLifecycle(run);
-  }
-
-  private notifyLifecycle(run: RuntimeRun) {
-    const event: RunLifecycleEvent = {
-      type: run.status,
-      sessionId: run.session_id,
-      runId: run.id,
-    };
-    for (const observer of this.lifecycleObservers) {
-      try {
-        observer(event);
-      } catch (error) {
-        console.error(`Run lifecycle observer failed for ${run.id}`, error);
-      }
-    }
+    this.observers.notifyStatus(run, status);
   }
 
   cancelAll(reason: 'user' | 'shutdown' = 'user') {
@@ -545,19 +499,6 @@ export class RunManager {
     return records;
   }
 
-  private async resolveHistory(messages: Message[]): Promise<RuntimeMessage[]> {
-    return Promise.all(messages.map(async (message): Promise<RuntimeMessage> => {
-      if (message.role !== 'user') return message;
-      if (!message.attachments?.length) return { ...message, attachments: undefined };
-      if (!this.config.resolveImageAttachments) {
-        throw new Error('Image attachment resolver is not configured');
-      }
-      return {
-        ...message,
-        attachments: await this.config.resolveImageAttachments(message.attachments),
-      };
-    }));
-  }
 }
 
 function isActiveRun(run: RuntimeRun) {

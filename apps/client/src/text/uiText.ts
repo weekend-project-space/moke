@@ -348,7 +348,6 @@ const tool = {
   textContent: 'Text content',
   typeContent: 'Input content',
   unknownTool: 'Tool',
-  availableSkills: 'Available skills',
   changeLayout: 'Change layout',
   changePage: 'Change page',
   clickCompleted: 'Click completed',
@@ -376,7 +375,6 @@ const tool = {
   viewFile: 'View file',
   viewImage: 'View image',
   viewPage: 'View page',
-  viewTools: 'View tools',
   wait: 'Wait',
   waitingForResult: 'Waiting for result',
 } as const

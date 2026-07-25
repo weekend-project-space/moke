@@ -2,9 +2,9 @@ import type { ToolApprovalRecord } from '@moke/protocol';
 import type { RuntimeRun } from './run-state.js';
 
 export type RuntimeContentManager = {
-  addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;
+  addSkill: (skill: { id: string; name: string; description: string; path: string; content: string }) =>
+    'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
   buildContext: () => string;
-  reset?: () => void;
 };
 
 export type WorkspacePathApprovalRequest = {
