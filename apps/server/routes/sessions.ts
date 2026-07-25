@@ -62,7 +62,10 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.get('/api/sessions/:id', ({ context, json, params }) => {
     const { id: sessionId } = parseParams(params, idParamsSchema);
     const session = getSession(context, sessionId);
-    return json(200, { session: summarizeSession(session), messages: session.messages });
+    return json(200, {
+      session: { ...summarizeSession(session), metadata: session.metadata },
+      messages: session.messages,
+    });
   });
 
   router.post('/api/sessions/:id/fork', async ({ body, context, json, params }) => {

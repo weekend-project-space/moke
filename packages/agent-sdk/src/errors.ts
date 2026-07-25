@@ -21,7 +21,11 @@ export class MokeApiError extends MokeError {
 export class MokeNetworkError extends MokeError {}
 
 export class MokeProtocolError extends MokeError {
-  constructor(message: string, readonly path?: Array<string | number>) {
+  constructor(
+    message: string,
+    readonly path?: Array<string | number>,
+    readonly received?: unknown,
+  ) {
     super(message);
   }
 }

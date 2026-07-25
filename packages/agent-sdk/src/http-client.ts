@@ -7,17 +7,20 @@ export class HttpClient {
   readonly fetcher: typeof fetch;
   private readonly token?: string;
   private readonly defaultTimeoutMs: number;
+  private readonly userAgent?: string;
 
   constructor(options: MokeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.fetcher = (options.fetch || fetch).bind(globalThis);
     this.token = options.token;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
+    this.userAgent = options.userAgent;
   }
 
   headers(extra?: HeadersInit) {
     const headers = new Headers(extra);
     if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
+    if (this.userAgent && !headers.has('User-Agent')) headers.set('User-Agent', this.userAgent);
     return headers;
   }
 
@@ -59,7 +62,7 @@ export class HttpClient {
   }
 }
 
-async function readApiError(response: Response) {
+export async function readApiError(response: Response) {
   try {
     const body = await response.json() as Partial<ApiErrorResponse>;
     const code = typeof body.error?.code === 'string' ? body.error.code : 'HTTP_ERROR';

@@ -12,6 +12,12 @@ export type RunStatus =
   | 'cancelled'
   | 'timeout';
 
+export type RunLifecycleEvent = {
+  type: RunStatus;
+  sessionId: string;
+  runId: string;
+};
+
 export type AgentEvent = {
   id: string;
   seq: number;
@@ -261,7 +267,7 @@ export type ListSessionsResponse = {
 };
 
 export type GetSessionResponse = {
-  session: SessionSummary;
+  session: SessionSummary & Pick<Session, 'metadata'>;
   messages: Message[];
 };
 

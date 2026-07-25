@@ -20,6 +20,7 @@ import type {
 import { MokeInteractionRequiredError, MokeProtocolError, MokeRunError } from './errors.js';
 import { streamRunEvents } from './event-stream.js';
 import { HttpClient } from './http-client.js';
+import { RunLifecycleSubscription } from './run-lifecycle.js';
 import type {
   AnswerRunInput,
   InteractionHandlers,
@@ -27,11 +28,17 @@ import type {
   ApproveRunInput,
   CreateSessionInput,
   ForkSessionInput,
+  ListSessionsOptions,
   MokeClientOptions,
+  RunLifecycleListener,
+  RunLifecycleOptions,
+  SessionRunEventListener,
+  SessionRunEventOptions,
   PromptOptions,
   RequestOptions,
   RunEventsOptions,
   RunResult,
+  RunResultOptions,
   SendMessageInput,
   UpdateSessionInput,
 } from './types.js';
@@ -39,16 +46,21 @@ import type {
 export class MokeClient {
   readonly sessions: SessionsResource;
   readonly runs: RunsResource;
-  readonly http: HttpClient;
+  private readonly http: HttpClient;
+  private readonly runLifecycle: RunLifecycleSubscription;
 
   constructor(options: MokeClientOptions) {
     this.http = new HttpClient(options);
-    this.sessions = new SessionsResource(this);
-    this.runs = new RunsResource(this);
+    this.runLifecycle = new RunLifecycleSubscription(this.http);
+    this.sessions = new SessionsResource(this, this.http);
+    this.runs = new RunsResource(this.http);
   }
 
   session(id: string) { return new SessionHandle(this, id); }
   run(id: string, sessionId?: string) { return new RunHandle(this, id, sessionId); }
+  onRunLifecycle(listener: RunLifecycleListener, options?: RunLifecycleOptions) {
+    return this.runLifecycle.add(listener, options);
+  }
 
   async health(options?: RequestOptions) {
     const response = await this.http.request<{ status?: unknown }>('/api/health', {}, options);
@@ -56,42 +68,48 @@ export class MokeClient {
   }
 }
 
-export class SessionsResource {
-  constructor(private readonly client: MokeClient) {}
+class SessionsResource {
+  constructor(
+    private readonly client: MokeClient,
+    private readonly http: HttpClient,
+  ) {}
 
   async create(input: CreateSessionInput = {}, options?: RequestOptions) {
-    const data = await this.client.http.request<CreateSessionResponse>(
-      '/api/sessions', this.client.http.json('POST', input), options,
+    const data = await this.http.request<CreateSessionResponse>(
+      '/api/sessions', this.http.json('POST', input), options,
     );
     const session = requireObjectWithId(data.session, 'session');
     return new SessionHandle(this.client, session.id);
   }
 
-  async list(options: RequestOptions & { includeArchived?: boolean } = {}) {
+  async list(options: ListSessionsOptions = {}) {
     const query = options.includeArchived ? '?include_archived=true' : '';
-    const data = await this.client.http.request<ListSessionsResponse>(`/api/sessions${query}`, {}, options);
+    const data = await this.http.request<ListSessionsResponse>(`/api/sessions${query}`, {}, options);
     if (!Array.isArray(data.sessions)) throw new MokeProtocolError('Session list response is invalid');
     return data.sessions;
   }
 
   async get(id: string, options?: RequestOptions): Promise<Session> {
-    const data = await this.client.http.request<GetSessionResponse>(`/api/sessions/${id}`, {}, options);
-    const summary = requireObjectWithId(data.session, 'session') as SessionSummary & { metadata?: Record<string, unknown> };
+    const data = await this.http.request<GetSessionResponse>(`/api/sessions/${id}`, {}, options);
+    const summary = requireObjectWithId(data.session, 'session') as SessionSummary & { metadata?: unknown };
     if (!Array.isArray(data.messages)) throw new MokeProtocolError('Session messages response is invalid');
-    return { ...summary, messages: data.messages, metadata: summary.metadata || {} };
+    if (!summary.metadata || typeof summary.metadata !== 'object' || Array.isArray(summary.metadata)) {
+      throw new MokeProtocolError('Session metadata response is invalid');
+    }
+    return { ...summary, messages: data.messages, metadata: summary.metadata as Record<string, unknown> };
   }
 
   async update(id: string, input: UpdateSessionInput, options?: RequestOptions) {
-    const data = await this.client.http.request<UpdateSessionResponse>(
-      `/api/sessions/${id}`, this.client.http.json('PATCH', input), options,
+    const data = await this.http.request<UpdateSessionResponse>(
+      `/api/sessions/${id}`, this.http.json('PATCH', input), options,
     );
     return requireObjectWithId(data.session, 'session') as SessionSummary;
   }
 
   async fork(id: string, input: ForkSessionInput, options?: RequestOptions) {
-    const data = await this.client.http.request<ForkSessionResponse>(
+    const data = await this.http.request<ForkSessionResponse>(
       `/api/sessions/${id}/fork`,
-      this.client.http.json('POST', { message_id: input.messageId, mode: input.mode || 'after' }),
+      this.http.json('POST', { message_id: input.messageId, mode: input.mode || 'after' }),
       options,
     );
     const session = requireObjectWithId(data.session, 'session');
@@ -111,8 +129,8 @@ export class SessionsResource {
         ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
       },
     };
-    const data = await this.client.http.request<SendMessageResponse>(
-      `/api/sessions/${id}/messages`, this.client.http.json('POST', body), options,
+    const data = await this.http.request<SendMessageResponse>(
+      `/api/sessions/${id}/messages`, this.http.json('POST', body), options,
     );
     if (typeof data.run_id !== 'string' || typeof data.session_id !== 'string') {
       throw new MokeProtocolError('Run creation response is invalid');
@@ -132,6 +150,9 @@ export class SessionHandle {
   archive(options?: RequestOptions) { return this.update({ archived: true }, options); }
   fork(input: ForkSessionInput, options?: RequestOptions) { return this.client.sessions.fork(this.id, input, options); }
   send(input: SendMessageInput, options?: RequestOptions) { return this.client.sessions.send(this.id, input, options); }
+  onRunEvent(listener: SessionRunEventListener, options?: SessionRunEventOptions) {
+    return subscribeSessionRunEvents(this.client, this.id, listener, options);
+  }
 
   withHandlers(handlers: InteractionHandlers) {
     return new InteractiveSessionHandle(this.client, this.id, handlers);
@@ -168,21 +189,21 @@ export class InteractiveSessionHandle extends SessionHandle {
   }
 }
 
-export class RunsResource {
-  constructor(private readonly client: MokeClient) {}
+class RunsResource {
+  constructor(private readonly http: HttpClient) {}
 
   async get(id: string, options?: RequestOptions) {
-    const data = await this.client.http.request<GetRunResponse>(`/api/runs/${id}`, {}, options);
+    const data = await this.http.request<GetRunResponse>(`/api/runs/${id}`, {}, options);
     return requireRun(data.run);
   }
 
   async listActive(options?: RequestOptions) {
-    const data = await this.client.http.request<ListActiveRunsResponse>('/api/runs/active', {}, options);
+    const data = await this.http.request<ListActiveRunsResponse>('/api/runs/active', {}, options);
     if (!Array.isArray(data.runs)) throw new MokeProtocolError('Active run response is invalid');
     return data.runs;
   }
 
-  events(id: string, options?: RunEventsOptions) { return streamRunEvents(this.client.http, id, options); }
+  events(id: string, options?: RunEventsOptions) { return streamRunEvents(this.http, id, options); }
 
   async cancel(id: string, options?: RequestOptions) {
     await this.respond(id, { type: 'cancel', reason: 'User cancelled' }, options);
@@ -203,8 +224,8 @@ export class RunsResource {
   }
 
   private respond(id: string, body: unknown, options?: RequestOptions) {
-    return this.client.http.request<RespondToRunResponse>(
-      `/api/runs/${id}/respond`, this.client.http.json('POST', body), options,
+    return this.http.request<RespondToRunResponse>(
+      `/api/runs/${id}/respond`, this.http.json('POST', body), options,
     );
   }
 }
@@ -222,7 +243,7 @@ export class RunHandle {
   answer(input: AnswerRunInput, options?: RequestOptions) { return this.client.runs.answer(this.id, input, options); }
   approve(input: ApproveRunInput, options?: RequestOptions) { return this.client.runs.approve(this.id, input, options); }
 
-  async result(options?: RequestOptions): Promise<RunResult> {
+  async result(options?: RunResultOptions): Promise<RunResult> {
     const snapshot = await this.get(options);
     if (isTerminal(snapshot.status)) return resultFromSnapshot(snapshot);
     for await (const _event of this.events(options)) {
@@ -264,6 +285,92 @@ export class RunHandle {
     }
     return result;
   }
+}
+
+function subscribeSessionRunEvents(
+  client: MokeClient,
+  sessionId: string,
+  listener: SessionRunEventListener,
+  options: SessionRunEventOptions = {},
+) {
+  if (options.signal?.aborted) return () => undefined;
+
+  let stopped = false;
+  let currentRunId = '';
+  let detailController: AbortController | undefined;
+
+  const notifyError = (error: unknown) => {
+    try {
+      options.onError?.(error);
+    } catch (listenerError) {
+      console.error(`Session run error listener failed for ${sessionId}`, listenerError);
+    }
+  };
+
+  const stopDetail = () => {
+    detailController?.abort();
+    detailController = undefined;
+    currentRunId = '';
+  };
+
+  const consumeRun = (runId: string) => {
+    if (stopped || currentRunId === runId) return;
+    stopDetail();
+
+    const run = client.run(runId, sessionId);
+    const controller = new AbortController();
+    currentRunId = runId;
+    detailController = controller;
+
+    void (async () => {
+      try {
+        for await (const event of run.events({
+          signal: controller.signal,
+          onReconnect: (attempt, delayMs) => {
+            try {
+              options.onReconnect?.(run, attempt, delayMs);
+            } catch (error) {
+              console.error(`Session run reconnect listener failed for ${run.id}`, error);
+            }
+          },
+        })) {
+          if (stopped || detailController !== controller) return;
+          try {
+            listener(event, run);
+          } catch (error) {
+            console.error(`Session run event listener failed for ${run.id}`, error);
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && !stopped && detailController === controller) {
+          notifyError(error);
+        }
+      } finally {
+        if (detailController === controller) {
+          detailController = undefined;
+          currentRunId = '';
+        }
+      }
+    })();
+  };
+
+  const stopLifecycle = client.onRunLifecycle((event) => {
+    if (event.sessionId !== sessionId || isTerminal(event.type)) return;
+    consumeRun(event.runId);
+  }, {
+    onError: notifyError,
+  });
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    stopLifecycle();
+    stopDetail();
+    options.signal?.removeEventListener('abort', stop);
+  };
+
+  options.signal?.addEventListener('abort', stop, { once: true });
+  return stop;
 }
 
 function normalizeHandlers(overrides: InteractionHandlerOverrides = {}): InteractionHandlers {

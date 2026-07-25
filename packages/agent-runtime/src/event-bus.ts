@@ -36,7 +36,7 @@ export class EventBus {
       this.run.events.splice(0, this.run.events.length - MAX_RETAINED_RUN_EVENTS);
     }
     this.onEvent?.(event);
-    const sse = `event: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
+    const sse = `id: ${event.seq}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
     for (const res of this.run.clients) res.write(sse);
 
     if (type === 'agent.done' || type === 'agent.error') {

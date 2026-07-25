@@ -6,6 +6,7 @@ import type {
   PendingAsk,
   ReasoningEffort,
   RuntimeLimits,
+  RunLifecycleEvent,
 } from '@moke/protocol';
 import type { RunHandle, SessionHandle } from './client.js';
 
@@ -14,11 +15,16 @@ export type MokeClientOptions = {
   token?: string;
   fetch?: typeof fetch;
   defaultTimeoutMs?: number;
+  userAgent?: string;
 };
 
 export type RequestOptions = {
   signal?: AbortSignal;
   timeoutMs?: number;
+};
+
+export type ListSessionsOptions = RequestOptions & {
+  includeArchived?: boolean;
 };
 
 export type CreateSessionInput = {
@@ -44,6 +50,8 @@ export type SendMessageInput = {
   limits?: Partial<RuntimeLimits>;
 };
 
+export type PromptInput = SendMessageInput;
+
 export type AnswerRunInput = {
   requestId: string;
   optionId: string;
@@ -60,6 +68,8 @@ export type RunEventsOptions = RequestOptions & {
   afterSeq?: number;
   reconnect?: boolean;
   maxReconnectDelayMs?: number;
+  maxReconnectAttempts?: number;
+  onReconnect?: (attempt: number, delayMs: number) => void;
 };
 
 export type RunResult = {
@@ -73,6 +83,24 @@ export type RunResult = {
     durationMs: number;
   };
   error?: { code: string; message: string };
+};
+
+export type RunResultOptions = RequestOptions;
+
+export type RunLifecycleListener = (event: RunLifecycleEvent) => void;
+
+export type RunLifecycleOptions = {
+  signal?: AbortSignal;
+  onReconnect?: () => void;
+  onError?: (error: unknown) => void;
+};
+
+export type SessionRunEventListener = (event: AgentEvent, run: RunHandle) => void;
+
+export type SessionRunEventOptions = {
+  signal?: AbortSignal;
+  onReconnect?: (run: RunHandle, attempt: number, delayMs: number) => void;
+  onError?: (error: unknown) => void;
 };
 
 export type RunContext = {

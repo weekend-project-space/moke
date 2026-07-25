@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import type { AgentEvent, RunSnapshot } from '@moke/protocol';
 import { MokeClient } from './client.js';
+import { MokeNetworkError, MokeProtocolError } from './errors.js';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -29,6 +30,16 @@ function sse(events: AgentEvent[]) {
     start(controller) {
       controller.enqueue(encoder.encode(text.slice(0, midpoint)));
       controller.enqueue(encoder.encode(text.slice(midpoint)));
+      controller.close();
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+}
+
+function lifecycleSse(events: Array<{ type: string; sessionId: string; runId: string }>) {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const item of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(item)}\n\n`));
       controller.close();
     },
   }), { headers: { 'Content-Type': 'text/event-stream' } });
@@ -63,6 +74,32 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
     message: { role: 'user', content: 'hello' },
     options: { stream: true, reasoningEffort: 'high' },
   });
+});
+
+test('SessionHandle.get preserves session metadata returned by the detail endpoint', async () => {
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async () => json({
+      session: {
+        id: 'sess_1', title: 'Test', created_at: '', updated_at: '', archived: false,
+        pinned: false, preview: '', message_count: 0, metadata: { workspace: 'E:/work/example' },
+      },
+      messages: [],
+    })) as typeof fetch,
+  });
+
+  const session = await client.session('sess_1').get();
+
+  assert.deepEqual(session.metadata, { workspace: 'E:/work/example' });
+});
+
+test('SessionHandle.get rejects a detail response without metadata', async () => {
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async () => json({ session: { id: 'sess_1' }, messages: [] })) as typeof fetch,
+  });
+
+  await assert.rejects(client.session('sess_1').get(), MokeProtocolError);
 });
 
 test('RunHandle.events parses split SSE data and removes replayed sequences', async () => {
@@ -104,6 +141,290 @@ test('RunHandle.events stops when replay ends after an already consumed terminal
 
   assert.deepEqual(received, []);
   assert.equal(requests, 2);
+});
+
+test('RunHandle.events resumes with Last-Event-ID after a disconnected stream', async () => {
+  const state = event({ seq: 1, type: 'agent.state', payload: { state: 'reason' } });
+  const done = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+  const eventHeaders: Array<string | null> = [];
+  let eventRequests = 0;
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      if (String(input).endsWith('/events')) {
+        eventHeaders.push(new Headers(init?.headers).get('Last-Event-ID'));
+        eventRequests += 1;
+        return eventRequests === 1 ? sse([state]) : sse([done]);
+      }
+      return json({ run: { id: 'run_1', session_id: 'sess_1', status: 'running', seq: 1, events: [state] } });
+    }) as typeof fetch,
+  });
+
+  const received: AgentEvent[] = [];
+  for await (const item of client.run('run_1').events({ maxReconnectDelayMs: 0 })) received.push(item);
+
+  assert.deepEqual(received.map((item) => item.seq), [1, 2]);
+  assert.deepEqual(eventHeaders, [null, '1']);
+});
+
+test('RunHandle.events stops after the configured reconnect limit', async () => {
+  let requests = 0;
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async () => {
+      requests += 1;
+      throw new Error('offline');
+    }) as typeof fetch,
+  });
+
+  await assert.rejects(
+    async () => {
+      for await (const _item of client.run('run_1').events({
+        maxReconnectAttempts: 2,
+        maxReconnectDelayMs: 0,
+      })) { /* no events */ }
+    },
+    MokeNetworkError,
+  );
+  assert.equal(requests, 3);
+});
+
+test('RunHandle.events cancels the response body when the consumer exits early', async () => {
+  let cancelled = false;
+  const encoder = new TextEncoder();
+  const state = event({ seq: 1, type: 'agent.state', payload: { state: 'reason' } });
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(state)}\n\n`));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  const client = new MokeClient({ baseUrl: '', fetch: (async () => response) as typeof fetch });
+
+  for await (const _item of client.run('run_1').events()) break;
+
+  assert.equal(cancelled, true);
+});
+
+test('MokeClient applies the configured user agent when the runtime permits it', async () => {
+  let userAgent: string | null = null;
+  const client = new MokeClient({
+    baseUrl: '',
+    userAgent: 'moke-test/1.0',
+    fetch: (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      userAgent = new Headers(init?.headers).get('User-Agent');
+      return json({ status: 'ok' });
+    }) as typeof fetch,
+  });
+
+  await client.health();
+  assert.equal(userAgent, 'moke-test/1.0');
+});
+
+test('MokeClient exposes simplified application-wide run lifecycle events', async () => {
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async () => lifecycleSse([
+      { type: 'running', sessionId: 'sess_1', runId: 'run_1' },
+      { type: 'completed', sessionId: 'sess_1', runId: 'run_1' },
+    ])) as typeof fetch,
+  });
+  const received: Array<{ type: string; sessionId: string; runId: string }> = [];
+  let off = () => undefined;
+  const completed = new Promise<void>((resolve) => {
+    off = client.onRunLifecycle((event) => {
+      received.push(event);
+      if (event.type === 'completed') resolve();
+    });
+  });
+
+  await completed;
+  off();
+
+  assert.deepEqual(received, [
+    { type: 'running', sessionId: 'sess_1', runId: 'run_1' },
+    { type: 'completed', sessionId: 'sess_1', runId: 'run_1' },
+  ]);
+});
+
+test('MokeClient shares lifecycle transport and replays current runs to new listeners', async () => {
+  const encoder = new TextEncoder();
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  let transportSignal: AbortSignal | undefined;
+  let requests = 0;
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      requests += 1;
+      transportSignal = init?.signal || undefined;
+      return response;
+    }) as typeof fetch,
+  });
+  let firstReceived!: () => void;
+  const firstEvent = new Promise<void>((resolve) => { firstReceived = resolve; });
+  const first: string[] = [];
+  const offFirst = client.onRunLifecycle((event) => {
+    first.push(event.type);
+    firstReceived();
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  streamController.enqueue(encoder.encode('data: {"type":"running","sessionId":"sess_1","runId":"run_1"}\n\n'));
+  await firstEvent;
+
+  const second: string[] = [];
+  const offSecond = client.onRunLifecycle((event) => second.push(event.type));
+
+  assert.equal(requests, 1);
+  assert.deepEqual(first, ['running']);
+  assert.deepEqual(second, ['running']);
+  offFirst();
+  assert.equal(transportSignal?.aborted, false);
+  offSecond();
+  assert.equal(transportSignal?.aborted, true);
+  streamController.close();
+});
+
+test('SessionHandle.onRunEvent follows the session active run and provides its handle', async () => {
+  const encoder = new TextEncoder();
+  let lifecycleController!: ReadableStreamDefaultController<Uint8Array>;
+  let eventsController!: ReadableStreamDefaultController<Uint8Array>;
+  const lifecycleResponse = new Response(new ReadableStream<Uint8Array>({
+    start(controller) { lifecycleController = controller; },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  const eventsResponse = new Response(new ReadableStream<Uint8Array>({
+    start(controller) { eventsController = controller; },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (input: URL | RequestInfo) => String(input).endsWith('/lifecycle')
+      ? lifecycleResponse
+      : eventsResponse) as typeof fetch,
+  });
+  const received: Array<{ event: AgentEvent; runId: string; sessionId?: string }> = [];
+  let resolveDone!: () => void;
+  const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+  const stop = client.session('sess_1').onRunEvent((item, run) => {
+    received.push({ event: item, runId: run.id, sessionId: run.sessionId });
+    if (item.type === 'agent.done') resolveDone();
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"running","sessionId":"sess_1","runId":"run_1"}\n\n',
+  ));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const delta = event({
+    seq: 1,
+    type: 'agent.message.delta',
+    payload: { channel: 'answer', content: 'hello' },
+  });
+  const finished = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+  eventsController.enqueue(encoder.encode(`data: ${JSON.stringify(delta)}\n\n`));
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"completed","sessionId":"sess_1","runId":"run_1"}\n\n',
+  ));
+  eventsController.enqueue(encoder.encode(`data: ${JSON.stringify(finished)}\n\n`));
+  eventsController.close();
+
+  await done;
+  stop();
+  lifecycleController.close();
+
+  assert.deepEqual(received.map(({ event: item }) => item.type), ['agent.message.delta', 'agent.done']);
+  assert.deepEqual(received.map(({ runId }) => runId), ['run_1', 'run_1']);
+  assert.deepEqual(received.map(({ sessionId }) => sessionId), ['sess_1', 'sess_1']);
+});
+
+test('SessionHandle.onRunEvent ignores other sessions and stops future delivery', async () => {
+  const encoder = new TextEncoder();
+  let lifecycleController!: ReadableStreamDefaultController<Uint8Array>;
+  let eventRequests = 0;
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (input: URL | RequestInfo) => {
+      if (String(input).endsWith('/lifecycle')) {
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) { lifecycleController = controller; },
+        }), { headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      eventRequests += 1;
+      return lifecycleSse([]);
+    }) as typeof fetch,
+  });
+  const received: AgentEvent[] = [];
+  const stop = client.session('sess_1').onRunEvent((item) => received.push(item));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"running","sessionId":"sess_2","runId":"run_2"}\n\n',
+  ));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  stop();
+
+  assert.equal(eventRequests, 0);
+  assert.deepEqual(received, []);
+  assert.doesNotThrow(stop);
+});
+
+test('SessionHandle.onRunEvent follows subsequent runs without resubscribing', async () => {
+  const encoder = new TextEncoder();
+  let lifecycleController!: ReadableStreamDefaultController<Uint8Array>;
+  const eventControllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (input: URL | RequestInfo) => {
+      if (String(input).endsWith('/lifecycle')) {
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) { lifecycleController = controller; },
+        }), { headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) { eventControllers.push(controller); },
+      }), { headers: { 'Content-Type': 'text/event-stream' } });
+    }) as typeof fetch,
+  });
+  const received: string[] = [];
+  let resolveBoth!: () => void;
+  const bothRuns = new Promise<void>((resolve) => { resolveBoth = resolve; });
+  const stop = client.session('sess_1').onRunEvent((item, run) => {
+    received.push(`${run.id}:${item.type}`);
+    if (received.length === 2) resolveBoth();
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"running","sessionId":"sess_1","runId":"run_1"}\n\n',
+  ));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  eventControllers[0].enqueue(encoder.encode(`data: ${JSON.stringify(
+    event({ seq: 1, type: 'agent.done', payload: { status: 'completed' } }),
+  )}\n\n`));
+  eventControllers[0].close();
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"completed","sessionId":"sess_1","runId":"run_1"}\n\n',
+  ));
+  lifecycleController.enqueue(encoder.encode(
+    'data: {"type":"running","sessionId":"sess_1","runId":"run_2"}\n\n',
+  ));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  eventControllers[1].enqueue(encoder.encode(`data: ${JSON.stringify({
+    ...event({ seq: 1, type: 'agent.done', payload: { status: 'completed' } }),
+    run_id: 'run_2',
+  })}\n\n`));
+  eventControllers[1].close();
+
+  await bothRuns;
+  stop();
+  lifecycleController.close();
+
+  assert.deepEqual(received, ['run_1:agent.done', 'run_2:agent.done']);
 });
 
 test('RunHandle.result reads a completed run snapshot', async () => {

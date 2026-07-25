@@ -58,15 +58,14 @@ const {
   cancelRun,
   archiveSession,
   checkServer,
-  closeEventSource,
   createSession,
   decideApproval,
+  disposeAgentSession,
   events,
   forkSession,
   isRunning,
   isSubmittingApproval,
   isSubmittingAsk,
-  loadActiveRuns,
   loadSessions,
   messages,
   pendingApproval,
@@ -305,7 +304,6 @@ onMounted(async () => {
   if (await checkServer()) {
     await loadReasoningCapability()
     await loadSessions()
-    await loadActiveRuns()
     const initialSession = initialSessionFromHash()
     if (initialSession) {
       await selectSession(initialSession.id)
@@ -320,7 +318,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)
   disposeBrowserWorkspace()
-  closeEventSource()
+  disposeAgentSession()
 })
 
 defineExpose({

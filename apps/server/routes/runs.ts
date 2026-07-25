@@ -21,9 +21,37 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     return json(200, { runs });
   });
 
+  router.get('/api/runs/lifecycle', ({ context, raw }) => {
+    raw.res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    raw.res.flushHeaders();
+
+    const writeEvent = (event: { type: string; sessionId: string; runId: string }) => {
+      raw.res.write(`event: run.lifecycle\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+    const removeObserver = context.runManager.addLifecycleObserver(writeEvent);
+
+    for (const run of context.runs.values()) {
+      if (isTerminalRun(run)) continue;
+      writeEvent({ type: run.status, sessionId: run.session_id, runId: run.id });
+    }
+
+    raw.req.on('close', removeObserver);
+    return rawResponse();
+  });
+
   router.get('/api/runs/:id/events', ({ context, params, raw }) => {
     const { id: runId } = parseParams(params, idParamsSchema);
     const run = getRun(context, runId);
+    const afterSeq = readLastEventId(raw.req.headers['last-event-id']);
+    const firstRetainedSeq = run.events[0]?.seq;
+    if (afterSeq > 0 && firstRetainedSeq !== undefined && firstRetainedSeq > afterSeq + 1) {
+      throw new HttpError(409, 'EVENT_CURSOR_EXPIRED', 'Run event cursor is no longer available');
+    }
 
     raw.res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -33,7 +61,8 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     });
 
     for (const event of run.events) {
-      raw.res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      if (event.seq <= afterSeq) continue;
+      raw.res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     }
 
     if (isTerminalRun(run)) {
@@ -74,6 +103,13 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     const run = getRun(context, runId);
     return json(200, { run: toRunSnapshot(run) });
   });
+}
+
+function readLastEventId(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !/^\d+$/.test(raw)) return 0;
+  const seq = Number(raw);
+  return Number.isSafeInteger(seq) ? seq : 0;
 }
 
 function toRunSnapshot(run: RuntimeRun) {

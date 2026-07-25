@@ -1,9 +1,7 @@
 export {
   InteractiveSessionHandle,
   MokeClient,
-  RunsResource,
   RunHandle,
-  SessionsResource,
   SessionHandle,
 } from './client.js';
 export {
@@ -22,12 +20,19 @@ export type {
   ForkSessionInput,
   InteractionHandlerOverrides,
   InteractionHandlers,
+  ListSessionsOptions,
   MokeClientOptions,
   PromptOptions,
+  PromptInput,
   RequestOptions,
   RunEventsOptions,
+  RunLifecycleListener,
+  RunLifecycleOptions,
+  SessionRunEventListener,
+  SessionRunEventOptions,
   RunContext,
   RunResult,
+  RunResultOptions,
   SendMessageInput,
   UpdateSessionInput,
 } from './types.js';
@@ -37,6 +42,8 @@ export type {
   PendingApproval,
   PendingAsk,
   RunSnapshot,
+  RunLifecycleEvent,
+  RunStatus,
   Session,
   SessionSummary,
 } from '@moke/protocol';

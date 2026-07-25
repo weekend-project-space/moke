@@ -8,6 +8,8 @@ import type {
   PendingApproval,
   ReasoningEffort,
   ResolvedImageAttachment,
+  RunLifecycleEvent,
+  RunStatus,
   Session,
   ToolApprovalRecord,
 } from '@moke/protocol';
@@ -128,6 +130,7 @@ export class RunManager {
   >();
   private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
   private readonly observers = new Set<(event: AgentEvent, run: RuntimeRun) => void>();
+  private readonly lifecycleObservers = new Set<(event: RunLifecycleEvent) => void>();
 
   constructor(private readonly config: RunManagerConfig) { }
 
@@ -152,6 +155,7 @@ export class RunManager {
       this.config.runs.delete(run.id);
       throw error;
     }
+    this.notifyLifecycle(run);
     const execution = this.execute(run, session, input, options);
     this.activeExecutions.set(run.id, execution);
     void execution.then(
@@ -216,7 +220,7 @@ export class RunManager {
         session.updated_at = result.message.created_at;
         this.config.onSessionChanged?.(session);
       }
-      run.status = 'completed';
+      this.setStatus(run, 'completed');
       eventBus.emit('agent.done', {
         status: 'completed',
         usage: {
@@ -236,7 +240,7 @@ export class RunManager {
         content: `Run failed: ${message}`,
         created_at: new Date().toISOString(),
       };
-      run.status = 'failed';
+      this.setStatus(run, 'failed');
       eventBus.emit('agent.message.done', {
         message: assistantMessage,
       });
@@ -257,7 +261,6 @@ export class RunManager {
     input: WorkspacePathApprovalRequest,
   ): Promise<WorkspacePathApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
     run.pending_approval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
@@ -272,6 +275,7 @@ export class RunManager {
       suggested_root: input.suggestedRoot,
       created_at: new Date().toISOString(),
     };
+    this.setStatus(run, 'awaiting_approval');
 
     eventBus.emit('approval.required', run.pending_approval);
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
@@ -289,7 +293,6 @@ export class RunManager {
     input: ToolApprovalRequest,
   ): Promise<ToolApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
     run.pending_approval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
@@ -302,6 +305,7 @@ export class RunManager {
       },
       created_at: new Date().toISOString(),
     };
+    this.setStatus(run, 'awaiting_approval');
 
     eventBus.emit('approval.required', run.pending_approval);
     return new Promise<ToolApprovalDecision>((resolve, reject) => {
@@ -319,7 +323,6 @@ export class RunManager {
     input: { callId: string; question: string; options: Array<{ id: string; label: string }> },
   ): Promise<{ id: string; label: string }> {
     const askId = id('ask');
-    run.status = 'awaiting_user';
     run.pending_ask = {
       ask_id: askId,
       call_id: input.callId,
@@ -327,6 +330,7 @@ export class RunManager {
       options: input.options,
       created_at: new Date().toISOString(),
     };
+    this.setStatus(run, 'awaiting_user');
 
     eventBus.emit('ask_user.required', run.pending_ask);
 
@@ -352,7 +356,7 @@ export class RunManager {
     this.pendingAsks.delete(askId);
     const pendingAsk = run.pending_ask;
     run.pending_ask = undefined;
-    run.status = 'running';
+    this.setStatus(run, 'running');
 
     const event = new EventBus(run).emit('ask_user.answered', {
       ask_id: pendingAsk.ask_id,
@@ -384,7 +388,7 @@ export class RunManager {
     const pendingApproval = run.pending_approval;
     this.pendingApprovals.delete(approvalId);
     run.pending_approval = undefined;
-    run.status = 'running';
+    this.setStatus(run, 'running');
     const scope = options.scope || 'session';
     this.recordApproval(run.id, pendingApproval, decision, scope);
     const event = new EventBus(run).emit('approval.resolved', {
@@ -412,8 +416,8 @@ export class RunManager {
     const run = this.config.runs.get(runId);
     if (!run) return null;
     run.abort = true;
-    run.status = 'cancelled';
     run.cancel_reason = reason;
+    this.setStatus(run, 'cancelled');
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
 
@@ -450,12 +454,38 @@ export class RunManager {
     return () => this.observers.delete(observer);
   }
 
+  addLifecycleObserver(observer: (event: RunLifecycleEvent) => void) {
+    this.lifecycleObservers.add(observer);
+    return () => this.lifecycleObservers.delete(observer);
+  }
+
   private notifyObservers(event: AgentEvent, run: RuntimeRun) {
     for (const observer of this.observers) {
       try {
         observer(event, run);
       } catch (error) {
         console.error(`Run observer failed for ${run.id}`, error);
+      }
+    }
+  }
+
+  private setStatus(run: RuntimeRun, status: RunStatus) {
+    if (run.status === status) return;
+    run.status = status;
+    this.notifyLifecycle(run);
+  }
+
+  private notifyLifecycle(run: RuntimeRun) {
+    const event: RunLifecycleEvent = {
+      type: run.status,
+      sessionId: run.session_id,
+      runId: run.id,
+    };
+    for (const observer of this.lifecycleObservers) {
+      try {
+        observer(event);
+      } catch (error) {
+        console.error(`Run lifecycle observer failed for ${run.id}`, error);
       }
     }
   }

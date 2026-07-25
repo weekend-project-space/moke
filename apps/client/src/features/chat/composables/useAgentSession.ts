@@ -1,8 +1,9 @@
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
+import type { RunHandle, RunLifecycleEvent, RunStatus } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
 import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
-import { AgentApiError, createAgentApi } from '../api/agentApi'
+import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
 import { reduceRunEvent } from '../model/runEventReducer'
 import {
@@ -19,11 +20,11 @@ import {
   startRun,
   type SessionRunState,
 } from '../model/runState'
-import { createRunEventStream } from '../services/runEventStream'
 import { createStreamingTextBuffer } from '../services/streamingTextBuffer'
 
 type UseAgentSessionOptions = {
   apiBase: string
+  api?: AgentApi
   isFinalAssistantMessage: (message: Message | undefined) => boolean
   onMessagesLoaded?: () => void | Promise<void>
   onRunFinished?: (sessionId: string) => void | Promise<void>
@@ -45,28 +46,21 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const submittingAskId = ref('')
   const submittingApprovalId = ref('')
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
+  const activeRuns = reactive<Record<string, { runId: string; status: RunStatus }>>({})
+  const currentRun = shallowRef<RunHandle>()
   const sessionLoadGuard = createLatestRequestGuard()
-  const api = createAgentApi(options.apiBase)
+  const api = options.api || createAgentApi(options.apiBase)
+  const pendingLocalSessions = new Set<string>()
+  const localRunIds = new Set<string>()
+  let stopRunLifecycle: (() => void) | undefined
+  let stopSessionRun: (() => void) | undefined
+  let watchedSessionId = ''
+  let sessionsRefreshTimer: number | undefined
   const streamingTextBuffer = createStreamingTextBuffer({
     onFlush: (targetSessionId, text) => {
       ensureRunState(targetSessionId).streamingText = text
     },
   })
-  const runEventStream = createRunEventStream({
-    apiBase: options.apiBase,
-    onActivity: (targetSessionId) => {
-      const state = sessionRunStates[targetSessionId]
-      if (!state) return
-      markRunConnected(state)
-    },
-    onEvent: handleRunEvent,
-    onReconnecting: (targetSessionId) => {
-      const state = sessionRunStates[targetSessionId]
-      if (!state || !isRunActive(state)) return
-      markRunReconnecting(state, uiText.app.reconnecting)
-    },
-  })
-
   const emptyRunState = createSessionRunState()
   const currentRunState = computed(() => (sessionId.value ? sessionRunStates[sessionId.value] : undefined) || emptyRunState)
   const runId = computed(() => currentRunState.value.runId)
@@ -81,9 +75,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const isRunning = computed(() => isRunActive(currentRunState.value))
   const runError = computed(() => currentRunState.value.error)
   const runningSessionIds = computed(() =>
-    Object.entries(sessionRunStates)
-      .filter(([, state]) => isRunActive(state))
-      .map(([id]) => id),
+    Object.keys(activeRuns),
   )
 
   const sortedSessions = computed(() =>
@@ -99,9 +91,81 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   function resetRunState(targetSessionId: string) {
-    runEventStream.close(targetSessionId)
     streamingTextBuffer.clear(targetSessionId)
     delete sessionRunStates[targetSessionId]
+  }
+
+  function startRunLifecycle() {
+    if (stopRunLifecycle) return
+    stopRunLifecycle = api.onRunLifecycle(handleRunLifecycle, {
+      onReconnect: clearActiveRuns,
+      onError: clearActiveRuns,
+    })
+  }
+
+  function clearActiveRuns() {
+    for (const targetSessionId of Object.keys(activeRuns)) delete activeRuns[targetSessionId]
+  }
+
+  function handleRunLifecycle(event: RunLifecycleEvent) {
+    const previous = activeRuns[event.sessionId]
+    if (isTerminalRunStatus(event.type)) {
+      localRunIds.delete(event.runId)
+      if (previous?.runId === event.runId) delete activeRuns[event.sessionId]
+      scheduleSessionsRefresh()
+      return
+    }
+
+    activeRuns[event.sessionId] = { runId: event.runId, status: event.type }
+    if (previous?.runId === event.runId) return
+
+    scheduleSessionsRefresh()
+    const isLocalRun = pendingLocalSessions.has(event.sessionId) || localRunIds.has(event.runId)
+    if (event.sessionId === sessionId.value && !isLocalRun) {
+      void refreshSessionMessagesIfActive(event.sessionId)
+    }
+  }
+
+  function watchSessionRun(targetSessionId: string) {
+    if (targetSessionId && watchedSessionId === targetSessionId && stopSessionRun) return
+    stopSessionRun?.()
+    stopSessionRun = undefined
+    watchedSessionId = targetSessionId
+    currentRun.value = undefined
+    if (!targetSessionId) return
+
+    stopSessionRun = api.onSessionRunEvent(targetSessionId, (event, run) => {
+      if (sessionId.value !== targetSessionId) return
+      const state = ensureRunState(targetSessionId)
+      if (state.runId !== run.id) {
+        streamingTextBuffer.clear(targetSessionId)
+        state.events = []
+        state.seenEventKeys.clear()
+        connectRun(state, run.id)
+      }
+      currentRun.value = run
+      markRunConnected(state)
+      handleRunEvent(targetSessionId, event)
+    }, {
+      onReconnect: (run) => {
+        if (sessionId.value !== targetSessionId || currentRun.value?.id !== run.id) return
+        const state = sessionRunStates[targetSessionId]
+        if (state && isRunActive(state)) markRunReconnecting(state, uiText.app.reconnecting)
+      },
+      onError: () => {
+        if (sessionId.value !== targetSessionId) return
+        const state = sessionRunStates[targetSessionId]
+        if (state && isRunActive(state)) finishRunState(state, uiText.app.disconnectedFromMoke)
+      },
+    })
+  }
+
+  function scheduleSessionsRefresh() {
+    if (sessionsRefreshTimer !== undefined) return
+    sessionsRefreshTimer = window.setTimeout(() => {
+      sessionsRefreshTimer = undefined
+      void loadSessions()
+    }, 50)
   }
 
   async function checkServer() {
@@ -111,6 +175,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       try {
         if (await api.checkHealth()) {
           serverStatus.value = 'online'
+          startRunLifecycle()
           return true
         }
       } catch {
@@ -133,6 +198,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       sessionId.value = nextSessionId
       messages.value = []
       resetRunState(nextSessionId)
+      watchSessionRun(nextSessionId)
       await loadSessions()
       return true
     } catch {
@@ -147,45 +213,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       sessions.value = await api.listSessions()
     } catch {
       // Keep the last successful session list during transient failures.
-    }
-  }
-
-  async function loadActiveRuns() {
-    if (serverStatus.value !== 'online') return
-
-    let activeRuns
-    try {
-      activeRuns = await api.listActiveRuns()
-    } catch {
-      return
-    }
-    const restoredSessionIds = new Set<string>()
-
-    for (const run of activeRuns) {
-      if (!run.session_id || !run.run_id || !run.events_url) continue
-
-      restoredSessionIds.add(run.session_id)
-      const state = ensureRunState(run.session_id)
-
-      if (state.runId !== run.run_id) {
-        runEventStream.close(run.session_id)
-        state.runId = run.run_id
-        state.events = []
-        streamingTextBuffer.clear(run.session_id)
-        state.seenEventKeys.clear()
-      }
-
-      connectRun(state, run.run_id, run.pending_ask, run.pending_approval)
-
-      runEventStream.subscribe(run.session_id, run.events_url)
-    }
-
-    for (const [targetSessionId, state] of Object.entries(sessionRunStates)) {
-      if (!isRunActive(state)) continue
-      if (restoredSessionIds.has(targetSessionId)) continue
-
-      finishRunState(state)
-      runEventStream.close(targetSessionId)
     }
   }
 
@@ -236,6 +263,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       sessionId.value = id
       messages.value = loadedMessages
+      watchSessionRun(id)
 
       if (optionsOverride.notify !== false) {
         await nextTick()
@@ -275,6 +303,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessionId.value = forked.sessionId
     messages.value = forked.messages
     resetRunState(forked.sessionId)
+    watchSessionRun(forked.sessionId)
     await nextTick()
     await options.onMessagesLoaded?.()
     return true
@@ -300,6 +329,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       content: trimmedContent,
       attachments,
     })
+    pendingLocalSessions.add(targetSessionId)
 
     try {
       const run = await api.sendMessage(targetSessionId, {
@@ -308,27 +338,39 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         reasoningEffort: draft.options?.reasoningEffort,
       })
 
-      connectRun(state, run.runId)
-      void loadSessions()
-      runEventStream.subscribe(targetSessionId, run.eventsUrl)
+      localRunIds.add(run.id)
+      if (currentRun.value?.id !== run.id) currentRun.value = run
+      if (state.runId !== run.id || state.lifecycle.status === 'starting') connectRun(state, run.id)
+      scheduleSessionsRefresh()
       return true
     } catch {
       finishRunState(state, uiText.app.sendFailed)
       optimisticMessage.rollback()
       void checkServer()
       return false
+    } finally {
+      pendingLocalSessions.delete(targetSessionId)
     }
   }
 
-  function closeEventSource(targetSessionId?: string) {
-    if (targetSessionId) runEventStream.close(targetSessionId)
-    else runEventStream.closeAll()
+  function disposeAgentSession() {
+    stopSessionRun?.()
+    stopSessionRun = undefined
+    watchedSessionId = ''
+    currentRun.value = undefined
+    stopRunLifecycle?.()
+    stopRunLifecycle = undefined
+    window.clearTimeout(sessionsRefreshTimer)
+    sessionsRefreshTimer = undefined
+    clearActiveRuns()
+    pendingLocalSessions.clear()
+    localRunIds.clear()
   }
 
   function finishRunEffects(targetSessionId: string) {
-    runEventStream.close(targetSessionId)
+    if (sessionId.value === targetSessionId) currentRun.value = undefined
     void (async () => {
-      await loadSessions()
+      scheduleSessionsRefresh()
       await refreshSessionMessagesIfActive(targetSessionId)
       await options.onRunFinished?.(targetSessionId)
     })()
@@ -351,25 +393,50 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     if (reduction.effects.message) {
       const doneMessage = reduction.effects.message
-      if (doneMessage && sessionId.value === targetSessionId) messages.value.push(doneMessage)
+      if (
+        doneMessage
+        && sessionId.value === targetSessionId
+        && !messages.value.some((message) => message.id === doneMessage.id)
+      ) {
+        messages.value.push(doneMessage)
+      }
       if (options.isFinalAssistantMessage(doneMessage)) streamingTextBuffer.clear(targetSessionId)
     }
 
     if (reduction.effects.finish) finishRunEffects(targetSessionId)
   }
 
+  async function reconcileRun(targetSessionId: string, run: RunHandle) {
+    try {
+      const snapshot = await run.get()
+      if (sessionId.value !== targetSessionId || currentRun.value?.id !== run.id) return
+      const state = ensureRunState(targetSessionId)
+      if (isTerminalRunStatus(snapshot.status)) {
+        finishRunState(state)
+        scheduleSessionsRefresh()
+        await refreshSessionMessagesIfActive(targetSessionId)
+        return
+      }
+      connectRun(state, run.id, snapshot.pending_ask, snapshot.pending_approval)
+    } catch {
+      const state = sessionRunStates[targetSessionId]
+      if (state?.runId === run.id) setRunError(state, uiText.app.responseFailed)
+    }
+  }
+
   async function selectAskOption(option: AskOption) {
     const targetSessionId = sessionId.value
     const state = sessionRunStates[targetSessionId]
     const ask = state ? pendingAskFrom(state) : null
-    if (!ask || !state.runId) return
+    const run = currentRun.value
+    if (!ask || !run || run.id !== state?.runId) return
     if (submittingAskId.value === ask.ask_id) return
 
-    const targetRunId = state.runId
+    const targetRunId = run.id
     submittingAskId.value = ask.ask_id
 
     try {
-      await api.choose(targetRunId, ask.ask_id, option.id)
+      await run.answer({ requestId: ask.ask_id, optionId: option.id })
       const currentState = sessionRunStates[targetSessionId]
       if (
         currentState?.runId === targetRunId
@@ -380,7 +447,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
     } catch (error) {
       if (error instanceof AgentApiError && error.code === 'ASK_NOT_PENDING') {
-        await loadActiveRuns()
+        await reconcileRun(targetSessionId, run)
       } else {
         const currentState = sessionRunStates[targetSessionId]
         if (currentState?.runId === targetRunId && pendingAskFrom(currentState)?.ask_id === ask.ask_id) {
@@ -396,13 +463,19 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const targetSessionId = sessionId.value
     const state = sessionRunStates[targetSessionId]
     const approval = state ? pendingApprovalFrom(state) : null
-    if (!state || !approval || !state.runId) return
+    const run = currentRun.value
+    if (!state || !approval || !run || run.id !== state.runId) return
     if (submittingApprovalId.value === approval.approval_id) return
-    const targetRunId = state.runId
+    const targetRunId = run.id
     submittingApprovalId.value = approval.approval_id
 
     try {
-      await api.approve(targetRunId, approval.approval_id, decision, scope)
+      await run.approve({
+        requestId: approval.approval_id,
+        decision,
+        scope,
+        message: decision === 'rejected' ? 'User rejected the action' : undefined,
+      })
       const currentState = sessionRunStates[targetSessionId]
       if (
         currentState?.runId === targetRunId
@@ -413,7 +486,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
     } catch (error) {
       if (error instanceof AgentApiError && error.code === 'APPROVAL_NOT_PENDING') {
-        await loadActiveRuns()
+        await reconcileRun(targetSessionId, run)
       } else {
         const currentState = sessionRunStates[targetSessionId]
         if (currentState?.runId === targetRunId && pendingApprovalFrom(currentState)?.approval_id === approval.approval_id) {
@@ -428,10 +501,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   async function cancelRun() {
     const targetSessionId = sessionId.value
     const state = sessionRunStates[targetSessionId]
-    if (!state?.runId || !isRunActive(state)) return
-    const targetRunId = state.runId
+    const run = currentRun.value
+    if (!state?.runId || !run || run.id !== state.runId || !isRunActive(state)) return
+    const targetRunId = run.id
     try {
-      await api.cancel(targetRunId)
+      await run.cancel()
     } catch {
       const currentState = sessionRunStates[targetSessionId]
       if (currentState?.runId === targetRunId && isRunActive(currentState)) {
@@ -444,16 +518,15 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     cancelRun,
     archiveSession,
     checkServer,
-    closeEventSource,
     createSession,
     decideApproval,
+    disposeAgentSession,
     events,
     forkSession,
     isRunning,
     isSubmittingApproval,
     isSubmittingAsk,
     loadSessions,
-    loadActiveRuns,
     loadSessionMessages,
     messages,
     pendingApproval,
@@ -472,4 +545,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sortedSessions,
     streamingText,
   }
+}
+
+function isTerminalRunStatus(status: RunLifecycleEvent['type']) {
+  return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timeout'
 }

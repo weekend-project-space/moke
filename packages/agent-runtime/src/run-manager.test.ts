@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { ImageAttachment, Message, Session, ToolApprovalRecord } from '@moke/protocol';
+import type { ImageAttachment, Message, RunLifecycleEvent, Session, ToolApprovalRecord } from '@moke/protocol';
 import type { Agent } from './agent.js';
 import { RunManager, selectRecentHistory } from './run-manager.js';
 import { ToolRegistry } from './tool-registry.js';
@@ -90,6 +90,36 @@ test('RunManager calls beforeStart before agent execution can emit events', asyn
   });
 
   await waitFor(() => run.status === 'completed');
+});
+
+test('RunManager emits the simplified lifecycle whenever a run status changes', async () => {
+  const session = createSession();
+  const runs = new Map();
+  const agent: Agent = {
+    async run(input) {
+      const selected = await input.context.askUser?.({
+        callId: 'call_1',
+        question: 'Continue?',
+        options: [{ id: 'yes', label: 'Yes' }],
+      });
+      return { toolCalls: 1, message: message({ role: 'assistant', content: selected?.label || '' }) };
+    },
+  };
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  const observed: RunLifecycleEvent[] = [];
+  manager.addLifecycleObserver((event) => observed.push(event));
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => run.status === 'awaiting_user');
+  manager.answer(run.id, run.pending_ask?.ask_id || '', 'yes');
+  await waitFor(() => run.status === 'completed');
+
+  assert.deepEqual(observed, [
+    { type: 'running', sessionId: session.id, runId: run.id },
+    { type: 'awaiting_user', sessionId: session.id, runId: run.id },
+    { type: 'running', sessionId: session.id, runId: run.id },
+    { type: 'completed', sessionId: session.id, runId: run.id },
+  ]);
 });
 
 async function waitFor(predicate: () => boolean) {

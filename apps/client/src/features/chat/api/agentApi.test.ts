@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { AgentApiError, createAgentApi } from './agentApi'
 
-test('agentApi sends a typed message request and normalizes the run response', async () => {
+test('agentApi sends a typed message request and returns the SDK RunHandle', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
     calls.push({ url: String(input), init })
@@ -20,7 +20,8 @@ test('agentApi sends a typed message request and normalizes the run response', a
     reasoningEffort: 'high',
   })
 
-  assert.deepEqual(run, { runId: 'run_1', eventsUrl: '/api/runs/run_1/events' })
+  assert.equal(run.id, 'run_1')
+  assert.equal(run.sessionId, 'session_1')
   assert.equal(calls[0]?.url, 'http://localhost:4010/api/sessions/session_1/messages')
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     message: { role: 'user', content: 'hello' },

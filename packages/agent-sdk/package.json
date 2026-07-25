@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
-    "clean": "tsc -b --clean"
+    "clean": "tsc -b --clean",
+    "test": "tsx --test src/*.test.ts"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

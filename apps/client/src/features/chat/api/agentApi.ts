@@ -1,14 +1,11 @@
 import { MokeApiError, MokeClient } from '@moke/agent-sdk'
-import type { ImageAttachment, Message, PendingApproval, PendingAsk, ReasoningEffort, SessionSummary } from '../model/conversation'
-
-export type ActiveRunSummary = {
-  session_id: string
-  run_id: string
-  status: string
-  events_url: string
-  pending_ask?: PendingAsk
-  pending_approval?: PendingApproval
-}
+import type {
+  RunLifecycleListener,
+  RunLifecycleOptions,
+  SessionRunEventListener,
+  SessionRunEventOptions,
+} from '@moke/agent-sdk'
+import type { ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 
 export type SendMessageRequest = {
   content: string
@@ -39,8 +36,12 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
       return client.sessions.list()
     },
 
-    async listActiveRuns(): Promise<ActiveRunSummary[]> {
-      return (await client.runs.listActive()).map((run) => ({ ...run }))
+    onRunLifecycle(listener: RunLifecycleListener, options?: RunLifecycleOptions) {
+      return client.onRunLifecycle(listener, options)
+    },
+
+    onSessionRunEvent(sessionId: string, listener: SessionRunEventListener, options?: SessionRunEventOptions) {
+      return client.session(sessionId).onRunEvent(listener, options)
     },
 
     async updateSession(id: string, payload: Record<string, unknown>) {
@@ -57,34 +58,11 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
     },
 
     async sendMessage(sessionId: string, input: SendMessageRequest) {
-      const run = await client.session(sessionId).send({
+      return client.session(sessionId).send({
         content: input.content,
         attachments: input.attachments,
         reasoningEffort: input.reasoningEffort,
       })
-      return { runId: run.id, eventsUrl: `/api/runs/${run.id}/events` }
-    },
-
-    async choose(runId: string, askId: string, optionId: string) {
-      await client.run(runId).answer({ requestId: askId, optionId })
-    },
-
-    async approve(
-      runId: string,
-      approvalId: string,
-      decision: 'approved' | 'rejected',
-      scope: 'once' | 'session' | 'persistent',
-    ) {
-      await client.run(runId).approve({
-        requestId: approvalId,
-        decision,
-        scope,
-        message: decision === 'rejected' ? 'User rejected the action' : undefined,
-      })
-    },
-
-    async cancel(runId: string) {
-      await client.run(runId).cancel()
     },
   }
 }

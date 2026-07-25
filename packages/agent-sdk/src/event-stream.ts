@@ -10,17 +10,23 @@ export async function* streamRunEvents(
   runId: string,
   options: RunEventsOptions = {},
 ): AsyncGenerator<AgentEvent> {
-  let lastSeq = options.afterSeq ?? 0;
+  let lastSeq = Number.isSafeInteger(options.afterSeq) && (options.afterSeq ?? 0) >= 0
+    ? options.afterSeq ?? 0
+    : 0;
   let attempt = 0;
   const reconnect = options.reconnect !== false;
-  const maxDelay = options.maxReconnectDelayMs ?? 5_000;
+  const maxDelay = Math.max(0, options.maxReconnectDelayMs ?? 5_000);
+  const maxAttempts = Math.max(0, Math.trunc(options.maxReconnectAttempts ?? 8));
+  let lastError: unknown;
 
   while (true) {
     throwIfAborted(options.signal);
     let endedNormally = false;
     try {
+      const headers = http.headers({ Accept: 'text/event-stream' });
+      if (lastSeq > 0) headers.set('Last-Event-ID', String(lastSeq));
       const response = await http.fetcher(`${http.baseUrl}/api/runs/${runId}/events`, {
-        headers: http.headers({ Accept: 'text/event-stream' }),
+        headers,
         signal: options.signal,
       });
       if (!response.ok) throw await toApiError(response);
@@ -48,6 +54,7 @@ export async function* streamRunEvents(
       if (!reconnect) {
         throw new MokeNetworkError(error instanceof Error ? error.message : 'Event stream failed', { cause: error });
       }
+      lastError = error;
     }
 
     if (!reconnect) {
@@ -55,14 +62,20 @@ export async function* streamRunEvents(
       return;
     }
     attempt += 1;
-    await delay(Math.min(500 * 2 ** (attempt - 1), maxDelay), options.signal);
+    if (attempt > maxAttempts) {
+      throw new MokeNetworkError('Event stream reconnect limit exceeded', { cause: lastError });
+    }
+    const reconnectDelay = Math.min(500 * 2 ** (attempt - 1), maxDelay);
+    options.onReconnect?.(attempt, reconnectDelay);
+    await delay(reconnectDelay, options.signal);
   }
 }
 
-async function* readSseData(stream: ReadableStream<Uint8Array>, signal?: AbortSignal) {
+export async function* readSseData(stream: ReadableStream<Uint8Array>, signal?: AbortSignal) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let completed = false;
   try {
     while (true) {
       throwIfAborted(signal);
@@ -80,9 +93,13 @@ async function* readSseData(stream: ReadableStream<Uint8Array>, signal?: AbortSi
         if (data) yield data;
         boundary = buffer.indexOf('\n\n');
       }
-      if (done) return;
+      if (done) {
+        completed = true;
+        return;
+      }
     }
   } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

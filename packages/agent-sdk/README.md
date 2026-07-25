@@ -37,6 +37,7 @@ const moke = new MokeClient({
 | `token` | 否 | 服务端启用本地访问保护时使用的 bearer token。 |
 | `fetch` | 否 | 自定义 fetch，主要用于测试或特殊运行环境。 |
 | `defaultTimeoutMs` | 否 | 普通 HTTP 请求超时，默认 30 秒。它不会取消远端 Run。 |
+| `userAgent` | 否 | 运行环境允许时附加到请求的 `User-Agent`。 |
 
 ## 创建 Session
 
@@ -117,7 +118,56 @@ for await (const event of run.events()) {
 }
 ```
 
-SDK 会解析 SSE、按事件 `seq` 去重并在异常断线后退避重连。收到 `agent.done` 或 `agent.error` 后，事件迭代结束。
+SDK 会解析 SSE、按事件 `seq` 去重，并通过 `Last-Event-ID` 从最后消费位置恢复。异常断线默认最多重试 8 次；可通过 `maxReconnectAttempts`、`maxReconnectDelayMs` 和 `onReconnect` 调整策略。收到 `agent.done` 或 `agent.error` 后，事件迭代结束。
+
+## 监听应用级 Run 生命周期
+
+`onRunLifecycle()` 用于跨 Session 监听当前 Moke Server 中所有 Run 的状态变化。事件只包含现有 `RunStatus`、Session ID 和 Run ID：
+
+```ts
+const off = moke.onRunLifecycle((event) => {
+  console.log(event.type, event.sessionId, event.runId);
+});
+
+off();
+```
+
+也可以让订阅跟随 `AbortSignal` 自动清理：
+
+```ts
+const controller = new AbortController();
+
+moke.onRunLifecycle(listener, {
+  signal: controller.signal,
+  onReconnect() {
+    // 清理派生的 Active Run 状态，等待服务端重新同步。
+  },
+  onError(error) {
+    console.error(error);
+  },
+});
+
+controller.abort();
+```
+
+多个 listener 共享同一条生命周期连接。`completed`、`failed`、`cancelled` 和 `timeout` 表示 Run 已终止；单个 Run 的消息、工具和交互细节仍通过 `run.events()` 获取。
+
+## 监听 Session 当前 Run
+
+交互式应用应先使用 `onRunLifecycle()` 维护全局运行状态，再用 `SessionHandle.onRunEvent()` 监听当前 Session 的详细事件：
+
+```ts
+const stop = moke.session(sessionId).onRunEvent((event, run) => {
+  if (event.type === 'ask_user.required') {
+    void run.answer({
+      requestId: event.payload.ask_id,
+      optionId: event.payload.options[0].id,
+    });
+  }
+});
+```
+
+监听建立时可以没有活跃 Run。SDK 会复用全局生命周期连接，自动发现该 Session 当前及后续 Run，并把每个 `AgentEvent` 及其对应的稳定 `RunHandle` 传给 listener。返回的函数只停止本地监听，不取消远端 Run。
 
 可以通过 `AbortSignal` 停止本地等待：
 
@@ -317,8 +367,8 @@ try {
 在仓库根目录执行：
 
 ```text
-npx tsc -b packages/agent-sdk
-npx tsx --test packages/agent-sdk/src/*.test.ts
+npm run build --workspace @moke/agent-sdk
+npm test --workspace @moke/agent-sdk
 ```
 
 完整回归：
