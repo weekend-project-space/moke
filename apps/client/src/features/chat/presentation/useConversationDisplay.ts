@@ -6,7 +6,6 @@ import { uiText } from '../../../text/uiText'
 import {
   describeToolCall,
   formatJson,
-  formatToolName,
   parseToolContent,
   shortText,
   summarizeOutput,
@@ -26,7 +25,6 @@ type UseConversationDisplayOptions = {
   pendingAsk: Ref<PendingAsk | null>
   pendingApproval: Ref<PendingApproval | null>
   processCollapsed: Ref<Record<string, boolean>>
-  toolLabels: Record<string, string>
   formatTimelineTime: (time: number) => string
 }
 
@@ -80,7 +78,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         const callId = String(event.payload.call_id || event.id)
         callsById.set(callId, event)
         if (isPendingInteractionCall(String(event.payload.tool || ''), callId, options)) continue
-        items.push(createToolCallEventProcessItem(event, options.toolLabels))
+        items.push(createToolCallEventProcessItem(event))
         continue
       }
 
@@ -377,7 +375,7 @@ function normalizeComparableText(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function createToolCallEventProcessItem(event: ToolCallEvent, toolLabels: Record<string, string>): ProcessItem {
+function createToolCallEventProcessItem(event: ToolCallEvent): ProcessItem {
   const name = String(event.payload.tool || '')
   const input = toRecord(event.payload.input)
   const description = describeToolCall(name, input)
@@ -386,7 +384,7 @@ function createToolCallEventProcessItem(event: ToolCallEvent, toolLabels: Record
   return {
     id: `process-tool-call-event-${event.id}`,
     kind: 'tool-call',
-    title: formatToolName(name, toolLabels),
+    title: name || uiText.tool.unknownTool,
     detail: description.objectLabel,
     tone: 'neutral',
     time: parseEventTime(event),

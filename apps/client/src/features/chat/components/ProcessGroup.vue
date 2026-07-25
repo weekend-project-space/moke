@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { BrainCircuit, Check, CircleX, ChevronDown, ChevronRight, Code2, FilePenLine, FolderSearch, ShieldCheck, ShieldX, Terminal } from 'lucide-vue-next'
+import { Check, CircleX, ChevronDown, ChevronRight, Code2, FilePenLine, Plug, Search, Send, ShieldCheck, ShieldX, Sparkles, SquareDashedMousePointer, SquareTerminal } from 'lucide-vue-next'
 import type { ToolCategory, ProcessViewItem } from '../presentation/types'
 import ToolStepDetails from './ToolStepDetails.vue'
 import { uiText } from '../../../text/uiText'
@@ -82,7 +82,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
         </summary>
         <summary v-else-if="processItem.kind === 'reasoning'" class="process-reasoning-summary">
           <span class="process-reasoning-icon" aria-hidden="true">
-            <BrainCircuit :size="14" stroke-width="1.8" />
+            <Sparkles :size="14" stroke-width="1.8" />
           </span>
           <span class="process-reasoning-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
           <span class="process-step-caret" aria-hidden="true">
@@ -93,11 +93,14 @@ function iconKind(step: { toolCategory: ToolCategory }) {
         <summary v-else-if="processItem.kind === 'tool-step'" class="process-tool-step-summary">
           <span class="process-tool-icon" aria-hidden="true">
             <FilePenLine v-if="iconKind(processItem) === 'change'" :size="14" stroke-width="1.9" />
-            <FolderSearch v-else-if="iconKind(processItem) === 'view'" :size="14" stroke-width="1.9" />
-            <Terminal v-else-if="iconKind(processItem) === 'run'" :size="14" stroke-width="1.9" />
+            <Search v-else-if="iconKind(processItem) === 'view'" :size="14" stroke-width="1.9" />
+            <SquareTerminal v-else-if="iconKind(processItem) === 'run'" :size="14" stroke-width="1.9" />
+            <SquareDashedMousePointer v-else-if="iconKind(processItem) === 'browser'" :size="14" stroke-width="1.9" />
+            <Send v-else-if="iconKind(processItem) === 'claw'" :size="14" stroke-width="1.9" />
+            <Plug v-else-if="iconKind(processItem) === 'skill'" :size="14" stroke-width="1.9" />
             <Code2 v-else :size="14" stroke-width="1.9" />
           </span>
-          <span class="process-tool-title">{{ processItem.actionLabel }}</span>
+          <span class="process-tool-title">{{ processItem.toolName }}</span>
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
           <span

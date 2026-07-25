@@ -20,13 +20,19 @@ const hasRawData = computed(() => Boolean(props.step.inputRaw || props.step.outp
 const outputText = computed(() => props.step.outputRaw || uiText.tool.waitingForResult)
 const commandOutput = computed(() => props.step.summary.stdout || props.step.summary.stderr || uiText.tool.commandNoOutput)
 const guardedCommandOutput = computed(() => guardToolContent(commandOutput.value))
-const commandStatusText = computed(() => (props.step.tone === 'error' ? uiText.process.failed : uiText.process.success))
+const commandStatusText = computed(() => (isCommandError.value ? uiText.process.failed : uiText.process.success))
 const commandExitCode = computed(() =>
   typeof props.step.summary.exitCode === 'number' ? props.step.summary.exitCode : props.step.tone === 'error' ? 1 : 0,
 )
-const isCommandError = computed(() => props.step.tone === 'error' || Boolean(props.step.summary.stderr && !props.step.summary.stdout))
+const isCommandError = computed(() =>
+  props.step.tone === 'error' ||
+  (typeof props.step.summary.exitCode === 'number' && props.step.summary.exitCode !== 0) ||
+  Boolean(props.step.summary.stderr && !props.step.summary.stdout),
+)
 const browserText = computed(() => props.step.summary.preview || browserFallbackText(props.step.toolName))
 const guardedBrowserText = computed(() => guardToolContent(browserText.value))
+const channelText = computed(() => props.step.summary.preview || doneText)
+const guardedChannelText = computed(() => guardToolContent(channelText.value))
 const guardedFileReadText = computed(() => guardToolContent(props.step.summary.preview || ''))
 const guardedInputRaw = computed(() => guardToolContent(props.step.inputRaw || ''))
 const guardedOutputRaw = computed(() => guardToolContent(outputText.value))
@@ -168,6 +174,13 @@ function diffStats(lines: string[]) {
         Content is {{ formatBytes(guardedBrowserText.bytes) }}. It is larger than 100 kB and is not rendered inline.
       </p>
       <pre v-else class="tool-detail-output compact">{{ guardedBrowserText.text }}</pre>
+    </template>
+
+    <template v-else-if="step.renderer === 'channel'">
+      <p v-if="guardedChannelText.isOversize" class="tool-content-oversize">
+        Content is {{ formatBytes(guardedChannelText.bytes) }}. It is larger than 100 kB and is not rendered inline.
+      </p>
+      <pre v-else class="tool-detail-output compact">{{ guardedChannelText.text }}</pre>
     </template>
 
     <template v-else>

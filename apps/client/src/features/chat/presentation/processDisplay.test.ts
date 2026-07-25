@@ -110,3 +110,69 @@ test('process display prioritizes rejection and execution failure states', () =>
   assert.deepEqual(resolveToolStepState('error', [approved]), { kind: 'failed', label: 'Failed' })
   assert.deepEqual(resolveToolStepState('error'), { kind: 'failed', label: 'Failed' })
 })
+
+test('process display retains a non-zero command exit code', () => {
+  const items: ProcessItem[] = [
+    {
+      id: 'command-call',
+      kind: 'tool-call',
+      title: 'execute',
+      detail: 'npm test',
+      tone: 'neutral',
+      actionLabel: 'Run command',
+      objectLabel: 'npm test',
+      renderer: 'command',
+      summary: { command: 'npm test' },
+      toolCategory: 'run',
+      toolCallId: 'call_1',
+    },
+    {
+      id: 'command-result',
+      kind: 'tool-result',
+      title: 'execute',
+      detail: 'Completed',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({ exit_code: 1, stdout: 'partial output' }),
+    },
+  ]
+
+  const step = createProcessGroupView(items).items[0] as ToolStepViewItem
+  assert.equal(step.summary.exitCode, 1)
+  assert.equal(step.tone, 'error')
+})
+
+test('process display keeps activated skill rows compact', () => {
+  const items: ProcessItem[] = [
+    {
+      id: 'skill-call',
+      kind: 'tool-call',
+      title: 'activate_skill',
+      detail: 'openwalk-usage',
+      tone: 'neutral',
+      actionLabel: 'Run tool',
+      objectLabel: 'openwalk-usage',
+      renderer: 'generic',
+      summary: {},
+      toolCategory: 'skill',
+      toolCallId: 'call_1',
+    },
+    {
+      id: 'skill-result',
+      kind: 'tool-result',
+      title: 'activate_skill',
+      detail: 'activated',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({
+        status: 'activated',
+        truncated: true,
+        notice: 'Skill instructions were truncated to fit the context budget.',
+      }),
+    },
+  ]
+
+  const step = createProcessGroupView(items).items[0] as ToolStepViewItem
+  assert.equal(step.objectLabel, 'openwalk-usage')
+  assert.equal(step.summary.preview, 'activated \u00b7 truncated \u00b7 Skill instructions were truncated to fit the context budget.')
+})

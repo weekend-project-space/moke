@@ -379,20 +379,6 @@ const tool = {
   waitingForResult: 'Waiting for result',
 } as const
 
-const toolLabel = {
-  applyPatch: 'Edit content',
-  bash: 'Run command',
-  cat: 'Read file',
-  execCommand: 'Run command',
-  find: 'Search content',
-  grep: 'Search content',
-  ls: 'Browse files',
-  npm: 'Run check',
-  rg: 'Search content',
-  sed: 'Read snippet',
-  viewImage: 'View image',
-} as const
-
 const approval = {
   allowExternalPath: 'Allow access to an external folder?',
   allowOnce: 'Allow once',
@@ -425,5 +411,4 @@ export const uiText = {
   skills,
   sidebar,
   tool,
-  toolLabel,
 } as const

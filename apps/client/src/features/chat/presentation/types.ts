@@ -1,8 +1,17 @@
 import type { Message, ToolApprovalRecord } from '../model/conversation'
 
 export type ProcessTone = 'neutral' | 'error' | 'ask'
-export type ToolCategory = 'view' | 'change' | 'run'
-export type ToolRendererKind = 'file-read' | 'file-change' | 'directory' | 'search' | 'command' | 'browser' | 'ask-user' | 'generic'
+export type ToolCategory = 'view' | 'change' | 'run' | 'browser' | 'claw' | 'skill'
+export type ToolRendererKind =
+  | 'file-read'
+  | 'file-change'
+  | 'directory'
+  | 'search'
+  | 'command'
+  | 'browser'
+  | 'channel'
+  | 'ask-user'
+  | 'generic'
 export type ToolStepState = {
   kind: 'approved' | 'rejected' | 'failed'
   label: string
