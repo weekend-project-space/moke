@@ -8,6 +8,11 @@ type StreamingTextBufferOptions = {
   onFlush: (sessionId: string, text: string) => void
 }
 
+export type StreamingTextBuffer = {
+  append: (sessionId: string, content: string) => void
+  clear: (sessionId: string) => void
+}
+
 const DEFAULT_FLUSH_INTERVAL_MS = 50
 
 export function createStreamingTextBuffer(options: StreamingTextBufferOptions) {

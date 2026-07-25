@@ -237,7 +237,7 @@ async function toggleEnabled() {
   error.value = ''
   try {
     const data = await requestJson(`${props.apiBase}/api/settings/skills/${encodeURIComponent(selectedId.value)}/status`, {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: draft.enabled }),
     })
@@ -263,8 +263,8 @@ async function deleteSkill() {
   deleting.value = true
   error.value = ''
   try {
-    await requestJson(`${props.apiBase}/api/settings/skills/${encodeURIComponent(selectedId.value)}/delete`, {
-      method: 'POST',
+    await requestJson(`${props.apiBase}/api/settings/skills/${encodeURIComponent(selectedId.value)}`, {
+      method: 'DELETE',
     })
     const next = skills.value.find((skill) => skill.id !== selectedId.value)?.id || ''
     skills.value = skills.value.filter((skill) => skill.id !== selectedId.value)

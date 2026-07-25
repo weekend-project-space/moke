@@ -42,7 +42,6 @@ env                command environment variables
 enabled            optional, defaults to true
 timeout_ms         optional, MCP connect, list, and call timeout
 max_output_chars   optional, maximum serialized MCP tool output before truncation
-tool_risks         optional, per-tool risk override: safe, write, dangerous
 disabled_tools     optional, MCP tool names to hide from the Agent
 roots              optional, allowed roots exposed through MCP roots/list
 ```

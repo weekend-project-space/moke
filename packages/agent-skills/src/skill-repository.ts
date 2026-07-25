@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/p
 import path from 'node:path';
 
 import { parseSkillFile, serializeSkillFile } from './skill-file.js';
-import type { LoadedSkill, ManagedSkill, SkillDraft, SkillManifest } from './skill-types.js';
+import type { LoadedSkill, ManagedSkill, SkillAuthority, SkillDraft, SkillManifest } from './skill-types.js';
 
 const DEFAULT_SKILL_DIR = '.moke/skills';
 const DEFAULT_SKILL_REGISTRY = '.moke/skills.json';
@@ -23,11 +23,18 @@ export class SkillRepository {
   readonly root: string;
   readonly skillsDir: string;
   readonly registryPath: string;
+  readonly authority: SkillAuthority;
 
-  constructor(root: string, skillsDir = DEFAULT_SKILL_DIR, registryPath = DEFAULT_SKILL_REGISTRY) {
+  constructor(
+    root: string,
+    skillsDir = DEFAULT_SKILL_DIR,
+    registryPath = DEFAULT_SKILL_REGISTRY,
+    authority: SkillAuthority = 'user',
+  ) {
     this.root = path.resolve(root);
-    this.skillsDir = path.resolve(this.root, skillsDir);
-    this.registryPath = path.resolve(this.root, registryPath);
+    this.skillsDir = resolveWorkspacePath(this.root, skillsDir, 'Skill directory');
+    this.registryPath = resolveWorkspacePath(this.root, registryPath, 'Skill registry');
+    this.authority = authority;
   }
 
   async listAll(): Promise<ManagedSkill[]> {
@@ -55,19 +62,20 @@ export class SkillRepository {
   async listEnabled(): Promise<SkillManifest[]> {
     return (await this.listAll())
       .filter((skill) => skill.enabled && skill.valid)
-      .map(({ id, name, description, path: skillPath, enabled }) => ({
+      .map(({ id, name, description, path: skillPath, enabled, authority }) => ({
         id,
         name,
         description,
         path: skillPath,
         enabled,
+        authority,
       }));
   }
 
   async readEnabled(nameOrId: string): Promise<LoadedSkill> {
     const skill = (await this.listEnabled()).find((item) => item.id === nameOrId || item.name === nameOrId);
     if (!skill) throw new SkillRepositoryError('SKILL_NOT_FOUND', `Skill not found: ${nameOrId}`);
-    const raw = await readFile(path.join(this.root, skill.path), 'utf8');
+    const raw = await readFile(this.skillFile(skill.id), 'utf8');
     const parsed = parseSkillFile(raw, skill.id);
     return { ...skill, content: parsed.content };
   }
@@ -177,6 +185,7 @@ export class SkillRepository {
         description: parsed.description,
         path: relativePath,
         enabled: !disabled,
+        authority: this.authority,
         valid: errors.length === 0,
         ...(errors.length > 0 ? { error: errors[0] } : {}),
         updatedAt: info.mtime.toISOString(),
@@ -188,6 +197,7 @@ export class SkillRepository {
         description: '',
         path: relativePath,
         enabled: !disabled,
+        authority: this.authority,
         valid: false,
         error: error instanceof Error ? error.message : 'Unable to read skill',
         updatedAt: '',
@@ -290,4 +300,13 @@ async function writeAtomic(filePath: string, content: string) {
     await rm(temporaryPath, { force: true });
     throw error;
   }
+}
+
+function resolveWorkspacePath(root: string, target: string, label: string) {
+  const resolved = path.resolve(root, target);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new SkillRepositoryError('SKILL_PATH_INVALID', `${label} must be inside the workspace`);
+  }
+  return resolved;
 }

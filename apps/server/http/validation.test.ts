@@ -7,6 +7,8 @@ import { createRouter } from './router.js';
 import {
   idParamsSchema,
   listSessionsQuerySchema,
+  messagingConnectionCreateSchema,
+  messagingConnectionUpdateSchema,
   runRespondSchema,
 } from '../routes/schemas.js';
 import { parseBody, parseInput, parseParams, parseQuery, RequestValidationError } from './validation.js';
@@ -35,6 +37,31 @@ test('run response schema rejects invalid variants and accepts typed variants', 
   assert.equal(runRespondSchema.safeParse({ type: 'choose', request_id: 'ask_1' }).success, false);
   assert.equal(runRespondSchema.safeParse({ type: 'approve', request_id: 'approval_1', decision: 'approved' }).success, true);
   assert.equal(runRespondSchema.safeParse({ type: 'cancel', reason: 'User cancelled' }).success, true);
+});
+
+test('messaging connection schema accepts Feishu credentials and defaults the domain', () => {
+  assert.deepEqual(messagingConnectionCreateSchema.parse({
+    platform: 'feishu',
+    credentials: { appId: 'cli_app_id', appSecret: 'app-secret' },
+  }), {
+    platform: 'feishu',
+    credentials: { appId: 'cli_app_id', appSecret: 'app-secret', domain: 'feishu' },
+  });
+  assert.equal(messagingConnectionCreateSchema.safeParse({
+    platform: 'feishu',
+    credentials: { appId: '', appSecret: 'app-secret' },
+  }).success, false);
+});
+
+test('messaging connection update accepts DingTalk policy fields', () => {
+  assert.deepEqual(parseInput(messagingConnectionUpdateSchema, {
+    allowedUserIds: ['staff_1'],
+    cardTemplateId: 'template.schema',
+  }), {
+    allowedUserIds: ['staff_1'],
+    cardTemplateId: 'template.schema',
+  });
+  assert.throws(() => parseInput(messagingConnectionUpdateSchema, {}), RequestValidationError);
 });
 
 test('router returns one validation error shape', async () => {
@@ -71,4 +98,33 @@ test('router returns one validation error shape', async () => {
       details: [{ path: ['required'], message: 'Invalid input: expected string, received undefined' }],
     },
   });
+});
+
+test('router dispatches DELETE requests and sends an empty 204 response', async () => {
+  const router = createRouter<{}>();
+  router.delete('/api/example/:id', ({ json, params }) => {
+    assert.equal(params.id, 'item_1');
+    return json(204, undefined);
+  });
+
+  const request = Readable.from([]) as IncomingMessage;
+  request.method = 'DELETE';
+  request.url = '/api/example/item_1';
+  request.headers = { host: 'localhost' };
+  const responseBody: { status?: number; body?: string } = {};
+  const responseStub = {
+    writableEnded: false,
+    writeHead(status: number) {
+      responseBody.status = status;
+    },
+    end(body?: string) {
+      responseBody.body = body;
+      responseStub.writableEnded = true;
+    },
+  };
+
+  await router.handler({})(request, responseStub as unknown as ServerResponse);
+
+  assert.equal(responseBody.status, 204);
+  assert.equal(responseBody.body, undefined);
 });

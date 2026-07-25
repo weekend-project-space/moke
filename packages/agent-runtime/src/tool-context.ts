@@ -1,15 +1,33 @@
 import type { ToolApprovalRecord } from '@moke/protocol';
+import type { RuntimeRun } from './run-state.js';
+
+export type RuntimeContextItem = {
+  authority: 'trusted' | 'user';
+  content: string;
+  scope?: 'run' | 'session';
+};
+
+export type RuntimeSkillActivationResult = {
+  status: 'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
+  content?: string;
+  truncated?: boolean;
+};
 
 export type RuntimeContentManager = {
-  addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;
-  buildContext: () => string;
-  reset?: () => void;
+  addSkill: (skill: {
+    id: string;
+    name: string;
+    description: string;
+    path: string;
+    content: string;
+    authority: 'trusted' | 'user' | 'external';
+  }) => RuntimeSkillActivationResult;
+  buildInitialContext: () => RuntimeContextItem[];
 };
 
 export type WorkspacePathApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -30,7 +48,6 @@ export type WorkspacePathApprovalDecision = {
 export type ToolApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -47,13 +64,13 @@ export type ToolApprovalDecision = {
 
 export type ToolContext = {
   workspace: string;
+  run?: RuntimeRun;
   abortSignal?: AbortSignal;
   contentManager?: RuntimeContentManager;
   currentToolCall?: {
     callId: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: 'safe' | 'write' | 'dangerous';
   };
   askUser?: (input: {
     callId: string;

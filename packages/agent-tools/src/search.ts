@@ -12,7 +12,6 @@ export function createSearchTool(system: SystemBackend): RuntimeTool<typeof sear
   return {
     name: 'search',
     description: 'Search file names and text inside the workspace.',
-    risk: 'safe',
     schema: searchSchema,
     async handler(input) {
       const [globResult, grepResult] = await Promise.all([

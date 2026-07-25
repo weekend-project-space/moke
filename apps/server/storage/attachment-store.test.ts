@@ -52,6 +52,19 @@ test('attachment store rejects image data that does not match its mime type', ()
   }
 });
 
+test('attachment store saves an inbound image buffer', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-attachment-inbound-'));
+  try {
+    const store = new AttachmentStore(directory);
+    const data = Buffer.from(PNG_DATA_URL.split(',')[1], 'base64');
+    const attachment = store.saveInboundImage(data, 'weixin-image');
+    assert.equal(attachment.mime_type, 'image/png');
+    assert.equal(store.resolve(toStoredAttachment(attachment)).data_url, PNG_DATA_URL);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('attachment migration replaces inline data and is idempotent', () => {
   const directory = mkdtempSync(join(tmpdir(), 'moke-attachment-migration-'));
   const storePath = join(directory, 'store');

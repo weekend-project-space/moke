@@ -1,5 +1,3 @@
-export type RiskLevel = 'safe' | 'write' | 'dangerous';
-
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export type RunStatus =
@@ -11,6 +9,12 @@ export type RunStatus =
   | 'failed'
   | 'cancelled'
   | 'timeout';
+
+export type RunLifecycleEvent = {
+  type: RunStatus;
+  sessionId: string;
+  runId: string;
+};
 
 export type AgentEvent = {
   id: string;
@@ -25,6 +29,13 @@ export type AgentEvent = {
 export type AgentEventType = keyof AgentEventPayloadMap;
 
 export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
+
+export type TokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_input_tokens?: number;
+  uncached_input_tokens?: number;
+};
 
 export type AgentStepPhase = 'reason' | 'act' | 'respond';
 
@@ -66,7 +77,15 @@ export type UserMessage = {
   role: 'user';
   content: string;
   created_at: string;
+  /** Internal context is retained for the model but not rendered in the conversation. */
+  visibility?: 'public' | 'internal';
   attachments?: ImageAttachment[];
+  source?: {
+    kind: 'messaging';
+    platform: string;
+    connection_id: string;
+    message_id: string;
+  };
 };
 
 export type AssistantMessage = {
@@ -132,7 +151,6 @@ export type PendingApproval = {
   call_id?: string;
   kind: 'workspace_path' | 'tool';
   reason: string;
-  risk: RiskLevel;
   action: {
     tool: string;
     input: Record<string, unknown>;
@@ -184,7 +202,6 @@ export type AgentEventPayloadMap = {
     call_id: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: RiskLevel;
     source?: {
       type: 'local' | 'mcp';
       server_id?: string;
@@ -217,6 +234,10 @@ export type AgentEventPayloadMap = {
       steps: number;
       tool_calls: number;
       duration_ms: number;
+      input_tokens?: number;
+      output_tokens?: number;
+      cached_input_tokens?: number;
+      uncached_input_tokens?: number;
     };
   };
   'agent.error': {
@@ -231,3 +252,102 @@ type AgentEventPayloadUnion = {
     payload: AgentEventPayloadMap[Type];
   };
 }[AgentEventType];
+
+export type ApiErrorResponse = {
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+};
+
+export type CreateSessionRequest = {
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CreateSessionResponse = {
+  session: Session;
+};
+
+export type ListSessionsResponse = {
+  sessions: SessionSummary[];
+  next_cursor: string | null;
+};
+
+export type GetSessionResponse = {
+  session: SessionSummary & Pick<Session, 'metadata'>;
+  messages: Message[];
+};
+
+export type UpdateSessionRequest = {
+  title?: string;
+  archived?: boolean;
+  pinned?: boolean;
+};
+
+export type UpdateSessionResponse = {
+  session: SessionSummary;
+};
+
+export type ForkSessionRequest = {
+  message_id: string;
+  mode?: 'after';
+};
+
+export type ForkSessionResponse = GetSessionResponse;
+
+export type SendMessageRequest = {
+  message: {
+    role?: 'user';
+    content: string;
+    attachments?: ImageAttachmentUpload[];
+  };
+  options?: {
+    stream?: boolean;
+    max_steps?: number;
+    max_tool_calls?: number;
+    timeout_ms?: number;
+    reasoningEffort?: ReasoningEffort;
+  };
+};
+
+export type SendMessageResponse = {
+  run_id: string;
+  session_id: string;
+  events_url: string;
+};
+
+export type ActiveRunSummary = {
+  session_id: string;
+  run_id: string;
+  status: RunStatus;
+  events_url: string;
+  pending_ask?: PendingAsk;
+  pending_approval?: PendingApproval;
+};
+
+export type ListActiveRunsResponse = {
+  runs: ActiveRunSummary[];
+};
+
+export type GetRunResponse = {
+  run: RunSnapshot;
+};
+
+export type RespondToRunRequest =
+  | { type: 'choose'; request_id: string; option_id: string }
+  | {
+      type: 'approve';
+      request_id: string;
+      decision: 'approved' | 'rejected';
+      scope?: 'once' | 'session' | 'persistent';
+      message?: string;
+    }
+  | { type: 'cancel'; reason?: string };
+
+export type RespondToRunResponse = {
+  run_id: string;
+  request_id?: string;
+  status: RunStatus;
+};

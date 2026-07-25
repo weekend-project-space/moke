@@ -58,15 +58,14 @@ const {
   cancelRun,
   archiveSession,
   checkServer,
-  closeEventSource,
   createSession,
   decideApproval,
+  disposeAgentSession,
   events,
   forkSession,
   isRunning,
   isSubmittingApproval,
   isSubmittingAsk,
-  loadActiveRuns,
   loadSessions,
   messages,
   pendingApproval,
@@ -195,19 +194,6 @@ const serverStatusLabel = computed(() => {
 
   return labels[serverStatus.value]
 })
-const toolLabels: Record<string, string> = {
-  apply_patch: uiText.toolLabel.applyPatch,
-  bash: uiText.toolLabel.bash,
-  cat: uiText.toolLabel.cat,
-  exec_command: uiText.toolLabel.execCommand,
-  find: uiText.toolLabel.find,
-  grep: uiText.toolLabel.grep,
-  ls: uiText.toolLabel.ls,
-  npm: uiText.toolLabel.npm,
-  rg: uiText.toolLabel.rg,
-  sed: uiText.toolLabel.sed,
-  view_image: uiText.toolLabel.viewImage,
-}
 const {
   displayItems,
   lastAssistantMessage,
@@ -222,7 +208,6 @@ const {
   pendingAsk,
   pendingApproval,
   processCollapsed,
-  toolLabels,
   formatTimelineTime,
 })
 const timelineNote = computed(() => {
@@ -305,7 +290,6 @@ onMounted(async () => {
   if (await checkServer()) {
     await loadReasoningCapability()
     await loadSessions()
-    await loadActiveRuns()
     const initialSession = initialSessionFromHash()
     if (initialSession) {
       await selectSession(initialSession.id)
@@ -320,7 +304,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)
   disposeBrowserWorkspace()
-  closeEventSource()
+  disposeAgentSession()
 })
 
 defineExpose({

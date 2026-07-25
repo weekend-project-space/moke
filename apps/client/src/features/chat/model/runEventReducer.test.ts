@@ -54,7 +54,6 @@ test('run event reducer stores reasoning deltas and enters pending states', () =
     approval_id: 'approval_1',
     kind: 'tool' as const,
     reason: 'Write data',
-    risk: 'write' as const,
     action: { tool: 'write_file', input: {} },
     created_at: '2026-01-01T00:00:00.000Z',
   }
@@ -81,7 +80,6 @@ test('run event reducer rebuilds completed interactions from replayed events', (
     approval_id: 'approval_1',
     kind: 'tool' as const,
     reason: 'Run command',
-    risk: 'write' as const,
     action: { tool: 'execute', input: { command: 'npm test' } },
     created_at: '2026-01-01T00:00:00.000Z',
   }

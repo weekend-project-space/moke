@@ -8,12 +8,16 @@ import type {
   PendingApproval,
   ReasoningEffort,
   ResolvedImageAttachment,
+  RunLifecycleEvent,
+  RunStatus,
   Session,
   ToolApprovalRecord,
 } from '@moke/protocol';
-import type { Agent, RuntimeMessage } from './agent.js';
+import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { RuntimeRun } from './run-state.js';
+import { resolveHistory, selectRecentHistory } from './history.js';
+import { RunObservers } from './run-observers.js';
+import type { RunOrigin, RuntimeRun } from './run-state.js';
 import type {
   RuntimeContentManager,
   ToolApprovalDecision,
@@ -32,7 +36,7 @@ type RunManagerConfig = {
   agent: Agent;
   toolRegistry: ToolRegistry;
   workspace: string;
-  createSkillContentManager?: () => RuntimeContentManager;
+  createSkillContentManager?: () => RuntimeContentManager | Promise<RuntimeContentManager>;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
   resolveImageAttachments?: (
     attachments: ImageAttachment[],
@@ -40,11 +44,17 @@ type RunManagerConfig = {
   onSessionChanged?: (session: Session) => void;
 };
 
-type RunOptions = {
+export type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
   reasoningEffort?: ReasoningEffort;
   timeout_ms?: number;
+  origin?: RunOrigin;
+  /**
+   * Called after the run is registered but before agent execution starts.
+   * Adapters use this to atomically associate external queue state with the run.
+   */
+  beforeStart?: (run: RuntimeRun) => void;
 };
 
 type RunMessageInput = {
@@ -54,28 +64,7 @@ type RunMessageInput = {
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
 
-export function selectRecentHistory(messages: Message[], maxMessages = 999) {
-  if (messages.length <= maxMessages) return messages.slice();
-
-  const cutoff = Math.max(0, messages.length - maxMessages);
-  let start = cutoff;
-  const cutoffMessage = messages[start];
-  if (cutoffMessage?.role !== 'tool') return messages.slice(start);
-
-  const firstToolCallId = cutoffMessage.tool_call_id;
-  while (start > 0) {
-    start--;
-    const candidate = messages[start];
-    if (candidate.role === 'assistant' && candidate.tool_calls?.some((call) => call.id === firstToolCallId)) {
-      return messages.slice(start);
-    }
-    if (candidate.role === 'user') break;
-  }
-
-  start = cutoff;
-  while (start < messages.length && messages[start]?.role === 'tool') start++;
-  return messages.slice(start);
-}
+export { selectRecentHistory } from './history.js';
 
 function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
@@ -121,6 +110,7 @@ export class RunManager {
     }
   >();
   private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
+  private readonly observers = new RunObservers();
 
   constructor(private readonly config: RunManagerConfig) { }
 
@@ -135,9 +125,17 @@ export class RunManager {
       clients: new Set(),
       started_at: Date.now(),
       abort: false,
+      origin: options.origin || { kind: 'local' },
     };
 
     this.config.runs.set(run.id, run);
+    try {
+      options.beforeStart?.(run);
+    } catch (error) {
+      this.config.runs.delete(run.id);
+      throw error;
+    }
+    this.observers.notifyInitial(run);
     const execution = this.execute(run, session, input, options);
     this.activeExecutions.set(run.id, execution);
     void execution.then(
@@ -151,6 +149,7 @@ export class RunManager {
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
+      this.observers.notify(event, run);
       if (run.abort) return;
       if (event.type !== 'agent.message.done') {
         return;
@@ -168,10 +167,13 @@ export class RunManager {
       max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
-    const history = await this.resolveHistory(selectRecentHistory(session.messages.slice(0, -1)));
-    const contentManager = this.config.createSkillContentManager?.();
+    const history = await resolveHistory(
+      selectRecentHistory(session.messages.slice(0, -1)),
+      this.config.resolveImageAttachments,
+    );
 
     try {
+      const contentManager = await this.config.createSkillContentManager?.();
       const result = await this.config.agent.run({
         input: input.content,
         attachments: input.attachments,
@@ -183,6 +185,7 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: this.config.workspace,
+          run,
           abortSignal: abortController.signal,
           contentManager,
           askUser: (input) => this.askUser(run, eventBus, input),
@@ -200,13 +203,14 @@ export class RunManager {
         session.updated_at = result.message.created_at;
         this.config.onSessionChanged?.(session);
       }
-      run.status = 'completed';
+      this.setStatus(run, 'completed');
       eventBus.emit('agent.done', {
         status: 'completed',
         usage: {
           steps: run.seq,
           tool_calls: result.toolCalls,
           duration_ms: Date.now() - run.started_at,
+          ...result.usage,
         },
       });
     } catch (error) {
@@ -220,7 +224,7 @@ export class RunManager {
         content: `Run failed: ${message}`,
         created_at: new Date().toISOString(),
       };
-      run.status = 'failed';
+      this.setStatus(run, 'failed');
       eventBus.emit('agent.message.done', {
         message: assistantMessage,
       });
@@ -241,13 +245,11 @@ export class RunManager {
     input: WorkspacePathApprovalRequest,
   ): Promise<WorkspacePathApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
-    run.pending_approval = {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'workspace_path',
       reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
-      risk: input.risk,
       action: {
         tool: input.tool,
         input: input.input,
@@ -256,8 +258,10 @@ export class RunManager {
       suggested_root: input.suggestedRoot,
       created_at: new Date().toISOString(),
     };
+    run.pending_approval = pendingApproval;
+    this.setStatus(run, 'awaiting_approval');
 
-    eventBus.emit('approval.required', run.pending_approval);
+    eventBus.emit('approval.required', pendingApproval);
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
@@ -273,21 +277,21 @@ export class RunManager {
     input: ToolApprovalRequest,
   ): Promise<ToolApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
-    run.pending_approval = {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
       ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'tool',
       reason: input.reason,
-      risk: input.risk,
       action: {
         tool: input.tool,
         input: input.input,
       },
       created_at: new Date().toISOString(),
     };
+    run.pending_approval = pendingApproval;
+    this.setStatus(run, 'awaiting_approval');
 
-    eventBus.emit('approval.required', run.pending_approval);
+    eventBus.emit('approval.required', pendingApproval);
     return new Promise<ToolApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
@@ -303,7 +307,6 @@ export class RunManager {
     input: { callId: string; question: string; options: Array<{ id: string; label: string }> },
   ): Promise<{ id: string; label: string }> {
     const askId = id('ask');
-    run.status = 'awaiting_user';
     run.pending_ask = {
       ask_id: askId,
       call_id: input.callId,
@@ -311,6 +314,7 @@ export class RunManager {
       options: input.options,
       created_at: new Date().toISOString(),
     };
+    this.setStatus(run, 'awaiting_user');
 
     eventBus.emit('ask_user.required', run.pending_ask);
 
@@ -336,13 +340,14 @@ export class RunManager {
     this.pendingAsks.delete(askId);
     const pendingAsk = run.pending_ask;
     run.pending_ask = undefined;
-    run.status = 'running';
+    this.setStatus(run, 'running');
 
-    new EventBus(run).emit('ask_user.answered', {
+    const event = new EventBus(run).emit('ask_user.answered', {
       ask_id: pendingAsk.ask_id,
       call_id: pendingAsk.call_id,
       selected,
     });
+    this.observers.notify(event, run);
 
     pending.resolve(selected);
 
@@ -367,14 +372,15 @@ export class RunManager {
     const pendingApproval = run.pending_approval;
     this.pendingApprovals.delete(approvalId);
     run.pending_approval = undefined;
-    run.status = 'running';
+    this.setStatus(run, 'running');
     const scope = options.scope || 'session';
     this.recordApproval(run.id, pendingApproval, decision, scope);
-    new EventBus(run).emit('approval.resolved', {
+    const event = new EventBus(run).emit('approval.resolved', {
       approval_id: pendingApproval.approval_id,
       decision,
       scope,
     });
+    this.observers.notify(event, run);
     const cleanupResult =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
         ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
@@ -390,11 +396,12 @@ export class RunManager {
     return { status: 200 as const, run };
   }
 
-  cancel(runId: string) {
+  cancel(runId: string, reason: 'user' | 'shutdown' = 'user') {
     const run = this.config.runs.get(runId);
     if (!run) return null;
     run.abort = true;
-    run.status = 'cancelled';
+    run.cancel_reason = reason;
+    this.setStatus(run, 'cancelled');
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
 
@@ -412,7 +419,7 @@ export class RunManager {
       pending?.reject(new Error('Run cancelled'));
     }
 
-    new EventBus(run).emit('agent.done', {
+    const event = new EventBus(run).emit('agent.done', {
       status: 'cancelled',
       usage: {
         steps: run.seq,
@@ -420,21 +427,34 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
+    this.observers.notify(event, run);
     this.pruneTerminalRuns();
 
     return run;
   }
 
-  cancelAll() {
+  addObserver(observer: (event: AgentEvent, run: RuntimeRun) => void) {
+    return this.observers.addEventObserver(observer);
+  }
+
+  addLifecycleObserver(observer: (event: RunLifecycleEvent) => void) {
+    return this.observers.addLifecycleObserver(observer);
+  }
+
+  private setStatus(run: RuntimeRun, status: RunStatus) {
+    this.observers.notifyStatus(run, status);
+  }
+
+  cancelAll(reason: 'user' | 'shutdown' = 'user') {
     for (const run of this.config.runs.values()) {
       if (!isActiveRun(run)) continue;
-      this.cancel(run.id);
+      this.cancel(run.id, reason);
     }
   }
 
   async shutdown() {
     this.shuttingDown = true;
-    this.cancelAll();
+    this.cancelAll('shutdown');
     await Promise.allSettled([...this.activeExecutions.values()]);
   }
 
@@ -480,19 +500,6 @@ export class RunManager {
     return records;
   }
 
-  private async resolveHistory(messages: Message[]): Promise<RuntimeMessage[]> {
-    return Promise.all(messages.map(async (message): Promise<RuntimeMessage> => {
-      if (message.role !== 'user') return message;
-      if (!message.attachments?.length) return { ...message, attachments: undefined };
-      if (!this.config.resolveImageAttachments) {
-        throw new Error('Image attachment resolver is not configured');
-      }
-      return {
-        ...message,
-        attachments: await this.config.resolveImageAttachments(message.attachments),
-      };
-    }));
-  }
 }
 
 function isActiveRun(run: RuntimeRun) {

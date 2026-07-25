@@ -1,4 +1,6 @@
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserResult } from '../api/browser'
+import { waitForBrowserLayoutFrame } from './browserLayout'
+import { createSerialTaskQueue } from './serialTaskQueue'
 
 type BrowserBridgeRequest = {
   id: string
@@ -30,16 +32,17 @@ function readNumber(params: Record<string, unknown>, key: string) {
   return typeof params[key] === 'number' ? params[key] as number : undefined
 }
 
-function waitForLayoutFrame() {
-  return new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve())
-  })
-}
-
 async function revealBrowserPanel(options: BrowserBridgeOptions) {
   await options.showBrowserPanel()
-  await waitForLayoutFrame()
+  await waitForBrowserLayoutFrame()
   return options.getBrowserBounds?.() || undefined
+}
+
+async function executeAfterReveal<T>(
+  options: BrowserBridgeOptions,
+  action: (bounds: BrowserBounds | undefined) => Promise<T>,
+) {
+  return action(await revealBrowserPanel(options))
 }
 
 async function executeBrowserRequest(
@@ -54,18 +57,16 @@ async function executeBrowserRequest(
     case 'list_pages':
       return browserApi.state()
     case 'create_page': {
-      const bounds = await revealBrowserPanel(options)
-      return browserApi.open({
+      return executeAfterReveal(options, (bounds) => browserApi.open({
         url: readString(params, 'url'),
         visible: readBool(params, 'visible') ?? true,
         bounds,
-      })
+      }))
     }
     case 'select_page': {
       const pageId = readPageId(params)
       if (!pageId) throw new Error('pageId is required')
-      const bounds = await revealBrowserPanel(options)
-      return browserApi.show(pageId, bounds)
+      return executeAfterReveal(options, (bounds) => browserApi.show(pageId, bounds))
     }
     case 'close_page': {
       const pageId = readPageId(params)
@@ -75,58 +76,48 @@ async function executeBrowserRequest(
     case 'navigate_page': {
       const type = readString(params, 'type') as NavigateType | undefined
       if (!type) throw new Error('type is required')
-      const bounds = await revealBrowserPanel(options)
-      await browserApi.show(readPageId(params), bounds)
+      const pageId = readPageId(params)
+      await executeAfterReveal(options, (bounds) => browserApi.show(pageId, bounds))
       return browserApi.navigate({
-        pageId: readPageId(params),
+        pageId,
         type,
         url: readString(params, 'url'),
         ignoreCache: readBool(params, 'ignoreCache'),
       })
     }
     case 'evaluate_script':
-      await revealBrowserPanel(options)
-      return browserApi.evaluateScript(params)
+      return executeAfterReveal(options, () => browserApi.evaluateScript(params))
     case 'take_snapshot':
       return browserApi.takeSnapshot(params)
     case 'take_screenshot':
-      await revealBrowserPanel(options)
-      return browserApi.takeScreenshot(params)
+      return executeAfterReveal(options, () => browserApi.takeScreenshot(params))
     case 'click':
-      await revealBrowserPanel(options)
-      return browserApi.click(params)
+      return executeAfterReveal(options, () => browserApi.click(params))
     case 'hover':
-      await revealBrowserPanel(options)
-      return browserApi.hover(params)
+      return executeAfterReveal(options, () => browserApi.hover(params))
     case 'fill':
-      await revealBrowserPanel(options)
-      return browserApi.fill(params)
+      return executeAfterReveal(options, () => browserApi.fill(params))
     case 'fill_form':
-      await revealBrowserPanel(options)
-      return browserApi.fillForm(params)
+      return executeAfterReveal(options, () => browserApi.fillForm(params))
     case 'upload_file':
-      await revealBrowserPanel(options)
-      return browserApi.uploadFile(params)
+      return executeAfterReveal(options, () => browserApi.uploadFile(params))
     case 'wait_for':
       return browserApi.waitFor(params)
     case 'press_key':
-      await revealBrowserPanel(options)
-      return browserApi.pressKey(params)
+      return executeAfterReveal(options, () => browserApi.pressKey(params))
     case 'type_text':
-      await revealBrowserPanel(options)
-      return browserApi.typeText(params)
+      return executeAfterReveal(options, () => browserApi.typeText(params))
     case 'handle_dialog':
       return browserApi.handleDialog(params)
     case 'resize_page': {
       const width = readNumber(params, 'width')
       const height = readNumber(params, 'height')
       if (!width || !height) throw new Error('width and height are required')
-      await revealBrowserPanel(options)
-      return browserApi.resizePage({
+      return executeAfterReveal(options, () => browserApi.resizePage({
         pageId: readPageId(params),
         width,
         height,
-      })
+      }))
     }
     case 'show_browser': {
       const bounds = await revealBrowserPanel(options)
@@ -154,15 +145,18 @@ export function connectBrowserBridge(options: BrowserBridgeOptions) {
 
   const source = new EventSource(`${options.apiBase}/api/browser/connect`)
 
+  const execution = createSerialTaskQueue()
+
   source.addEventListener('browser_request', (message) => {
     const request = JSON.parse((message as MessageEvent).data) as BrowserBridgeRequest
 
-    void executeBrowserRequest(request, options)
+    // Keep native webview operations ordered; otherwise late responses can overwrite newer state.
+    void execution.enqueue(() => executeBrowserRequest(request, options)
       .then((result) => respond(options.apiBase, request.id, { ok: true, result }))
       .catch((error) => respond(options.apiBase, request.id, {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
-      }))
+      })))
   })
 
   source.onerror = () => {

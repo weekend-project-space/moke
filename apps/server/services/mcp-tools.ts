@@ -102,7 +102,6 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
         name: mcpTool.name,
         original_name: mcpTool.originalName,
         description: describeMcpTool(mcpTool),
-        risk: mcpTool.risk,
         source: {
           type: 'mcp',
           server_id: mcpTool.serverId,
@@ -110,19 +109,6 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
         input_schema: mcpTool.inputSchema,
         schema: jsonSchemaToZod(mcpTool.inputSchema),
         async handler(input) {
-          if (mcpTool.risk !== 'safe') {
-            throw new ToolExecutionError(`MCP tool is not allowed without approval: ${mcpTool.name}`, {
-              error: {
-                code: 'TOOL_NOT_ALLOWED',
-                message: `MCP tool is not allowed without approval: ${mcpTool.name}`,
-                tool: mcpTool.name,
-                original_name: mcpTool.originalName,
-                server_id: mcpTool.serverId,
-                risk: mcpTool.risk,
-              },
-            });
-          }
-
           const toolInput = input && typeof input === 'object' ? input : {};
           try {
             const result = await mcpManager.callTool(mcpTool.name, toolInput as Record<string, unknown>);

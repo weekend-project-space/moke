@@ -15,7 +15,6 @@ export function createGrepTool(system: SystemBackend): RuntimeTool<typeof grepSc
   return {
     name: 'grep',
     description: 'Search workspace file contents by pattern.',
-    risk: 'safe',
     schema: grepSchema,
     async handler(input) {
       return system.grep(input.pattern, {

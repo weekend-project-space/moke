@@ -6,6 +6,8 @@ import type { SettingsService } from '../services/settings-service.js';
 import type { SkillSettingsService } from '../services/skill-settings-service.js';
 import type { SessionRepository } from '../storage/session-store.js';
 import type { AttachmentStore } from '../storage/attachment-store.js';
+import type { MessagingRuntime } from '../services/messaging/messaging-runtime.js';
+import type { WeixinLoginService } from '../services/messaging/weixin-login-service.js';
 
 export type RoutesContext = {
   sessionStore: SessionRepository;
@@ -18,4 +20,6 @@ export type RoutesContext = {
   permissionsService: PermissionsService;
   settingsService: SettingsService;
   skillSettingsService: SkillSettingsService;
+  messagingRuntime: MessagingRuntime;
+  weixinLoginService: WeixinLoginService;
 };

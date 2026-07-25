@@ -209,16 +209,7 @@ Each tool must define:
 name
 description
 input schema
-risk level
 handler
-```
-
-Risk levels:
-
-```txt
-safe       read-only actions, local search
-write      file writes or state changes
-dangerous  shell execution, deletion, network access, external service calls
 ```
 
 Execution policy:
@@ -276,7 +267,6 @@ The first Tools hardening phase includes:
 ```txt
 GET /api/tools
 input schema validation for common JSON Schema fields
-tool risk overrides
 disabled tools
 output truncation
 structured MCP tool errors
@@ -327,14 +317,14 @@ The MVP should be conservative by default.
 Required protections:
 
 - Workspace path restriction for file tools
-- No write or dangerous tools until approval policy exists
+- Explicit approval checks for actions that require confirmation
 - Runtime timeout
 - Tool call limit
 - Output size limit for tool results
 - Basic input validation
 - Structured errors
 
-The Agent must not execute arbitrary high-risk actions without policy checks.
+The Agent must not execute actions requiring confirmation without their explicit policy checks.
 
 ## 15. API Requirements
 
@@ -409,5 +399,5 @@ GET /api/tools
 - Should the Agent server always run locally, or can it also run remotely?
 - Should `shell` be enabled in MVP, or delayed until file tools are stable?
 - When should persistence move from JSON to SQLite?
-- Should approvals be per action, per run, or configurable by risk level once write/shell tools exist?
+- Should approvals be per action or per run once write/shell tools exist?
 - Should B/S mode support multiple users in the first version?

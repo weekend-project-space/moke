@@ -75,6 +75,22 @@ export class AttachmentStore {
     return prepared.map(({ upload, data, mimeType }) => this.saveImage(upload, data, mimeType));
   }
 
+  saveInboundImage(data: Buffer, name?: string): ResolvedImageAttachment {
+    if (data.length > MAX_IMAGE_FILE_BYTES) {
+      throw new AttachmentStoreError(413, 'PAYLOAD_TOO_LARGE', 'Image is too large');
+    }
+    const mimeType = detectMimeType(data);
+    if (!mimeType) throw badRequest('Unsupported image format');
+    const upload: ImageAttachmentUpload = {
+      id: `img_${randomUUID().slice(0, 8)}`,
+      kind: 'image',
+      ...(name ? { name: name.slice(0, 120) } : {}),
+      mime_type: mimeType,
+      data_url: `data:${mimeType};base64,${data.toString('base64')}`,
+    };
+    return this.saveImage(upload, data, mimeType);
+  }
+
   resolve(attachment: ImageAttachment): ResolvedImageAttachment {
     const mimeType = normalizeMimeType(attachment.mime_type);
     const expectedPath = relativeBlobPath(attachment.sha256, mimeType);
@@ -206,6 +222,11 @@ function normalizeMimeType(input: unknown, index?: number): SupportedMimeType {
   if (mimeType in IMAGE_TYPES) return mimeType as SupportedMimeType;
   const prefix = index === undefined ? 'attachment' : `message.attachments[${index}]`;
   throw badRequest(`${prefix}.mime_type must be PNG, JPEG, WebP, or GIF`);
+}
+
+function detectMimeType(data: Buffer): SupportedMimeType | undefined {
+  return (Object.entries(IMAGE_TYPES) as Array<[SupportedMimeType, typeof IMAGE_TYPES[SupportedMimeType]]>)
+    .find(([, definition]) => definition.matches(data))?.[0];
 }
 
 function relativeBlobPath(sha256: string, mimeType: SupportedMimeType) {
