@@ -12,12 +12,13 @@ export function createReadFileTool(system: SystemBackend): RuntimeTool<typeof re
   return {
     name: 'read_file',
     description: 'Read a text file from the workspace.',
+    approval: 'none',
     schema: readFileSchema,
-    async handler(input) {
+    async handler(input, context) {
       const result = await system.readFile(input.path, {
         offset: input.offset,
         limit: input.limit,
-      });
+      }, { approvedRoots: context.workspaceRoots?.() });
       return {
         path: result.path,
         content: result.content,

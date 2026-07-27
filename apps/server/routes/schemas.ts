@@ -15,6 +15,11 @@ export const listSessionsQuerySchema = z.object({
 export const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  env: z.object({ approval_mode: z.enum(['manual', 'ai_review', 'auto_approve']).optional() }).strict().optional(),
+}).strict();
+
+export const updateSessionEnvironmentSchema = z.object({
+  approval_mode: z.enum(['manual', 'ai_review', 'auto_approve']),
 }).strict();
 
 export const updateSessionSchema = z.object({

@@ -175,5 +175,6 @@ export function forkSession({ source, messageId, now }: ForkSessionInput): Sessi
         created_at: now,
       },
     },
+    env: structuredClone(source.env),
   };
 }

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import path from 'node:path';
 
 import type { RuntimeRun } from '@moke/agent-runtime';
 import {
@@ -68,7 +69,7 @@ export async function createApp(): Promise<ServerApp> {
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const skillSettingsService = new SkillSettingsService(workspace);
-  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession });
+  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace });
   const attachmentStore = new AttachmentStore(storePath);
   const messagingStore = new JsonMessagingStore(storePath);
   const { system, toolRegistry, createSkillContentManager } = createToolRegistry(workspace, browserBridge);
@@ -76,6 +77,7 @@ export async function createApp(): Promise<ServerApp> {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
   const approvedMessagingRoots = new Set([workspace]);
+  const sessionWorkspaceRoots = new Map<string, Set<string>>();
   for (const permission of permissionsService.listWorkspaceRoots()) {
     system.approveWorkspaceRoot(permission.path);
     approvedMessagingRoots.add(permission.path);
@@ -91,24 +93,30 @@ export async function createApp(): Promise<ServerApp> {
     toolRegistry,
     createSkillContentManager,
     workspace,
-    approveWorkspaceRoot: (root, scope) => {
-      const approval = system.approveWorkspaceRoot(root);
-      approvedMessagingRoots.add(approval.path);
+    approveWorkspaceRoot: (root, scope, sessionId) => {
+      const normalizedRoot = path.resolve(root);
       if (scope === 'once') {
-        return approval.added ? () => {
-          system.revokeWorkspaceRoot(root);
-          approvedMessagingRoots.delete(approval.path);
-        } : undefined;
+        return { approved: true, scope, approvedRoots: [normalizedRoot] };
       }
+      if (scope === 'session') {
+        const roots = sessionWorkspaceRoots.get(sessionId) || new Set<string>();
+        roots.add(normalizedRoot);
+        sessionWorkspaceRoots.set(sessionId, roots);
+        return { approved: true, scope };
+      }
+      const approval = system.approveWorkspaceRoot(normalizedRoot);
+      approvedMessagingRoots.add(approval.path);
       if (scope === 'persistent') {
         permissionsService.upsertWorkspaceRoot(root);
       }
+      return { approved: true, scope };
     },
+    workspaceRoots: (sessionId) => [...(sessionWorkspaceRoots.get(sessionId) || [])],
     getModelSettings: () => settingsService.getModelSettings(),
     resolveImageAttachments: (attachments) => attachments.map((attachment) => attachmentStore.resolve(attachment)),
     onSessionChanged: (session) => sessionStore.save(session),
   });
-  const sessionApplicationService = new SessionApplicationService(sessionStore, runManager);
+  const sessionApplicationService = new SessionApplicationService(sessionStore, runManager, workspace);
   const messagingConnectionPool = new MessagingConnectionPool(messagingStore);
   messagingConnectionPool
     .register('weixin', (connection, secret) => {
@@ -168,6 +176,7 @@ export async function createApp(): Promise<ServerApp> {
       skillSettingsService,
       messagingRuntime,
       weixinLoginService,
+      workspace,
     }),
   );
 

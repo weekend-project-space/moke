@@ -9,6 +9,7 @@ import {
   listSessionsQuerySchema,
   sendMessageSchema,
   updateSessionSchema,
+  updateSessionEnvironmentSchema,
 } from './schemas.js';
 import { parseBody, parseParams, parseQuery } from '../http/validation.js';
 import {
@@ -24,15 +25,11 @@ import { SessionApplicationService } from '../services/session-application-servi
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
     const requestBody = await parseBody(body, createSessionSchema);
-    const session: Session = {
-      id: id('sess'),
+    const session = new SessionApplicationService(context.sessionStore, context.runManager, context.workspace).createSession({
       title: requestBody.title || 'New chat',
-      created_at: now(),
-      updated_at: now(),
-      messages: [],
-      metadata: requestBody.metadata || {},
-    };
-    context.sessionStore.save(session);
+      metadata: requestBody.metadata,
+      approvalMode: requestBody.env?.approval_mode,
+    });
     return json(200, { session });
   });
 
@@ -54,6 +51,17 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const result = applySessionUpdate(session, await parseBody(body, updateSessionSchema));
     if (!result.ok) throw new HttpError(result.status, result.code, result.message);
 
+    session.updated_at = now();
+    context.sessionStore.save(session);
+    return json(200, { session: summarizeSession(session) });
+  });
+
+  router.patch('/api/sessions/:id/env', async ({ body, context, json, params }) => {
+    const { id: sessionId } = parseParams(params, idParamsSchema);
+    const session = getSession(context, sessionId);
+    const input = await parseBody(body, updateSessionEnvironmentSchema);
+    if (!session.env) throw new HttpError(409, 'SESSION_ENV_UNAVAILABLE', 'Session environment is unavailable');
+    session.env.approval_mode = input.approval_mode;
     session.updated_at = now();
     context.sessionStore.save(session);
     return json(200, { session: summarizeSession(session) });
@@ -94,7 +102,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     }
 
     maybeSetTitleFromFirstUserMessage(session, content || 'Image');
-    const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager);
+    const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager, context.workspace);
     const result = sessionApplicationService.acceptUserMessage({
       session,
       content,

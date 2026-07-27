@@ -48,3 +48,29 @@ test('session detail omits internal context messages from the public API', async
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });
+
+test('session environment API only updates the approval mode', async () => {
+  const session: Session = {
+    id: 'sess_env', title: 'Test', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
+    env: { approval_mode: 'manual', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
+  };
+  const router = createRouter<RoutesContext>();
+  registerSessionRoutes(router);
+  const server = http.createServer(router.handler({
+    sessionStore: { get: () => session, save: () => undefined },
+    workspace: 'E:\\work\\test\\moke',
+  } as unknown as RoutesContext));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/sessions/${session.id}/env`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ approval_mode: 'auto_approve' }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(session.env?.approval_mode, 'auto_approve');
+    assert.equal(session.env?.workspace.root, 'E:\\work\\test\\moke');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});

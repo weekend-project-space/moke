@@ -1,7 +1,7 @@
 import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
 import type { RunHandle, RunLifecycleEvent } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
-import type { AgentEvent, AskOption, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
+import type { AgentEvent, ApprovalMode, AskOption, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
@@ -142,6 +142,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       messages.value = []
       resetRunState(nextSessionId)
       subscriptions.watch(nextSessionId)
+      await loadSessions()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function setApprovalMode(approvalMode: ApprovalMode) {
+    const targetSessionId = sessionId.value
+    if (!targetSessionId || serverStatus.value !== 'online') return false
+    try {
+      await api.updateSessionEnvironment(targetSessionId, approvalMode)
       await loadSessions()
       return true
     } catch {
@@ -437,6 +449,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     runId,
     runningSessionIds,
     selectAskOption,
+    setApprovalMode,
     selectSession,
     sendMessage,
     serverStatus,

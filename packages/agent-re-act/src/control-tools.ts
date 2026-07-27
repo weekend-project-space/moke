@@ -24,6 +24,7 @@ export type AgentToolSpec = RuntimeToolSpec;
 export const askUserTool: AgentToolSpec = {
   name: ASK_USER_TOOL_NAME,
   description: 'Pause the current run to ask the user one question with 2 to 5 concrete options.',
+  approval: 'none',
   schema: askUserSchema,
 };
 

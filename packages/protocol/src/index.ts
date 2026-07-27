@@ -104,6 +104,25 @@ export type ToolApprovalRecord = {
   decision: 'approved' | 'rejected';
   scope: 'once' | 'session' | 'persistent';
   reason: string;
+  reviewer?: ApprovalReviewer;
+  review_reason?: string;
+  approval_mode?: ApprovalMode;
+};
+
+export type ApprovalMode = 'manual' | 'ai_review' | 'auto_approve';
+
+export type ApprovalReviewer = 'user' | 'ai' | 'auto_approve';
+
+export type SessionEnvironment = {
+  approval_mode: ApprovalMode;
+  system: {
+    platform: 'windows' | 'macos' | 'linux' | 'other';
+    arch: string;
+    shell: string;
+  };
+  workspace: {
+    root: string;
+  };
 };
 
 export type ToolMessage = {
@@ -126,6 +145,8 @@ export type Session = {
   updated_at: string;
   messages: Message[];
   metadata: Record<string, unknown>;
+  /** Old persisted sessions may omit this until the server normalizes them on load. */
+  env?: SessionEnvironment;
 };
 
 export type SessionSummary = Omit<Session, 'messages' | 'metadata'> & {

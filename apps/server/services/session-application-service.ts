@@ -2,14 +2,16 @@ import type { RunManager, RunOptions } from '@moke/agent-runtime';
 import type { ResolvedImageAttachment, Session } from '@moke/protocol';
 import type { SessionRepository } from '../storage/session-store.js';
 import { id, maybeSetTitleFromFirstUserMessage, now } from '../domain/sessions.js';
+import { createSessionEnvironment } from './session-environment.js';
 
 export class SessionApplicationService {
   constructor(
     private readonly sessionStore: SessionRepository,
     private readonly runManager: RunManager,
+    private readonly workspace: string,
   ) {}
 
-  createSession(input: { title: string; metadata?: Record<string, unknown> }) {
+  createSession(input: { title: string; metadata?: Record<string, unknown>; approvalMode?: unknown }) {
     const createdAt = now();
     const session: Session = {
       id: id('sess'),
@@ -18,6 +20,7 @@ export class SessionApplicationService {
       updated_at: createdAt,
       messages: [],
       metadata: input.metadata || {},
+      env: createSessionEnvironment({ workspace: this.workspace, approvalMode: input.approvalMode }),
     };
     this.sessionStore.save(session);
     return session;

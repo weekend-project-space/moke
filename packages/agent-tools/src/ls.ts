@@ -10,9 +10,10 @@ export function createLsTool(system: SystemBackend): RuntimeTool<typeof lsSchema
   return {
     name: 'ls',
     description: 'List files in a workspace directory with metadata.',
+    approval: 'none',
     schema: lsSchema,
-    async handler(input) {
-      return system.ls(input.path);
+    async handler(input, context) {
+      return system.ls(input.path, { approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

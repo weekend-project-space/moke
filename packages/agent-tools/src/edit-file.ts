@@ -13,11 +13,12 @@ export function createEditFileTool(system: WritableSystemBackend): RuntimeTool<t
   return {
     name: 'edit_file',
     description: 'Perform exact string replacements in a workspace file.',
+    approval: 'required',
     schema: editFileSchema,
-    async handler(input) {
+    async handler(input, context) {
       return system.editFile(input.path, input.old_string, input.new_string, {
         replaceAll: input.replace_all,
-      });
+      }, { approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

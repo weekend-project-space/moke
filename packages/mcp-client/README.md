@@ -43,6 +43,7 @@ enabled            optional, defaults to true
 timeout_ms         optional, MCP connect, list, and call timeout
 max_output_chars   optional, maximum serialized MCP tool output before truncation
 disabled_tools     optional, MCP tool names to hide from the Agent
+read_only_tools    optional, original MCP tool names that skip tool approval
 roots              optional, allowed roots exposed through MCP roots/list
 ```
 
@@ -64,7 +65,7 @@ Example roots override:
 }
 ```
 
-`write` and `dangerous` MCP tools are visible in `/api/tools` when enabled, but they are not executed until approval policy is implemented.
+MCP tools expose `approval: "required"` in `/api/tools` by default. Only original tool names explicitly listed in a server's `read_only_tools` use `approval: "none"`; disabled tools are never registered.
 
 The recommended config shape follows the common `mcpServers` object style. Moke still accepts the older internal `servers` array format for compatibility.
 

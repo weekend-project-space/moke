@@ -15,7 +15,7 @@ import { useAgentSession } from '../composables/useAgentSession'
 import { useChatComposer } from '../composables/useChatComposer'
 import { useComposerReasoning } from '../composables/useComposerReasoning'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
-import type { Message, SessionSummary } from '../model/conversation'
+import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
@@ -76,6 +76,7 @@ const {
   runId,
   runningSessionIds,
   selectAskOption,
+  setApprovalMode,
   selectSession: selectAgentSession,
   sendMessage,
   serverStatus,
@@ -173,6 +174,12 @@ function openSettings() {
   closeTransientPanels()
   emit('openSettings')
 }
+
+async function updateApprovalMode(mode: ApprovalMode) {
+  const previous = currentApprovalMode.value
+  if (mode === previous) return
+  await setApprovalMode(mode)
+}
 const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
   title: prompt,
   description: '',
@@ -180,6 +187,7 @@ const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
 }))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
+const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode)
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
@@ -452,8 +460,10 @@ defineExpose({
           :model-name="activeModel?.model || ''" :model-provider="activeModel?.providerName || ''"
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
+          :approval-mode="currentApprovalMode"
           @update:input-value="input = $event"
           @update:reasoning-effort="composerReasoningEffort = $event"
+          @update:approval-mode="updateApprovalMode"
           @input="handleInput"
           @add-attachments="addAttachments" @remove-attachment="removeAttachment"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />

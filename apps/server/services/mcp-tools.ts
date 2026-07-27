@@ -106,6 +106,7 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
           type: 'mcp',
           server_id: mcpTool.serverId,
         },
+        approval: mcpTool.readOnly ? 'none' : 'required',
         input_schema: mcpTool.inputSchema,
         schema: jsonSchemaToZod(mcpTool.inputSchema),
         async handler(input) {

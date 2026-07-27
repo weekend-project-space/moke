@@ -251,6 +251,7 @@ test('RunManager emits approval resolution after a decision', async () => {
     decision: 'approved',
     scope: 'once',
     reason: 'Run tests',
+    reviewer: 'user',
   }]);
 });
 
@@ -425,4 +426,105 @@ test('RunManager resolves persisted image attachments before sending history to 
   const run = manager.createRun(session, { content: 'current' });
   await waitFor(() => run.status === 'completed');
   assert.equal(historyDataUrl, 'data:image/png;base64,AA==');
+});
+
+test('RunManager auto-approves tool decisions and records the reviewer', async () => {
+  const session = createSession();
+  session.env = {
+    approval_mode: 'auto_approve',
+    system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
+    workspace: { root: process.cwd() },
+  };
+  let decision: { approved?: boolean; reviewer?: string } | undefined;
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        decision = await input.context.approveTool?.({ tool: 'write_file', input: { path: 'a.md' }, callId: 'call_1', reason: 'Write file' });
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+
+  const run = manager.createRun(session, { content: 'write a file' });
+  await waitFor(() => run.status === 'completed');
+  assert.equal(decision?.approved, true);
+  assert.equal(decision?.reviewer, 'auto_approve');
+});
+
+test('RunManager uses the AI reviewer decision without waiting for the user', async () => {
+  const session = createSession();
+  session.env = {
+    approval_mode: 'ai_review',
+    system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
+    workspace: { root: process.cwd() },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        const decision = await input.context.approveTool?.({ tool: 'write_file', input: { path: 'a.md' }, callId: 'call_1', reason: 'Write file' });
+        assert.equal(decision?.approved, false);
+        assert.equal(decision?.reviewer, 'ai');
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+    aiApprovalReviewer: {
+      async review() { return { decision: 'rejected', reason: 'Not requested by the user' }; },
+    },
+  });
+
+  const run = manager.createRun(session, { content: 'summarize the file' });
+  await waitFor(() => run.status === 'completed');
+});
+
+test('RunManager escalates an AI review to the user', async () => {
+  const session = createSession();
+  session.env = {
+    approval_mode: 'ai_review',
+    system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: process.cwd() },
+  };
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        const decision = await input.context.approveTool?.({ tool: 'execute', input: { command: 'rm' }, callId: 'call_1', reason: 'Run command' });
+        assert.equal(decision?.approved, true);
+        assert.equal(decision?.reviewer, 'ai');
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(), workspace: process.cwd(),
+    aiApprovalReviewer: { async review() { return { decision: 'escalated', reason: 'Destructive action' }; } },
+  });
+  const run = manager.createRun(session, { content: 'remove it' });
+  await waitFor(() => Boolean(run.pending_approval));
+  assert.equal(manager.approve(run.id, run.pending_approval?.approval_id || '', 'approved').status, 200);
+  await waitFor(() => run.status === 'completed');
+});
+
+test('RunManager redacts sensitive tool parameters before publishing a user approval', async () => {
+  const session = createSession();
+  let manager: RunManager;
+  manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        await input.context.approveTool?.({
+          tool: 'send_message', input: { token: 'secret-value', text: 'hello' }, callId: 'call_1', reason: 'Send message',
+        });
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+  const run = manager.createRun(session, { content: 'send hello' });
+  await waitFor(() => Boolean(run.pending_approval));
+  assert.equal(run.pending_approval?.action.input.token, '[REDACTED]');
+  manager.cancel(run.id);
 });

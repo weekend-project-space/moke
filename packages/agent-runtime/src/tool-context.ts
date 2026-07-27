@@ -1,4 +1,4 @@
-import type { ToolApprovalRecord } from '@moke/protocol';
+import type { ApprovalReviewer, ToolApprovalRecord } from '@moke/protocol';
 import type { RuntimeRun } from './run-state.js';
 
 export type RuntimeContextItem = {
@@ -41,6 +41,7 @@ export type WorkspacePathApprovalRequest = {
 export type WorkspacePathApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
+  approvedRoots?: string[];
   message?: string;
   cleanup?: () => void;
 };
@@ -60,13 +61,17 @@ export type ToolApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
   message?: string;
+  reviewer?: ApprovalReviewer;
+  reviewReason?: string;
 };
 
 export type ToolContext = {
   workspace: string;
+  workspaceRoots?: () => string[];
   run?: RuntimeRun;
   abortSignal?: AbortSignal;
   contentManager?: RuntimeContentManager;
+  trustedContext?: RuntimeContextItem[];
   currentToolCall?: {
     callId: string;
     tool: string;

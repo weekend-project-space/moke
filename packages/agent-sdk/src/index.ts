@@ -35,6 +35,7 @@ export type {
   RunResultOptions,
   SendMessageInput,
   UpdateSessionInput,
+  UpdateSessionEnvironmentInput,
 } from './types.js';
 export type {
   AgentEvent,

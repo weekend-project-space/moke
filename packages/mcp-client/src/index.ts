@@ -25,6 +25,7 @@ const serverConfigSchema = z.object({
   timeout_ms: z.number().int().positive().default(30000),
   max_output_chars: z.number().int().positive().default(20000),
   disabled_tools: z.array(z.string()).default([]),
+  read_only_tools: z.array(z.string()).default([]),
   roots: z.array(rootConfigSchema).optional(),
 });
 
@@ -60,6 +61,7 @@ export type McpTool = {
   description: string;
   inputSchema: Record<string, unknown>;
   maxOutputChars: number;
+  readOnly: boolean;
 };
 
 type McpConnection = {
@@ -167,6 +169,7 @@ export class McpManager {
     }
 
     const disabledTools = new Set(config.disabled_tools);
+    const readOnlyTools = new Set(config.read_only_tools);
     const tools = (toolList.tools || [])
       .filter((tool) => !disabledTools.has(tool.name))
       .map((tool) => ({
@@ -176,6 +179,7 @@ export class McpManager {
         description: tool.description || `MCP tool ${tool.name} from ${config.id}`,
         inputSchema: (tool.inputSchema || {}) as Record<string, unknown>,
         maxOutputChars: config.max_output_chars,
+        readOnly: readOnlyTools.has(tool.name),
       }));
 
     const connection = {

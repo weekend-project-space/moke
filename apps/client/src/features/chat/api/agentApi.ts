@@ -5,7 +5,7 @@ import type {
   SessionRunEventListener,
   SessionRunEventOptions,
 } from '@moke/agent-sdk'
-import type { ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { ApprovalMode, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 
 export type SendMessageRequest = {
   content: string
@@ -46,6 +46,10 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
 
     async updateSession(id: string, payload: Record<string, unknown>) {
       await client.sessions.update(id, payload)
+    },
+
+    async updateSessionEnvironment(id: string, approvalMode: ApprovalMode) {
+      await client.session(id).updateEnvironment({ approval_mode: approvalMode })
     },
 
     async loadSessionMessages(id: string, signal?: AbortSignal): Promise<Message[]> {

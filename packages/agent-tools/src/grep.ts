@@ -15,15 +15,16 @@ export function createGrepTool(system: SystemBackend): RuntimeTool<typeof grepSc
   return {
     name: 'grep',
     description: 'Search workspace file contents by pattern.',
+    approval: 'none',
     schema: grepSchema,
-    async handler(input) {
+    async handler(input, context) {
       return system.grep(input.pattern, {
         path: input.path,
         glob: input.glob,
         mode: input.mode,
         contextLines: input.context_lines,
         limit: input.limit,
-      });
+      }, { approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

@@ -186,6 +186,27 @@
   padding: 0 8px 8px 12px;
 }
 
+.composer-footer-left,
+.composer-footer-right {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-footer-right {
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.composer-model-context {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
 .composer-secondary-action {
   color: var(--ink-soft);
   background: transparent;
@@ -198,8 +219,10 @@
 
 .composer-model {
   display: inline-flex;
-  min-width: 0;
-  max-width: min(180px, 34%);
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: min(136px, 30vw);
+  max-width: min(200px, 30vw);
   height: 30px;
   align-items: center;
   gap: 6px;
@@ -217,6 +240,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+.composer-model-context .composer-model {
+  min-width: 0;
 }
 
 .composer button.composer-thinking-action {
@@ -242,6 +269,36 @@
     color: var(--ink);
     background: var(--surface-panel-muted);
   }
+}
+
+.composer button.composer-approval-action {
+  width: auto;
+  min-width: 0;
+  gap: 5px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-soft);
+  background: transparent;
+
+  span {
+    max-width: 92px;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    font-weight: 430;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover,
+  &.active {
+    color: var(--ink);
+    background: var(--surface-panel-muted);
+  }
+}
+
+.composer-select-control {
+  position: relative;
+  flex: 0 0 auto;
 }
 
 .composer-option-list {
@@ -277,6 +334,19 @@
       white-space: nowrap;
     }
 
+    .composer-option-icon,
+    .composer-option-check {
+      display: inline-flex;
+      flex: 0 0 16px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .composer-option-check {
+      margin-left: auto;
+      color: var(--accent-strong);
+    }
+
     &:hover {
       color: var(--ink);
       background: var(--surface-control-hover);
@@ -298,6 +368,35 @@
 .composer-thinking-menu button.active {
   color: var(--ink);
   background: var(--surface-control-hover);
+}
+
+.composer-approval-menu {
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 210px;
+  transform: none;
+}
+
+.composer-approval-menu button:has(.lucide-shield-alert) .composer-option-icon {
+  color: var(--warning);
+}
+
+.composer-thinking-menu {
+  width: 210px;
+}
+
+.composer-select-menu {
+  bottom: calc(100% + 6px);
+  transform: none;
+
+  &.align-start {
+    left: 0;
+  }
+
+  &.align-end {
+    right: 0;
+    left: auto;
+  }
 }
 
 .queued-message-panel {
@@ -543,7 +642,7 @@
 }
 
 .composer button.primary-action {
-  margin-left: auto;
+  margin-left: 0;
   color: var(--surface-solid);
   background: var(--primary);
   box-shadow: none;
@@ -594,5 +693,17 @@
   .jump-inline {
     width: 36px;
     height: 36px;
+  }
+
+  .composer-model {
+    flex-basis: auto;
+    width: fit-content;
+    min-width: 0;
+    max-width: min(128px, 28vw);
+  }
+
+  .composer button.composer-thinking-action span,
+  .composer button.composer-approval-action span {
+    max-width: 60px;
   }
 }

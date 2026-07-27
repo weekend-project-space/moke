@@ -35,92 +35,15 @@ function createSystemBackend() {
   return { calls, system };
 }
 
-test('execute asks for approval before complex shell commands', async () => {
+test('execute delegates all approval decisions to ToolRegistry', async () => {
   const { calls, system } = createSystemBackend();
   const tool = createExecuteTool(system);
-  let approvalReason = '';
 
   const result = await tool.handler(
     { command: 'echo hello && echo world' },
-    {
-      workspace: 'E:\\work\\test\\moke',
-      approveTool: async (input) => {
-        approvalReason = input.reason;
-        return { approved: true, scope: 'once' };
-      },
-    },
+    { workspace: 'E:\\work\\test\\moke' },
   );
 
   assert.deepEqual(result, { exit_code: 0, stdout: 'ok', stderr: '' });
-  assert.match(approvalReason, /shell \u63a7\u5236\u7b26/);
   assert.deepEqual(calls, ['echo hello && echo world']);
-});
-
-test('execute skips approval for allowlisted npm command chains', async () => {
-  const { calls, system } = createSystemBackend();
-  const tool = createExecuteTool(system);
-
-  const result = await tool.handler(
-    { command: 'npm test && npm run build' },
-    {
-      workspace: 'E:\\work\\test\\moke',
-      approveTool: async () => {
-        throw new Error('approval should not be requested');
-      },
-    },
-  );
-
-  assert.deepEqual(result, { exit_code: 0, stdout: 'ok', stderr: '' });
-  assert.deepEqual(calls, ['npm test && npm run build']);
-});
-
-test('execute does not run complex commands when approval is rejected', async () => {
-  const { calls, system } = createSystemBackend();
-  const tool = createExecuteTool(system);
-
-  await assert.rejects(
-    () =>
-      tool.handler(
-        { command: 'powershell -EncodedCommand AAAA' },
-        {
-          workspace: 'E:\\work\\test\\moke',
-          approveTool: async () => ({ approved: false, message: 'no' }),
-        },
-      ),
-    /no/,
-  );
-
-  assert.deepEqual(calls, []);
-});
-
-test('execute does not ask approval for non-shell args', async () => {
-  const { calls, system } = createSystemBackend();
-  const tool = createExecuteTool(system);
-
-  await tool.handler(
-    { command: 'node', args: ['-e', "process.stdout.write('ok');"] },
-    {
-      workspace: 'E:\\work\\test\\moke',
-      approveTool: async () => {
-        throw new Error('approval should not be requested');
-      },
-    },
-  );
-
-  assert.deepEqual(calls, ['node']);
-});
-
-test('execute asks approval for shell args with encoded content', async () => {
-  const { calls, system } = createSystemBackend();
-  const tool = createExecuteTool(system);
-
-  await tool.handler(
-    { command: 'powershell', args: ['-EncodedCommand', 'AAAA'] },
-    {
-      workspace: 'E:\\work\\test\\moke',
-      approveTool: async () => ({ approved: true, scope: 'once' }),
-    },
-  );
-
-  assert.deepEqual(calls, ['powershell']);
 });

@@ -285,6 +285,7 @@ Response:
       "name": "mcp__moke_local__project_info",
       "original_name": "project_info",
       "description": "Return basic read-only information about the current Moke workspace.",
+      "approval": "required",
       "source": {
         "type": "mcp",
         "server_id": "moke_local"
@@ -301,6 +302,8 @@ Response:
   ]
 }
 ```
+
+`approval` is read-only tool metadata. `required` means the runtime requests approval after validating input and before invoking the handler; `none` means no tool-level approval is needed. Workspace-path approval remains separate.
 
 Future approval response:
 
@@ -754,6 +757,8 @@ MCP tool behavior:
 input_schema       converted to runtime validation for common JSON Schema fields
 max_output_chars   truncates serialized tool output
 disabled_tools     hides configured tools from the Agent
+read_only_tools    original MCP tool names that explicitly use approval=none
+approval           required by default; read_only_tools are the only exception
 roots              optional allowed root paths exposed through roots/list
 ```
 

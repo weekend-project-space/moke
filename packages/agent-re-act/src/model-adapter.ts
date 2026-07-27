@@ -305,7 +305,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
     return {
       langchain: [
         createSystemMessage(input.runtimeTools),
-        ...createRuntimeContextMessages(input.context.contentManager?.buildInitialContext() || []),
+        ...createRuntimeContextMessages([...(input.context.trustedContext || []), ...(input.context.contentManager?.buildInitialContext() || [])]),
         ...createHistoryMessages(input.history),
         createUserMessage(input.input, input.attachments),
       ],
@@ -382,7 +382,7 @@ export class ResponsesAdapter implements ModelAdapter {
           role: 'developer',
           content: createSystemPrompt(input.runtimeTools),
         },
-        ...createResponsesContextItems(input.context.contentManager?.buildInitialContext() || []),
+        ...createResponsesContextItems([...(input.context.trustedContext || []), ...(input.context.contentManager?.buildInitialContext() || [])]),
         ...createResponsesHistoryMessages(input.history),
         {
           role: 'user',

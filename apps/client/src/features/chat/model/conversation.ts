@@ -23,6 +23,7 @@ export type SessionSummary = ProtocolSessionSummary
 export type PendingAsk = ProtocolPendingAsk
 export type PendingApproval = ProtocolPendingApproval
 export type ToolApprovalRecord = ProtocolToolApprovalRecord
+export type ApprovalMode = import('@moke/protocol').ApprovalMode
 export type AskOption = PendingAsk['options'][number]
 
 type BaseMessage = {

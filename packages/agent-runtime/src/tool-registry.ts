@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { RuntimeContextItem, ToolContext } from './tool-context.js';
 import { isPathRequiresApprovalError } from './workspace-approval.js';
 
+export type ToolApprovalRequirement = 'none' | 'required';
+
 export type RuntimeToolResult = {
   type: 'runtime_tool_result';
   publicOutput: Record<string, unknown>;
@@ -24,6 +26,8 @@ export type RuntimeTool<
     server_id?: string;
   };
   input_schema?: Record<string, unknown>;
+  /** Defaults to required when omitted so new tools fail closed. */
+  approval?: ToolApprovalRequirement;
   schema: TInput;
   handler: (input: z.infer<TInput>, context: ToolContext) => Promise<TOutput>;
 };
@@ -108,6 +112,31 @@ export class ToolRegistry {
       },
     };
 
+    if (tool.approval !== 'none') {
+      if (!context.approveTool) {
+        throw approvalError(
+          'TOOL_APPROVAL_UNAVAILABLE',
+          `Tool approval is unavailable for ${name}`,
+          name,
+        );
+      }
+
+      const decision = await context.approveTool({
+        tool: name,
+        input: normalizedInput,
+        source: tool.source,
+        callId: context.currentToolCall?.callId,
+        reason: `Approval required to execute ${name}`,
+      });
+      if (!decision.approved) {
+        throw approvalError(
+          'TOOL_APPROVAL_REJECTED',
+          decision.message || `Tool execution rejected: ${name}`,
+          name,
+        );
+      }
+    }
+
     try {
       return await tool.handler(parsedInput, nextContext);
     } catch (error) {
@@ -135,12 +164,27 @@ export class ToolRegistry {
       }
 
       try {
-        return await tool.handler(parsedInput, nextContext);
+        const retryContext = decision.approvedRoots?.length
+          ? {
+              ...nextContext,
+              workspaceRoots: () => [
+                ...(nextContext.workspaceRoots?.() || []),
+                ...decision.approvedRoots!,
+              ],
+            }
+          : nextContext;
+        return await tool.handler(parsedInput, retryContext);
       } finally {
         decision.cleanup?.();
       }
     }
   }
+}
+
+function approvalError(code: 'TOOL_APPROVAL_UNAVAILABLE' | 'TOOL_APPROVAL_REJECTED', message: string, tool: string) {
+  return new ToolExecutionError(message, {
+    error: { code, message, tool },
+  });
 }
 
 function toRecord(value: unknown): Record<string, unknown> {

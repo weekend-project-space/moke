@@ -70,6 +70,21 @@ test('writeFile writes directly when parent is the backend root', async () => {
   }
 });
 
+test('readFile requests approval for the exact external file', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  const target = path.resolve('C:/Windows/System32/drivers/etc/hosts');
+
+  await assert.rejects(
+    () => system.readFile(target),
+    (error: unknown) => {
+      assert.equal((error as { details?: { suggestedRoot?: string } }).details?.suggestedRoot, target);
+      return true;
+    },
+  );
+});
+
 test('execute rejects absolute command paths outside workspace', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');
@@ -100,6 +115,21 @@ test('execute allows absolute command paths inside approved roots', async () => 
   await system.execute('type E:\\notes\\a.md');
 
   assert.equal(approval.added, true);
+  assert.equal(backend.calls.length, 1);
+});
+
+test('per-invocation roots do not leak to another session sharing the backend', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  const sessionARoots = ['E:/notes'];
+
+  await system.execute('type E:\\notes\\a.md', [], undefined, { approvedRoots: sessionARoots });
+
+  await assert.rejects(
+    () => system.execute('type E:\\notes\\a.md'),
+    /Command path requires approval: E:\\notes\\a\.md/,
+  );
   assert.equal(backend.calls.length, 1);
 });
 

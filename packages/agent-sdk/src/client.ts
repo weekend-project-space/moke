@@ -41,6 +41,7 @@ import type {
   RunResultOptions,
   SendMessageInput,
   UpdateSessionInput,
+  UpdateSessionEnvironmentInput,
 } from './types.js';
 
 export class MokeClient {
@@ -106,6 +107,13 @@ class SessionsResource {
     return requireObjectWithId(data.session, 'session') as SessionSummary;
   }
 
+  async updateEnvironment(id: string, input: UpdateSessionEnvironmentInput, options?: RequestOptions) {
+    const data = await this.http.request<UpdateSessionResponse>(
+      `/api/sessions/${id}/env`, this.http.json('PATCH', input), options,
+    );
+    return requireObjectWithId(data.session, 'session') as SessionSummary;
+  }
+
   async fork(id: string, input: ForkSessionInput, options?: RequestOptions) {
     const data = await this.http.request<ForkSessionResponse>(
       `/api/sessions/${id}/fork`,
@@ -145,6 +153,9 @@ export class SessionHandle {
   get(options?: RequestOptions) { return this.client.sessions.get(this.id, options); }
   async messages(options?: RequestOptions) { return (await this.get(options)).messages; }
   update(input: UpdateSessionInput, options?: RequestOptions) { return this.client.sessions.update(this.id, input, options); }
+  updateEnvironment(input: UpdateSessionEnvironmentInput, options?: RequestOptions) {
+    return this.client.sessions.updateEnvironment(this.id, input, options);
+  }
   rename(title: string, options?: RequestOptions) { return this.update({ title }, options); }
   pin(pinned = true, options?: RequestOptions) { return this.update({ pinned }, options); }
   archive(options?: RequestOptions) { return this.update({ archived: true }, options); }

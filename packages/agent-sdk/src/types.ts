@@ -7,6 +7,7 @@ import type {
   ReasoningEffort,
   RuntimeLimits,
   RunLifecycleEvent,
+  ApprovalMode,
 } from '@moke/protocol';
 import type { RunHandle, SessionHandle } from './client.js';
 
@@ -30,6 +31,11 @@ export type ListSessionsOptions = RequestOptions & {
 export type CreateSessionInput = {
   title?: string;
   metadata?: Record<string, unknown>;
+  env?: { approval_mode?: ApprovalMode };
+};
+
+export type UpdateSessionEnvironmentInput = {
+  approval_mode: ApprovalMode;
 };
 
 export type UpdateSessionInput = {

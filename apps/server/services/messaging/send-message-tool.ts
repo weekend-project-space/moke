@@ -34,6 +34,7 @@ export function createSendMessageTool(
   return {
     name: 'send_message',
     description: 'Send text, images, or files to the current external messaging conversation. Media paths outside the workspace require directory approval.',
+    approval: 'required',
     schema: sendMessageSchema,
     async handler(input, context) {
       const run = context.run;
@@ -41,17 +42,7 @@ export function createSendMessageTool(
         throw toolError('send_message is only available in the current external messaging conversation', 'MESSAGING_ORIGIN_REQUIRED');
       }
       const contents = toOutboundContents(input);
-      if (hasMedia(contents)) {
-        await outbound.validateMediaPaths?.(contents);
-        if (!context.approveTool) throw toolError('Sending media requires approval', 'TOOL_APPROVAL_REQUIRED');
-        const decision = await context.approveTool({
-          tool: 'send_message',
-          input: toRecord(input),
-          callId: context.currentToolCall?.callId,
-          reason: 'Send workspace media to the current external messaging conversation',
-        });
-        if (!decision.approved) throw toolError(decision.message || 'Media sending was rejected', 'TOOL_ACCESS_REJECTED');
-      }
+      if (hasMedia(contents)) await outbound.validateMediaPaths?.(contents);
       const callId = context.currentToolCall?.callId;
       if (!callId) throw toolError('send_message requires a tool call id', 'TOOL_CALL_ID_REQUIRED');
       const result = await outbound.send({
@@ -77,10 +68,6 @@ function toOutboundContents(input: z.infer<typeof sendMessageSchema>): OutboundC
 
 function hasMedia(contents: OutboundContent[]) {
   return contents.some((content) => content.type !== 'text');
-}
-
-function toRecord(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function toolError(message: string, code: string) {

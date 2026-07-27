@@ -59,6 +59,13 @@ const resultEmptyText = computed(() => {
 
   return props.step.renderer === 'directory' ? uiText.process.emptyDirectory : uiText.process.noResults
 })
+const latestApproval = computed(() => props.step.approvals?.at(-1))
+const approvalAuditText = computed(() => {
+  const approval = latestApproval.value
+  if (!approval) return ''
+  const reviewer = approval.reviewer || 'user'
+  return approval.review_reason ? `${reviewer}: ${approval.review_reason}` : reviewer
+})
 function browserFallbackText(toolName: string) {
   if (toolName === 'navigate_page' || toolName === 'create_page' || toolName === 'select_page') return uiText.tool.pageOpened
   if (toolName === 'click') return uiText.tool.clickCompleted
@@ -93,6 +100,10 @@ function diffStats(lines: string[]) {
 
 <template>
   <div class="tool-detail">
+    <div v-if="latestApproval" class="tool-approval-audit">
+      <span>{{ latestApproval.decision }}</span>
+      <span>{{ approvalAuditText }}</span>
+    </div>
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">

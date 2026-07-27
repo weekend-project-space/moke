@@ -1,5 +1,5 @@
-import { ReActAgent } from '@moke/agent-re-act';
-import { RunManager, ToolRegistry, type RuntimeContentManager, type RuntimeRun } from '@moke/agent-runtime';
+import { ReActAgent, ReActApprovalReviewer } from '@moke/agent-re-act';
+import { RunManager, ToolRegistry, type RuntimeContentManager, type RuntimeRun, type WorkspacePathApprovalDecision } from '@moke/agent-runtime';
 import { LocalSystemBackend, registerAgentTools } from '@moke/agent-tools';
 import {
   ContentManager,
@@ -33,7 +33,8 @@ export function createRunManager(input: {
   toolRegistry: ToolRegistry;
   createSkillContentManager: () => RuntimeContentManager | Promise<RuntimeContentManager>;
   workspace: string;
-  approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
+  approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
+  workspaceRoots: (sessionId: string) => string[];
   getModelSettings: () => Partial<ChatModelSettings>;
   resolveImageAttachments: (
     attachments: ImageAttachment[],
@@ -47,7 +48,9 @@ export function createRunManager(input: {
     workspace: input.workspace,
     createSkillContentManager: input.createSkillContentManager,
     approveWorkspaceRoot: input.approveWorkspaceRoot,
+    workspaceRoots: input.workspaceRoots,
     resolveImageAttachments: input.resolveImageAttachments,
     onSessionChanged: input.onSessionChanged,
+    aiApprovalReviewer: new ReActApprovalReviewer(input.getModelSettings),
   });
 }

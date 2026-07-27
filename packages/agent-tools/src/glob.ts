@@ -12,12 +12,13 @@ export function createGlobTool(system: SystemBackend): RuntimeTool<typeof globSc
   return {
     name: 'glob',
     description: 'Find files matching a glob pattern in the workspace.',
+    approval: 'none',
     schema: globSchema,
-    async handler(input) {
+    async handler(input, context) {
       return system.glob(input.pattern, {
         path: input.path,
         limit: input.limit,
-      });
+      }, { approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

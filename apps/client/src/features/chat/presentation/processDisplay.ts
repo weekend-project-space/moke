@@ -152,7 +152,7 @@ export function resolveToolStepState(
       : approval.scope === 'session'
         ? uiText.tool.approvalAllowedSession
         : uiText.tool.approvalAllowedOnce
-    return { kind: 'approved', label }
+    return { kind: 'approved', label: approval.reviewer ? `${label} (${approval.reviewer})` : label }
   }
   return undefined
 }

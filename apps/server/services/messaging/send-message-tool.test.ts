@@ -80,33 +80,7 @@ test('send_message accepts a Feishu messaging run', async () => {
   assert.equal(sent, true);
 });
 
-test('send_message requires approval before sending media', async () => {
-  let sends = 0;
-  const tool = createSendMessageTool({
-    async send() {
-      sends += 1;
-      return { receipts: [] };
-    },
-  });
-  const run = {
-    id: 'run_1',
-    origin: { kind: 'messaging', platform: 'weixin', connection_id: 'wxconn_1', binding_id: 'bind_1', inbound_message_id: 'message_1' },
-  } as RuntimeRun;
-
-  await assert.rejects(
-    () => tool.handler({ images: [{ path: 'output/image.png' }] }, {
-      workspace: process.cwd(),
-      run,
-      currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
-      approveTool: async () => ({ approved: false, message: 'rejected' }),
-    }),
-    /rejected/,
-  );
-  assert.equal(sends, 0);
-});
-
-test('send_message sends media after approval', async () => {
-  let approved = false;
+test('send_message validates media paths while ToolRegistry owns approval', async () => {
   let request: { contents: Array<{ type: string }> } | undefined;
   const tool = createSendMessageTool({
     async send(input) {
@@ -123,18 +97,12 @@ test('send_message sends media after approval', async () => {
     workspace: process.cwd(),
     run,
     currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
-    approveTool: async () => {
-      approved = true;
-      return { approved: true };
-    },
   });
 
-  assert.equal(approved, true);
   assert.deepEqual(request?.contents, [{ type: 'image', path: 'output/image.png' }]);
 });
 
-test('send_message checks a media path before requesting media approval', async () => {
-  let mediaApprovalRequested = false;
+test('send_message preserves media path approval errors for ToolRegistry retry', async () => {
   const tool = createSendMessageTool({
     async validateMediaPaths() {
       throw new PathRequiresApprovalError({
@@ -156,12 +124,7 @@ test('send_message checks a media path before requesting media approval', async 
       workspace: process.cwd(),
       run,
       currentToolCall: { callId: 'call_1', tool: 'send_message', input: {} },
-      approveTool: async () => {
-        mediaApprovalRequested = true;
-        return { approved: true };
-      },
     }),
     PathRequiresApprovalError,
   );
-  assert.equal(mediaApprovalRequested, false);
 });

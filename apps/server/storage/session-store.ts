@@ -10,11 +10,12 @@ import {
 import { basename, join } from 'node:path';
 
 import type { Session, SessionSummary } from '@moke/protocol';
+import { normalizeSessionEnvironment } from '../services/session-environment.js';
 
 const SAVE_DEBOUNCE_MS = 80;
 const MAX_RETRY_DELAY_MS = 5_000;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 
 export type SessionSummaryFactory = (session: Session) => SessionSummary;
 
@@ -30,6 +31,7 @@ type SessionStoreInput = {
   storePath: string;
   legacyStatePath: string;
   summarizeSession: SessionSummaryFactory;
+  workspace?: string;
 };
 
 type LegacyState = { sessions?: Session[] };
@@ -85,6 +87,7 @@ export class JsonSessionStore implements SessionRepository {
     try {
       const session = this.readSessionFile(filePath, sessionId);
       this.loadedSessions.set(session.id, session);
+      if (!this.summaries.get(session.id)?.env) this.save(session);
       return session;
     } catch (error) {
       console.warn(`Failed to load session from ${filePath}:`, error);
@@ -158,6 +161,7 @@ export class JsonSessionStore implements SessionRepository {
     this.loadedSessions.clear();
     for (const session of this.readAllSessions()) {
       this.summaries.set(session.id, this.input.summarizeSession(session));
+      this.writeSession(session);
     }
     this.writeIndex();
     rmSync(this.indexDirtyPath, { force: true });
@@ -211,7 +215,10 @@ export class JsonSessionStore implements SessionRepository {
   private readSessionFile(filePath: string, expectedId: string) {
     const session = JSON.parse(readFileSync(filePath, 'utf8')) as Partial<Session>;
     if (!isSession(session) || session.id !== expectedId) throw new Error('invalid session shape or filename');
-    return session as Session;
+    if (!this.input.workspace) return session as Session;
+    const normalized = { ...session, env: normalizeSessionEnvironment(session.env, this.input.workspace) } as Session;
+    if (JSON.stringify(session.env) !== JSON.stringify(normalized.env)) this.pendingSessions.set(normalized.id, normalized);
+    return normalized;
   }
 
   private listSessionFileIds() {
