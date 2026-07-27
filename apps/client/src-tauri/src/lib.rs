@@ -2262,7 +2262,9 @@ async fn browser_close(
         show_browser_page(&app, &state, next_active, None)?;
     }
 
-    browser_result(&state)
+    let result = browser_result(&state)?;
+    emit_browser_state_change(&app, &state, "tab-closed", Some(page_id));
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
