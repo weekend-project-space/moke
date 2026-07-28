@@ -16,8 +16,14 @@ export function createSearchTool(system: SystemBackend): RuntimeTool<typeof sear
     schema: searchSchema,
     async handler(input, context) {
       const [globResult, grepResult] = await Promise.all([
-        system.glob(`**/*${input.query}*`, undefined, { approvedRoots: context.workspaceRoots?.() }),
-        system.grep(input.query, { mode: 'content' }, { approvedRoots: context.workspaceRoots?.() }),
+        system.glob(`**/*${input.query}*`, undefined, {
+          workspaceRoot: context.workspace,
+          approvedRoots: context.workspaceRoots?.(),
+        }),
+        system.grep(input.query, { mode: 'content' }, {
+          workspaceRoot: context.workspace,
+          approvedRoots: context.workspaceRoots?.(),
+        }),
       ]);
       const results = [
         ...globResult.matches.map((match) => ({

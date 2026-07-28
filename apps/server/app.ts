@@ -57,26 +57,37 @@ function closeHttpServer(server: http.Server) {
 }
 
 export async function createApp(): Promise<ServerApp> {
-  const initialWorkspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
-  const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialWorkspace));
+  const initialAppRoot = resolvePath(process.env.MOKE_APP_ROOT, process.cwd(), process.cwd());
+  const loadedEnvPath = loadFirstEnvFile(resolveEnvPaths(initialAppRoot));
   if (loadedEnvPath) console.log(`Loaded environment from ${loadedEnvPath}`);
 
   const config: ServerConfig = resolveServerConfig();
-  const { mcpConfigPath, permissionsPath, port, settingsPath, statePath, storePath, workspace } = config;
+  const {
+    defaultWorkspaceRoot,
+    mcpConfigPath,
+    permissionsPath,
+    port,
+    settingsPath,
+    statePath,
+    storePath,
+  } = config;
 
   const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
   const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
-  const skillSettingsService = new SkillSettingsService(workspace);
-  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace });
+  const skillSettingsService = new SkillSettingsService(defaultWorkspaceRoot);
+  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
   const attachmentStore = new AttachmentStore(storePath);
   const messagingStore = new JsonMessagingStore(storePath);
-  const { system, toolRegistry, createSkillContentManager } = createToolRegistry(workspace, browserBridge);
+  const { system, toolRegistry, createSkillContentManager } = createToolRegistry({
+    defaultWorkspaceRoot,
+    browserBridge,
+  });
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
-  const approvedMessagingRoots = new Set([workspace]);
+  const approvedMessagingRoots = new Set([defaultWorkspaceRoot]);
   const sessionWorkspaceRoots = new Map<string, Set<string>>();
   for (const permission of permissionsService.listWorkspaceRoots()) {
     system.approveWorkspaceRoot(permission.path);
@@ -87,12 +98,12 @@ export async function createApp(): Promise<ServerApp> {
   attachmentStore.migrateInlineAttachments(sessionStore);
   messagingStore.initialize();
 
-  const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, workspace);
+  const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, defaultWorkspaceRoot);
   const runManager = createRunManager({
     runs,
     toolRegistry,
     createSkillContentManager,
-    workspace,
+    defaultWorkspaceRoot,
     approveWorkspaceRoot: (root, scope, sessionId) => {
       const normalizedRoot = path.resolve(root);
       if (scope === 'once') {
@@ -116,7 +127,7 @@ export async function createApp(): Promise<ServerApp> {
     resolveImageAttachments: (attachments) => attachments.map((attachment) => attachmentStore.resolve(attachment)),
     onSessionChanged: (session) => sessionStore.save(session),
   });
-  const sessionApplicationService = new SessionApplicationService(sessionStore, runManager, workspace);
+  const sessionApplicationService = new SessionApplicationService(sessionStore, runManager, defaultWorkspaceRoot);
   const messagingConnectionPool = new MessagingConnectionPool(messagingStore);
   messagingConnectionPool
     .register('weixin', (connection, secret) => {
@@ -153,7 +164,7 @@ export async function createApp(): Promise<ServerApp> {
     sessionApplicationService,
     runManager,
     attachmentStore,
-    workspace,
+    defaultWorkspaceRoot,
     () => [...approvedMessagingRoots],
   );
   toolRegistry.register(createSendMessageTool(messagingRuntime));
@@ -176,7 +187,7 @@ export async function createApp(): Promise<ServerApp> {
       skillSettingsService,
       messagingRuntime,
       weixinLoginService,
-      workspace,
+      defaultWorkspaceRoot,
     }),
   );
 

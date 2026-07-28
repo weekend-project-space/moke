@@ -125,6 +125,24 @@ export type SessionEnvironment = {
   };
 };
 
+/** Environment fields accepted only while a Session is being created. */
+export type CreateSessionEnvironmentInput = {
+  approval_mode?: ApprovalMode;
+  workspace?: {
+    root: string;
+  };
+};
+
+/** Session policy fields that remain mutable after creation. */
+export type UpdateSessionEnvironmentInput = {
+  approval_mode: ApprovalMode;
+};
+
+/** Optional atomic policy update applied before a message starts its Run. */
+export type SendMessageEnvironmentInput = {
+  approval_mode?: ApprovalMode;
+};
+
 export type ToolMessage = {
   id: string;
   role: 'tool';
@@ -285,6 +303,7 @@ export type ApiErrorResponse = {
 export type CreateSessionRequest = {
   title?: string;
   metadata?: Record<string, unknown>;
+  env?: CreateSessionEnvironmentInput;
 };
 
 export type CreateSessionResponse = {
@@ -307,6 +326,8 @@ export type UpdateSessionRequest = {
   pinned?: boolean;
 };
 
+export type UpdateSessionEnvironmentRequest = UpdateSessionEnvironmentInput;
+
 export type UpdateSessionResponse = {
   session: SessionSummary;
 };
@@ -324,6 +345,7 @@ export type SendMessageRequest = {
     content: string;
     attachments?: ImageAttachmentUpload[];
   };
+  env?: SendMessageEnvironmentInput;
   options?: {
     stream?: boolean;
     max_steps?: number;

@@ -131,6 +131,7 @@ class SessionsResource {
         content: input.content,
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       },
+      ...(input.env ? { env: input.env } : {}),
       options: {
         stream: true,
         ...input.limits,

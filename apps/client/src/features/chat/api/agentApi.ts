@@ -1,11 +1,13 @@
 import { MokeApiError, MokeClient } from '@moke/agent-sdk'
 import type {
+  CreateSessionEnvironmentInput,
   RunLifecycleListener,
   RunLifecycleOptions,
   SessionRunEventListener,
   SessionRunEventOptions,
+  UpdateSessionEnvironmentInput,
 } from '@moke/agent-sdk'
-import type { ApprovalMode, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 
 export type SendMessageRequest = {
   content: string
@@ -28,8 +30,8 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
       }
     },
 
-    async createSession(title: string) {
-      return (await client.sessions.create({ title })).id
+    async createSession(title: string, env?: CreateSessionEnvironmentInput) {
+      return (await client.sessions.create({ title, env })).id
     },
 
     listSessions(): Promise<SessionSummary[]> {
@@ -48,8 +50,8 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
       await client.sessions.update(id, payload)
     },
 
-    async updateSessionEnvironment(id: string, approvalMode: ApprovalMode) {
-      await client.session(id).updateEnvironment({ approval_mode: approvalMode })
+    async updateSessionEnvironment(id: string, input: UpdateSessionEnvironmentInput) {
+      await client.session(id).updateEnvironment(input)
     },
 
     async loadSessionMessages(id: string, signal?: AbortSignal): Promise<Message[]> {

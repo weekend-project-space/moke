@@ -11,25 +11,26 @@ import {
   updateSessionSchema,
   updateSessionEnvironmentSchema,
 } from './schemas.js';
-import { parseBody, parseParams, parseQuery } from '../http/validation.js';
+import { parseBody, parseInput, parseParams, parseQuery } from '../http/validation.js';
 import {
   applySessionUpdate,
   forkSession,
   id,
-  maybeSetTitleFromFirstUserMessage,
   now,
   summarizeSession,
 } from '../domain/sessions.js';
 import { SessionApplicationService } from '../services/session-application-service.js';
+import { applyMutableSessionEnvironmentInput, SessionEnvironmentError } from '../services/session-environment.js';
 
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
     const requestBody = await parseBody(body, createSessionSchema);
-    const session = new SessionApplicationService(context.sessionStore, context.runManager, context.workspace).createSession({
-      title: requestBody.title || 'New chat',
-      metadata: requestBody.metadata,
-      approvalMode: requestBody.env?.approval_mode,
-    });
+    const session = withEnvironmentError(() =>
+      new SessionApplicationService(context.sessionStore, context.runManager, context.defaultWorkspaceRoot).createSession({
+        title: requestBody.title || 'New chat',
+        metadata: requestBody.metadata,
+        env: requestBody.env,
+      }));
     return json(200, { session });
   });
 
@@ -59,9 +60,14 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.patch('/api/sessions/:id/env', async ({ body, context, json, params }) => {
     const { id: sessionId } = parseParams(params, idParamsSchema);
     const session = getSession(context, sessionId);
-    const input = await parseBody(body, updateSessionEnvironmentSchema);
-    if (!session.env) throw new HttpError(409, 'SESSION_ENV_UNAVAILABLE', 'Session environment is unavailable');
-    session.env.approval_mode = input.approval_mode;
+    const rawInput = await body();
+    rejectImmutableWorkspace(rawInput);
+    const input = parseInput(updateSessionEnvironmentSchema, rawInput);
+    session.env = withEnvironmentError(() => applyMutableSessionEnvironmentInput(
+      session.env,
+      input,
+      context.defaultWorkspaceRoot,
+    ));
     session.updated_at = now();
     context.sessionStore.save(session);
     return json(200, { session: summarizeSession(session) });
@@ -94,24 +100,26 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions/:id/messages', async ({ body, context, json, params }) => {
     const { id: sessionId } = parseParams(params, idParamsSchema);
     const session = getSession(context, sessionId);
-    const requestBody = await parseBody(body, sendMessageSchema);
+    const rawRequestBody = await body();
+    rejectImmutableWorkspace(environmentFromSendRequest(rawRequestBody));
+    const requestBody = parseInput(sendMessageSchema, rawRequestBody);
     const content = requestBody.message.content.trim();
     const attachments = saveImageAttachments(context, requestBody.message.attachments);
     if (!content && attachments.length === 0) {
       throw new HttpError(400, 'BAD_REQUEST', 'message.content or message.attachments is required');
     }
 
-    maybeSetTitleFromFirstUserMessage(session, content || 'Image');
-    const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager, context.workspace);
-    const result = sessionApplicationService.acceptUserMessage({
+    const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager, context.defaultWorkspaceRoot);
+    const result = withEnvironmentError(() => sessionApplicationService.acceptUserMessage({
       session,
       content,
       attachments,
+      env: requestBody.env,
       options: {
       ...requestBody.options,
       reasoningEffort: requestBody.options.reasoningEffort === 'ultra' ? 'max' : requestBody.options.reasoningEffort,
       },
-    });
+    }));
 
     return json(200, {
       run_id: result.runId,
@@ -119,6 +127,31 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       events_url: `/api/runs/${result.runId}/events`,
     });
   });
+}
+
+function environmentFromSendRequest(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined;
+  return (value as Record<string, unknown>).env;
+}
+
+function rejectImmutableWorkspace(value: unknown) {
+  if (!value || typeof value !== 'object' || !Object.hasOwn(value, 'workspace')) return;
+  throw new HttpError(
+    400,
+    'IMMUTABLE_SESSION_WORKSPACE',
+    'Session workspace can only be set when the session is created',
+  );
+}
+
+function withEnvironmentError<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof SessionEnvironmentError) {
+      throw new HttpError(400, error.code, error.message);
+    }
+    throw error;
+  }
 }
 
 function saveImageAttachments(context: RoutesContext, input: unknown) {

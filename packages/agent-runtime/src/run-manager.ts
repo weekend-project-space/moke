@@ -11,6 +11,7 @@ import type {
   RunLifecycleEvent,
   RunStatus,
   Session,
+  SessionEnvironment,
   ToolApprovalRecord,
 } from '@moke/protocol';
 import type { Agent } from './agent.js';
@@ -36,8 +37,10 @@ type RunManagerConfig = {
   runs: Map<string, RuntimeRun>;
   agent: Agent;
   toolRegistry: ToolRegistry;
-  workspace: string;
-  createSkillContentManager?: () => RuntimeContentManager | Promise<RuntimeContentManager>;
+  defaultWorkspaceRoot?: string;
+  /** @deprecated Use defaultWorkspaceRoot. */
+  workspace?: string;
+  createSkillContentManager?: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
   workspaceRoots?: (sessionId: string) => string[];
   resolveImageAttachments?: (
@@ -121,6 +124,7 @@ export class RunManager {
 
   createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
     if (this.shuttingDown) throw new Error('Run manager is shutting down');
+    const env = snapshotEnvironment(session.env, this.defaultWorkspaceRoot());
     const run: RuntimeRun = {
       id: id('run'),
       session_id: session.id,
@@ -131,7 +135,8 @@ export class RunManager {
       started_at: Date.now(),
       abort: false,
       origin: options.origin || { kind: 'local' },
-      approval_mode: session.env?.approval_mode || 'manual',
+      approval_mode: env.approval_mode,
+      env,
     };
 
     this.config.runs.set(run.id, run);
@@ -179,7 +184,7 @@ export class RunManager {
     );
 
     try {
-      const contentManager = await this.config.createSkillContentManager?.();
+      const contentManager = await this.config.createSkillContentManager?.(run.env.workspace.root);
       const result = await this.config.agent.run({
         input: input.content,
         attachments: input.attachments,
@@ -190,7 +195,7 @@ export class RunManager {
         eventBus,
         toolRegistry: this.config.toolRegistry,
         context: {
-          workspace: this.config.workspace,
+          workspace: run.env.workspace.root,
           workspaceRoots: () => this.config.workspaceRoots?.(session.id) || [],
           run,
           abortSignal: abortController.signal,
@@ -199,14 +204,14 @@ export class RunManager {
             {
               authority: 'trusted',
               scope: 'run',
-              content: `<session_environment>${JSON.stringify(session.env || { approval_mode: run.approval_mode, workspace: { root: this.config.workspace } })}</session_environment>`,
+              content: `<session_environment>${JSON.stringify(run.env)}</session_environment>`,
             },
           ],
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
           approveTool: (toolInput) => this.reviewTool(run, eventBus, toolInput, {
             approvalMode: run.approval_mode,
-            environment: session.env || { approval_mode: 'manual', system: { platform: 'other', arch: 'unknown', shell: 'unknown' }, workspace: { root: this.config.workspace } },
+            environment: run.env,
             runId: run.id,
             sessionId: session.id,
             origin: run.origin,
@@ -291,6 +296,10 @@ export class RunManager {
       });
       eventBus.emit('approval.required', pendingApproval);
     });
+  }
+
+  private defaultWorkspaceRoot() {
+    return this.config.defaultWorkspaceRoot || this.config.workspace || process.cwd();
   }
 
   private async reviewTool(
@@ -629,6 +638,21 @@ function isActiveRun(run: RuntimeRun) {
     && run.status !== 'failed'
     && run.status !== 'cancelled'
     && run.status !== 'timeout';
+}
+
+function snapshotEnvironment(
+  environment: SessionEnvironment | undefined,
+  defaultWorkspaceRoot: string,
+): SessionEnvironment {
+  return structuredClone(environment || {
+    approval_mode: 'manual',
+    system: {
+      platform: 'other',
+      arch: 'unknown',
+      shell: 'unknown',
+    },
+    workspace: { root: defaultWorkspaceRoot },
+  });
 }
 
 function safeApprovalInput(value: Record<string, unknown>): Record<string, unknown> {

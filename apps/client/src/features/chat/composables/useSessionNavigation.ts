@@ -7,10 +7,10 @@ type UseSessionNavigationOptions = {
   archiveSession: (id: string) => Promise<boolean>
   clearQueuedMessages: () => void
   closeTransientPanels: () => void
-  createSession: () => Promise<boolean>
   forkSession: (messageId: string) => Promise<boolean>
   selectAgentSession: (id: string) => Promise<boolean>
   sessionId: Ref<string>
+  startAgentSession: () => boolean
   sortedSessions: Readonly<Ref<SessionSummary[]>>
 }
 
@@ -32,10 +32,10 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
   }
 
   async function startNewSession() {
-    if (!(await options.createSession())) return false
+    if (!options.startAgentSession()) return false
 
     options.clearQueuedMessages()
-    writeSessionIdToHash(options.sessionId.value)
+    writeSessionIdToHash('')
     options.closeTransientPanels()
     return true
   }

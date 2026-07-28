@@ -120,7 +120,13 @@ export type InboundJob = {
 };
 
 export type StoredOutboundOperation =
-  | { kind: 'message'; contents: OutboundContent[]; reply_to_id?: string }
+  | {
+      kind: 'message';
+      contents: OutboundContent[];
+      reply_to_id?: string;
+      workspace_root?: string;
+      approved_roots?: string[];
+    }
   | { kind: 'activity'; active: boolean }
   | { kind: 'status'; phase: 'working' | 'waiting_input' | 'waiting_approval'; title: string; detail?: string }
   | { kind: 'interaction'; interaction_id: string; title: string; detail: string; options: Array<{ id: string; label: string }>; resolved?: { label: string } }
@@ -1254,7 +1260,13 @@ function isOutboundJob(value: unknown): value is OutboundJob {
 function isStoredOutboundOperation(value: unknown): value is StoredOutboundOperation {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<StoredOutboundOperation>;
-  if (candidate.kind === 'message') return Array.isArray(candidate.contents);
+  if (candidate.kind === 'message') {
+    return Array.isArray(candidate.contents)
+      && (candidate.workspace_root === undefined || typeof candidate.workspace_root === 'string')
+      && (candidate.approved_roots === undefined
+        || (Array.isArray(candidate.approved_roots)
+          && candidate.approved_roots.every((root) => typeof root === 'string')));
+  }
   if (candidate.kind === 'activity') return typeof candidate.active === 'boolean';
   if (candidate.kind === 'status') return candidate.phase === 'working' || candidate.phase === 'waiting_input' || candidate.phase === 'waiting_approval';
   if (candidate.kind === 'interaction') return typeof candidate.interaction_id === 'string' && Array.isArray(candidate.options);

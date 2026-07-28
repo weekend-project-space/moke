@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
 
-import type { ApprovalMode, RunSnapshot } from '@moke/protocol';
+import type { ApprovalMode, RunSnapshot, SessionEnvironment } from '@moke/protocol';
 
 export type RunOrigin =
   | { kind: 'local' }
@@ -19,5 +19,6 @@ export type RuntimeRun = RunSnapshot & {
   cancel_reason?: 'user' | 'shutdown';
   origin: RunOrigin;
   approval_mode: ApprovalMode;
+  env: SessionEnvironment;
   outbound_tool_texts?: string[];
 };

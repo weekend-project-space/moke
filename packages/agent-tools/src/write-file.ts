@@ -14,7 +14,10 @@ export function createWriteFileTool(system: WritableSystemBackend): RuntimeTool<
     approval: 'required',
     schema: writeFileSchema,
     async handler(input, context) {
-      return system.writeFile(input.path, input.content, { approvedRoots: context.workspaceRoots?.() });
+      return system.writeFile(input.path, input.content, {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+      });
     },
   };
 }

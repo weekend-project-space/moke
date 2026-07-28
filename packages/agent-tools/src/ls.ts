@@ -13,7 +13,10 @@ export function createLsTool(system: SystemBackend): RuntimeTool<typeof lsSchema
     approval: 'none',
     schema: lsSchema,
     async handler(input, context) {
-      return system.ls(input.path, { approvedRoots: context.workspaceRoots?.() });
+      return system.ls(input.path, {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+      });
     },
   };
 }

@@ -12,14 +12,14 @@ const executeSchema = z.object({
 export function createExecuteTool(system: ExecutableSystemBackend): RuntimeTool<typeof executeSchema> {
   return {
     name: 'execute',
-    description: 'Run a shell command in the workspace environment.',
+    description: 'Run a shell command in the workspace environment. On Windows, commands run in PowerShell; use PowerShell cmdlets and parameters for file operations (for example, Remove-Item -Force instead of del /q).',
     approval: 'required',
     schema: executeSchema,
     async handler(input, context) {
       return system.execute(input.command, input.args, {
         cwd: input.cwd,
         timeoutMs: input.timeout_ms,
-      }, { approvedRoots: context.workspaceRoots?.() });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

@@ -7,7 +7,9 @@ import type {
   ReasoningEffort,
   RuntimeLimits,
   RunLifecycleEvent,
-  ApprovalMode,
+  CreateSessionEnvironmentInput,
+  SendMessageEnvironmentInput,
+  UpdateSessionEnvironmentInput,
 } from '@moke/protocol';
 import type { RunHandle, SessionHandle } from './client.js';
 
@@ -31,12 +33,10 @@ export type ListSessionsOptions = RequestOptions & {
 export type CreateSessionInput = {
   title?: string;
   metadata?: Record<string, unknown>;
-  env?: { approval_mode?: ApprovalMode };
+  env?: CreateSessionEnvironmentInput;
 };
 
-export type UpdateSessionEnvironmentInput = {
-  approval_mode: ApprovalMode;
-};
+export type { UpdateSessionEnvironmentInput } from '@moke/protocol';
 
 export type UpdateSessionInput = {
   title?: string;
@@ -54,6 +54,7 @@ export type SendMessageInput = {
   attachments?: ImageAttachmentUpload[];
   reasoningEffort?: ReasoningEffort;
   limits?: Partial<RuntimeLimits>;
+  env?: SendMessageEnvironmentInput;
 };
 
 export type PromptInput = SendMessageInput;

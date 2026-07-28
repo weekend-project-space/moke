@@ -18,7 +18,7 @@ export function createGlobTool(system: SystemBackend): RuntimeTool<typeof globSc
       return system.glob(input.pattern, {
         path: input.path,
         limit: input.limit,
-      }, { approvedRoots: context.workspaceRoots?.() });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

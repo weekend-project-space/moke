@@ -12,15 +12,27 @@ export const listSessionsQuerySchema = z.object({
   include_archived: z.enum(['true', 'false']).optional().default('false'),
 }).strict();
 
+const approvalModeSchema = z.enum(['manual', 'ai_review', 'auto_approve']);
+
+const createSessionEnvironmentInputSchema = z.object({
+  approval_mode: approvalModeSchema.optional(),
+  workspace: z.object({ root: nonEmptyText.max(2000) }).strict().optional(),
+}).strict();
+
+const mutableSessionEnvironmentInputSchema = z.object({
+  approval_mode: approvalModeSchema.optional(),
+}).strict();
+
 export const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  env: z.object({ approval_mode: z.enum(['manual', 'ai_review', 'auto_approve']).optional() }).strict().optional(),
+  env: createSessionEnvironmentInputSchema.optional(),
 }).strict();
 
-export const updateSessionEnvironmentSchema = z.object({
-  approval_mode: z.enum(['manual', 'ai_review', 'auto_approve']),
-}).strict();
+export const updateSessionEnvironmentSchema = mutableSessionEnvironmentInputSchema.refine(
+  (value) => Object.keys(value).length > 0,
+  { message: 'At least one environment field is required' },
+);
 
 export const updateSessionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -57,6 +69,7 @@ export const sendMessageSchema = z.object({
     content: z.string().default(''),
     attachments: z.array(imageUploadSchema).max(4).optional(),
   }).strict(),
+  env: mutableSessionEnvironmentInputSchema.optional(),
   options: runOptionsSchema.optional().default({}),
 }).strict();
 

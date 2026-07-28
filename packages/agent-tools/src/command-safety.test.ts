@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
-import { analyzeCommandComplexity, analyzeCommandSafety } from './command-safety.js';
+import { analyzeCommandComplexity, analyzeCommandSafety, analyzePowerShellCompatibility } from './command-safety.js';
 
 const workspace = path.resolve('E:/work/test/moke');
 
@@ -99,6 +99,26 @@ test('analyzeCommandSafety rejects bare drive roots outside approved roots', () 
 
   assert.equal(issues[0]?.code, 'absolute_path_outside_workspace');
   assert.equal(issues[0]?.path, path.resolve('E:/'));
+});
+
+test('analyzePowerShellCompatibility rejects cmd switches on PowerShell aliases', () => {
+  const issues = analyzePowerShellCompatibility('del /q ".moke-browser-test\\manual-approval.txt"').issues;
+
+  assert.equal(issues[0]?.command, 'del');
+  assert.equal(issues[0]?.token, '/q');
+});
+
+test('analyzePowerShellCompatibility finds cmd switches after a command separator', () => {
+  const issues = analyzePowerShellCompatibility('Write-Output ready; rmdir /s /q .cache').issues;
+
+  assert.equal(issues[0]?.command, 'rmdir');
+  assert.equal(issues[0]?.token, '/s');
+});
+
+test('analyzePowerShellCompatibility keeps Unix paths and PowerShell parameters valid', () => {
+  assert.deepEqual(analyzePowerShellCompatibility('cat /etc/hosts').issues, []);
+  assert.deepEqual(analyzePowerShellCompatibility('Remove-Item -LiteralPath file.txt -Force').issues, []);
+  assert.deepEqual(analyzePowerShellCompatibility('attrib /s file.txt').issues, []);
 });
 
 test('analyzeCommandComplexity flags shell control operators', () => {

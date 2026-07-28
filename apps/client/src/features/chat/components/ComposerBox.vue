@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, Hand, Image, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Brain, Check, ChevronDown, FolderOpen, FolderPlus, Hand, Image, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
 import type { ApprovalMode, ImageAttachment, ReasoningEffort } from '../model/conversation'
@@ -17,16 +17,21 @@ const props = defineProps<{
   reasoningEffort: ComposerReasoningEffort
   reasoningOptions: ReasoningEffort[]
   approvalMode?: ApprovalMode
+  nativeWorkspacePicker?: boolean
+  workspaceRoot?: string
+  workspaceSuggestions?: string[]
 }>()
 
 const emit = defineEmits<{
   addAttachments: [attachments: ImageAttachment[]]
+  chooseWorkspaceDirectory: []
   submit: []
   input: []
   enter: [event: KeyboardEvent]
   removeAttachment: [id: string]
   'update:reasoningEffort': [value: ComposerReasoningEffort]
   'update:approvalMode': [value: ApprovalMode]
+  'update:workspaceRoot': [value: string]
   'update:inputValue': [value: string]
 }>()
 
@@ -38,6 +43,9 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const thinkingMenuOpen = ref(false)
 const approvalMenuOpen = ref(false)
+const workspaceMenuOpen = ref(false)
+const workspaceCustomOpen = ref(false)
+const workspaceDraft = ref('')
 const isDraggingImage = ref(false)
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
@@ -179,12 +187,14 @@ function chooseImages() {
 function toggleAddMenu() {
   thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
   addMenuOpen.value = !addMenuOpen.value
 }
 
 function updateThinkingMenu(value: boolean) {
   addMenuOpen.value = false
   approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
   thinkingMenuOpen.value = value
 }
 
@@ -195,6 +205,7 @@ function approvalModeLabel(value: ApprovalMode) {
 function updateApprovalMenu(value: boolean) {
   addMenuOpen.value = false
   thinkingMenuOpen.value = false
+  workspaceMenuOpen.value = false
   approvalMenuOpen.value = value
 }
 
@@ -202,13 +213,58 @@ function chooseApprovalMode(value: string) {
   emit('update:approvalMode', value as ApprovalMode)
 }
 
+function updateWorkspaceMenu(value: boolean) {
+  addMenuOpen.value = false
+  thinkingMenuOpen.value = false
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = value
+  workspaceCustomOpen.value = false
+}
+
+function workspaceOptions() {
+  return [...new Set([props.workspaceRoot, ...(props.workspaceSuggestions || [])].filter((root): root is string => Boolean(root)))].slice(0, 5)
+}
+
+function workspaceName(root: string) {
+  const normalized = root.replace(/[\\/]+$/, '')
+  return normalized.split(/[\\/]/).at(-1) || root
+}
+
+function chooseWorkspace(root: string) {
+  emit('update:workspaceRoot', root)
+}
+
+function beginCustomWorkspace() {
+  if (props.nativeWorkspacePicker) {
+    workspaceMenuOpen.value = false
+    emit('chooseWorkspaceDirectory')
+    return
+  }
+  openWorkspaceEditor()
+}
+
+function openWorkspaceEditor() {
+  workspaceDraft.value = props.workspaceRoot || ''
+  workspaceMenuOpen.value = true
+  workspaceCustomOpen.value = true
+}
+
+function applyWorkspace() {
+  const value = workspaceDraft.value.trim()
+  if (!value) return
+  emit('update:workspaceRoot', value)
+  workspaceMenuOpen.value = false
+  workspaceCustomOpen.value = false
+}
+
 function closeAddMenuOnOutsideClick(event: PointerEvent) {
-  if (!addMenuOpen.value && !thinkingMenuOpen.value && !approvalMenuOpen.value) return
+  if (!addMenuOpen.value && !thinkingMenuOpen.value && !approvalMenuOpen.value && !workspaceMenuOpen.value) return
   const target = event.target
   if (target instanceof Node && composerEl.value?.contains(target)) return
   addMenuOpen.value = false
   thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
 }
 
 onMounted(() => {
@@ -242,6 +298,7 @@ function handleDragEnter(event: DragEvent) {
   addMenuOpen.value = false
   thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
 }
 
 function handleDragOver(event: DragEvent) {
@@ -272,7 +329,7 @@ function handleDrop(event: DragEvent) {
   void addImageFiles(files)
 }
 
-defineExpose({ focus, resize })
+defineExpose({ focus, openWorkspaceEditor, resize })
 </script>
 
 <template>
@@ -329,6 +386,59 @@ defineExpose({ focus, resize })
           >
             <Plus :size="17" stroke-width="2.2" />
           </button>
+          <ComposerSelectControl
+            v-if="props.workspaceRoot !== undefined"
+            :open="workspaceMenuOpen"
+            :options="workspaceOptions()"
+            :selected="props.workspaceRoot || ''"
+            menu-class="composer-workspace-menu"
+            @select="chooseWorkspace"
+            @update:open="updateWorkspaceMenu"
+          >
+            <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
+            <template #option-icon>
+              <FolderOpen :size="17" stroke-width="1.9" />
+            </template>
+            <template #option-label="{ option }">
+              <span class="composer-workspace-option-copy">
+                <strong>{{ workspaceName(option) }}</strong>
+                <small>{{ option }}</small>
+              </span>
+            </template>
+            <template #option-selected>
+              <Check :size="15" stroke-width="2.3" />
+            </template>
+            <template #menu-footer>
+              <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
+                <input
+                  id="composer-workspace-input"
+                  v-model="workspaceDraft"
+                  :aria-label="uiText.composer.workspace"
+                  type="text"
+                  @keydown.enter.prevent="applyWorkspace"
+                />
+                <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
+              </div>
+              <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
+                <FolderPlus :size="17" stroke-width="1.9" />
+                <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
+              </button>
+            </template>
+            <template #trigger="{ open, toggle }">
+              <button
+                class="composer-workspace-action"
+                type="button"
+                :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
+                :title="props.workspaceRoot || uiText.composer.workspace"
+                :class="{ active: open }"
+                @click="toggle"
+              >
+                <FolderOpen :size="14" stroke-width="2.1" />
+                <span>{{ props.workspaceRoot || uiText.composer.workspace }}</span>
+                <ChevronDown :size="13" stroke-width="2.2" />
+              </button>
+            </template>
+          </ComposerSelectControl>
           <ComposerSelectControl
             v-if="props.approvalMode"
             :open="approvalMenuOpen"

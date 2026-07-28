@@ -14,8 +14,11 @@ import ConversationView from './ConversationView.vue'
 import { useAgentSession } from '../composables/useAgentSession'
 import { useChatComposer } from '../composables/useChatComposer'
 import { useComposerReasoning } from '../composables/useComposerReasoning'
+import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
+import { writeSessionIdToHash } from '../services/sessionRoute'
+import { isNativeWorkspacePickerAvailable, pickWorkspaceDirectory } from '../services/workspacePicker'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
@@ -35,6 +38,7 @@ const copiedKey = ref('')
 const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
+const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
 let runtimeTimer: number | undefined
 const {
   closeSidebar,
@@ -58,7 +62,6 @@ const {
   cancelRun,
   archiveSession,
   checkServer,
-  createSession,
   decideApproval,
   disposeAgentSession,
   events,
@@ -68,6 +71,7 @@ const {
   isSubmittingAsk,
   loadSessions,
   messages,
+  newSessionDraft,
   pendingApproval,
   pendingAsk,
   pinSession,
@@ -76,6 +80,7 @@ const {
   runId,
   runningSessionIds,
   selectAskOption,
+  setDraftWorkspace,
   setApprovalMode,
   selectSession: selectAgentSession,
   sendMessage,
@@ -83,6 +88,7 @@ const {
   sessionId,
   sessions,
   sortedSessions,
+  startNewSession: startAgentSession,
   streamingText,
 } = useAgentSession({
   apiBase,
@@ -93,6 +99,7 @@ const {
   onRunFinished: async () => {
     await sendNextQueuedMessage()
   },
+  onSessionCreated: writeSessionIdToHash,
 })
 const {
   activeModel,
@@ -102,6 +109,11 @@ const {
   loadCapability: loadReasoningCapability,
   loadStoredSelection: loadComposerReasoningEffort,
 } = useComposerReasoning({ apiBase, serverStatus })
+const {
+  recentWorkspaces,
+  rememberWorkspace,
+  seedRecentWorkspaces,
+} = useRecentWorkspaces()
 const {
   addAttachments,
   applySuggestion,
@@ -159,10 +171,10 @@ const {
   archiveSession,
   clearQueuedMessages,
   closeTransientPanels,
-  createSession,
   forkSession,
   selectAgentSession,
   sessionId,
+  startAgentSession,
   sortedSessions,
 })
 
@@ -176,10 +188,25 @@ function openSettings() {
 }
 
 async function updateApprovalMode(mode: ApprovalMode) {
-  const previous = currentApprovalMode.value
-  if (mode === previous) return
+  if (mode === currentApprovalMode.value) return
   await setApprovalMode(mode)
 }
+
+function updateDraftWorkspace(root: string) {
+  if (setDraftWorkspace(root)) rememberWorkspace(root)
+}
+
+async function chooseDraftWorkspaceDirectory() {
+  try {
+    const root = await pickWorkspaceDirectory(newSessionDraft.workspace?.root)
+    if (root) updateDraftWorkspace(root)
+  } catch {
+    nativeWorkspacePicker.value = false
+    await nextTick()
+    composerBox.value?.openWorkspaceEditor()
+  }
+}
+
 const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
   title: prompt,
   description: '',
@@ -187,7 +214,8 @@ const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
 }))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
-const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode)
+const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
+const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
@@ -287,6 +315,12 @@ watch(isRunning, (running) => {
     runtimeNow.value = Date.now()
   }, 1000)
 })
+
+watch(sortedSessions, (nextSessions) => {
+  seedRecentWorkspaces(nextSessions.flatMap((session) =>
+    session.env?.workspace.root ? [session.env.workspace.root] : [],
+  ))
+}, { immediate: true })
 
 onMounted(async () => {
   window.addEventListener('keydown', handleChatKeydown)
@@ -461,9 +495,14 @@ defineExpose({
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
           :approval-mode="currentApprovalMode"
+          :native-workspace-picker="nativeWorkspacePicker"
+          :workspace-root="draftWorkspaceRoot"
+          :workspace-suggestions="recentWorkspaces"
           @update:input-value="input = $event"
           @update:reasoning-effort="composerReasoningEffort = $event"
           @update:approval-mode="updateApprovalMode"
+          @update:workspace-root="updateDraftWorkspace"
+          @choose-workspace-directory="chooseDraftWorkspaceDirectory"
           @input="handleInput"
           @add-attachments="addAttachments" @remove-attachment="removeAttachment"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />

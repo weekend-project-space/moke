@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "Main desktop window capability",
   "windows": ["main"],
-  "permissions": ["core:event:default"]
+  "permissions": ["core:event:default", "dialog:allow-open"]
 }

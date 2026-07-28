@@ -82,9 +82,15 @@ test('send_message accepts a Feishu messaging run', async () => {
 
 test('send_message validates media paths while ToolRegistry owns approval', async () => {
   let request: { contents: Array<{ type: string }> } | undefined;
+  let validatedWorkspace = '';
+  let sentWorkspace = '';
   const tool = createSendMessageTool({
-    async send(input) {
+    async validateMediaPaths(_contents, access) {
+      validatedWorkspace = access?.workspaceRoot || '';
+    },
+    async send(input, access) {
       request = input;
+      sentWorkspace = access?.workspaceRoot || '';
       return { receipts: [{ type: 'image', delivered_at: '2026-01-01T00:00:00.000Z' }] };
     },
   });
@@ -100,6 +106,8 @@ test('send_message validates media paths while ToolRegistry owns approval', asyn
   });
 
   assert.deepEqual(request?.contents, [{ type: 'image', path: 'output/image.png' }]);
+  assert.equal(validatedWorkspace, process.cwd());
+  assert.equal(sentWorkspace, process.cwd());
 });
 
 test('send_message preserves media path approval errors for ToolRegistry retry', async () => {

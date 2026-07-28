@@ -22,5 +22,5 @@ export type RoutesContext = {
   skillSettingsService: SkillSettingsService;
   messagingRuntime: MessagingRuntime;
   weixinLoginService: WeixinLoginService;
-  workspace: string;
+  defaultWorkspaceRoot: string;
 };

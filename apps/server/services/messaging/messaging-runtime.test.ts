@@ -23,10 +23,16 @@ test('runtime sends tool output through the durable outbox before returning', as
       binding_id: 'bind_1',
       idempotency_key: 'run_1:tool:call_1',
       contents: [{ type: 'text', text: 'done' }],
+    }, {
+      workspaceRoot: join(directory, 'session-workspace'),
+      approvedRoots: [join(directory, 'approved-once')],
     });
     assert.equal(harness.delivered.length, 1);
     assert.equal(harness.delivered[0]?.kind, 'message');
     assert.equal(result.receipts[0]?.type, 'text');
+    assert.equal(harness.jobs[0]?.operation.workspace_root, join(directory, 'session-workspace'));
+    assert.deepEqual(harness.jobs[0]?.operation.approved_roots, [join(directory, 'approved-once')]);
+    assert.equal('workspace_root' in harness.delivered[0], false);
     await runtime.close();
   } finally {
     rmSync(directory, { recursive: true, force: true });

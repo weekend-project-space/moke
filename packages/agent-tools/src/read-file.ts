@@ -18,7 +18,7 @@ export function createReadFileTool(system: SystemBackend): RuntimeTool<typeof re
       const result = await system.readFile(input.path, {
         offset: input.offset,
         limit: input.limit,
-      }, { approvedRoots: context.workspaceRoots?.() });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
       return {
         path: result.path,
         content: result.content,

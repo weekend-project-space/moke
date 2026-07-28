@@ -47,4 +47,6 @@ export type {
   RunStatus,
   Session,
   SessionSummary,
+  CreateSessionEnvironmentInput,
+  SendMessageEnvironmentInput,
 } from '@moke/protocol';

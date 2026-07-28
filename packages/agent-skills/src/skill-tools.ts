@@ -12,14 +12,17 @@ const activateSkillSchema = z.object({
   id: z.string().min(1),
 });
 
-export function createActivateSkillTool(loader: SkillLoader): RuntimeTool<typeof activateSkillSchema, RuntimeToolResult> {
+export function createActivateSkillTool(
+  loader: SkillLoader | ((workspace: string) => SkillLoader),
+): RuntimeTool<typeof activateSkillSchema, RuntimeToolResult> {
   return {
     name: 'activate_skill',
     description: 'Activate an available agent skill for the current session.',
     approval: 'none',
     schema: activateSkillSchema,
     async handler(input, context) {
-      const skill = await loader.read(input.id);
+      const selectedLoader = typeof loader === 'function' ? loader(context.workspace) : loader;
+      const skill = await selectedLoader.read(input.id);
       const activation = context.contentManager?.addSkill(skill) || { status: 'unavailable' as const };
       const publicOutput = {
         id: skill.id,

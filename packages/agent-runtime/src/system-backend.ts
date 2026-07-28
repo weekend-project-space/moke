@@ -22,6 +22,7 @@ export type SystemReadOptions = {
 };
 
 export type SystemAccessOptions = {
+  workspaceRoot?: string;
   approvedRoots?: string[];
 };
 

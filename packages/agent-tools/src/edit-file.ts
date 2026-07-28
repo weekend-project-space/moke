@@ -18,7 +18,7 @@ export function createEditFileTool(system: WritableSystemBackend): RuntimeTool<t
     async handler(input, context) {
       return system.editFile(input.path, input.old_string, input.new_string, {
         replaceAll: input.replace_all,
-      }, { approvedRoots: context.workspaceRoots?.() });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

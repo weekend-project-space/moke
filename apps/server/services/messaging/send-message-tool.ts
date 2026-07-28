@@ -4,11 +4,16 @@ import { ToolExecutionError, type RuntimeTool } from '@moke/agent-runtime';
 import type { MessagingOutboundRequest, MessagingOutboundResult, OutboundContent } from '@moke/messaging-core';
 
 export type MessagingOutboundService = {
-  send(input: MessagingOutboundRequest): Promise<MessagingOutboundResult>;
+  send(input: MessagingOutboundRequest, access?: MessagingOutboundAccess): Promise<MessagingOutboundResult>;
 };
 
 export type MessagingOutboundMediaPathValidator = {
-  validateMediaPaths(contents: OutboundContent[]): Promise<void>;
+  validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess): Promise<void>;
+};
+
+export type MessagingOutboundAccess = {
+  workspaceRoot: string;
+  approvedRoots?: string[];
 };
 
 const mediaSchema = z.object({
@@ -42,7 +47,11 @@ export function createSendMessageTool(
         throw toolError('send_message is only available in the current external messaging conversation', 'MESSAGING_ORIGIN_REQUIRED');
       }
       const contents = toOutboundContents(input);
-      if (hasMedia(contents)) await outbound.validateMediaPaths?.(contents);
+      const access = {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+      };
+      if (hasMedia(contents)) await outbound.validateMediaPaths?.(contents, access);
       const callId = context.currentToolCall?.callId;
       if (!callId) throw toolError('send_message requires a tool call id', 'TOOL_CALL_ID_REQUIRED');
       const result = await outbound.send({
@@ -50,7 +59,7 @@ export function createSendMessageTool(
         run_id: run.id,
         idempotency_key: `${run.id}:tool:${callId}`,
         contents,
-      });
+      }, access);
       const text = input.text?.trim();
       if (text) run.outbound_tool_texts = [...(run.outbound_tool_texts || []), text];
       return { receipts: result.receipts };

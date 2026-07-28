@@ -24,7 +24,7 @@ export function createGrepTool(system: SystemBackend): RuntimeTool<typeof grepSc
         mode: input.mode,
         contextLines: input.context_lines,
         limit: input.limit,
-      }, { approvedRoots: context.workspaceRoots?.() });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

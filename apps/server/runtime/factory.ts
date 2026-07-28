@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { ReActAgent, ReActApprovalReviewer } from '@moke/agent-re-act';
 import { RunManager, ToolRegistry, type RuntimeContentManager, type RuntimeRun, type WorkspacePathApprovalDecision } from '@moke/agent-runtime';
 import { LocalSystemBackend, registerAgentTools } from '@moke/agent-tools';
@@ -11,12 +13,24 @@ import type { ChatModelSettings } from '@moke/agent-re-act';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
 import type { ImageAttachment, ResolvedImageAttachment, Session } from '@moke/protocol';
 
-export function createToolRegistry(workspace: string, browserBridge: BrowserBridge) {
-  const system = new LocalSystemBackend(workspace);
-  const browserBackend = new BrowserBridgeBackend(browserBridge);
-  const skillLoader = new SkillLoader(workspace);
+export function createToolRegistry(input: {
+  defaultWorkspaceRoot: string;
+  browserBridge: BrowserBridge;
+}) {
+  const system = new LocalSystemBackend(input.defaultWorkspaceRoot);
+  const browserBackend = new BrowserBridgeBackend(input.browserBridge);
+  const skillLoaders = new Map<string, SkillLoader>();
+  const getSkillLoader = (root: string) => {
+    const normalizedRoot = path.resolve(root);
+    let loader = skillLoaders.get(normalizedRoot);
+    if (!loader) {
+      loader = new SkillLoader(normalizedRoot);
+      skillLoaders.set(normalizedRoot, loader);
+    }
+    return loader;
+  };
   const toolRegistry = new ToolRegistry()
-    .register(createActivateSkillTool(skillLoader));
+    .register(createActivateSkillTool(getSkillLoader));
 
   registerAgentTools(toolRegistry, system);
   registerBrowserTools(toolRegistry, browserBackend);
@@ -24,15 +38,16 @@ export function createToolRegistry(workspace: string, browserBridge: BrowserBrid
   return {
     system,
     toolRegistry,
-    createSkillContentManager: async () => new ContentManager({ catalog: await skillLoader.list() }),
+    createSkillContentManager: async (root: string) =>
+      new ContentManager({ catalog: await getSkillLoader(root).list() }),
   };
 }
 
 export function createRunManager(input: {
   runs: Map<string, RuntimeRun>;
   toolRegistry: ToolRegistry;
-  createSkillContentManager: () => RuntimeContentManager | Promise<RuntimeContentManager>;
-  workspace: string;
+  createSkillContentManager: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
+  defaultWorkspaceRoot: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
   workspaceRoots: (sessionId: string) => string[];
   getModelSettings: () => Partial<ChatModelSettings>;
@@ -45,7 +60,7 @@ export function createRunManager(input: {
     runs: input.runs,
     agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
-    workspace: input.workspace,
+    defaultWorkspaceRoot: input.defaultWorkspaceRoot,
     createSkillContentManager: input.createSkillContentManager,
     approveWorkspaceRoot: input.approveWorkspaceRoot,
     workspaceRoots: input.workspaceRoots,

@@ -16,6 +16,7 @@
   "dependencies": {
     "@moke/agent-sdk": "0.1.0",
     "@moke/protocol": "0.1.0",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "dompurify": "^3.4.11",
     "lucide-vue-next": "^0.577.0",
     "markdown-it": "^14.2.0",

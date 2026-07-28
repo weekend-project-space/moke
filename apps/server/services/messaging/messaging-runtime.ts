@@ -31,6 +31,7 @@ import {
 import { SessionApplicationService } from '../session-application-service.js';
 import { readMessagingDeliveryContents, validateMessagingMediaPaths } from './outbound-media.js';
 import { MessagingConnectionPool } from './connection-pool.js';
+import type { MessagingOutboundAccess } from './send-message-tool.js';
 
 const MAX_OUTBOUND_ATTEMPTS = 8;
 
@@ -183,12 +184,20 @@ export class MessagingRuntime {
     }
   }
 
-  async send(input: MessagingOutboundRequest): Promise<MessagingOutboundResult> {
-    await this.validateMediaPaths(input.contents);
+  async send(input: MessagingOutboundRequest, access?: MessagingOutboundAccess): Promise<MessagingOutboundResult> {
+    const workspaceAccess = this.normalizeWorkspaceAccess(access);
+    await this.validateMediaPaths(input.contents, workspaceAccess);
     const job = this.store.enqueueOutboundJob({
       idempotencyKey: input.idempotency_key,
       bindingId: input.binding_id,
-      operation: { kind: 'message', contents: input.contents },
+      operation: {
+        kind: 'message',
+        contents: input.contents,
+        workspace_root: workspaceAccess.workspaceRoot,
+        ...(workspaceAccess.approvedRoots?.length
+          ? { approved_roots: workspaceAccess.approvedRoots }
+          : {}),
+      },
     });
     await this.drainOutbox();
     const completed = await this.waitForOutbound(input.idempotency_key);
@@ -196,8 +205,13 @@ export class MessagingRuntime {
     return { receipts: completed.receipts };
   }
 
-  async validateMediaPaths(contents: OutboundContent[]) {
-    await validateMessagingMediaPaths(this.workspace, this.approvedRoots, contents);
+  async validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess) {
+    const workspaceAccess = this.normalizeWorkspaceAccess(access);
+    await validateMessagingMediaPaths(
+      workspaceAccess.workspaceRoot,
+      () => [...this.approvedRoots(), ...(workspaceAccess.approvedRoots || [])],
+      contents,
+    );
   }
 
   listConnections() {
@@ -500,8 +514,21 @@ export class MessagingRuntime {
 
   private async materializeOperation(operation: StoredOutboundOperation): Promise<MessagingOutboundOperation> {
     if (operation.kind !== 'message') return operation;
-    const contents: MessagingDeliveryContent[] = await readMessagingDeliveryContents(this.workspace, this.approvedRoots, operation.contents);
-    return { ...operation, contents };
+    const {
+      workspace_root: workspaceRoot,
+      approved_roots: approvedRoots,
+      ...messageOperation
+    } = operation;
+    const contents: MessagingDeliveryContent[] = await readMessagingDeliveryContents(
+      workspaceRoot || this.workspace,
+      () => [...this.approvedRoots(), ...(approvedRoots || [])],
+      operation.contents,
+    );
+    return { ...messageOperation, contents };
+  }
+
+  private normalizeWorkspaceAccess(access?: MessagingOutboundAccess): MessagingOutboundAccess {
+    return access || { workspaceRoot: this.workspace };
   }
 
   private async waitForOutbound(idempotencyKey: string) {

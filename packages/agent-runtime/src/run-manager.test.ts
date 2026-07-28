@@ -428,6 +428,50 @@ test('RunManager resolves persisted image attachments before sending history to 
   assert.equal(historyDataUrl, 'data:image/png;base64,AA==');
 });
 
+test('RunManager freezes the session environment and uses its workspace for the run', async () => {
+  const session = createSession();
+  session.env = {
+    approval_mode: 'ai_review',
+    system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
+    workspace: { root: 'E:\\work\\project-a' },
+  };
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let skillWorkspace = '';
+  let agentWorkspace = '';
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        agentWorkspace = input.context.workspace;
+        return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    defaultWorkspaceRoot: 'E:\\work\\default',
+    createSkillContentManager: async (workspace) => {
+      skillWorkspace = workspace;
+      await gate;
+      return {
+        addSkill: () => ({ status: 'unavailable' }),
+        buildInitialContext: () => [],
+      };
+    },
+  });
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => skillWorkspace !== '');
+  session.env.workspace.root = 'E:\\work\\project-b';
+  session.env.approval_mode = 'auto_approve';
+  release();
+  await waitFor(() => run.status === 'completed');
+
+  assert.equal(run.env.workspace.root, 'E:\\work\\project-a');
+  assert.equal(run.approval_mode, 'ai_review');
+  assert.equal(skillWorkspace, 'E:\\work\\project-a');
+  assert.equal(agentWorkspace, 'E:\\work\\project-a');
+});
+
 test('RunManager auto-approves tool decisions and records the reviewer', async () => {
   const session = createSession();
   session.env = {

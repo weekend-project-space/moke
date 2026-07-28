@@ -28,6 +28,17 @@ type UseAgentSessionOptions = {
   isFinalAssistantMessage: (message: Message | undefined) => boolean
   onMessagesLoaded?: () => void | Promise<void>
   onRunFinished?: (sessionId: string) => void | Promise<void>
+  onSessionCreated?: (sessionId: string) => void
+}
+
+export type NewSessionDraft = {
+  approval_mode: ApprovalMode
+  workspace?: { root: string }
+}
+
+export type MessageSubmissionError = {
+  code: 'SESSION_CREATE_FAILED' | 'MESSAGE_SEND_FAILED'
+  message: string
 }
 
 export type SendMessageInput = {
@@ -44,11 +55,14 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const submittingAskId = ref('')
   const submittingApprovalId = ref('')
+  const newSessionDraft = reactive<NewSessionDraft>({ approval_mode: 'manual' })
+  const submissionError = ref<MessageSubmissionError | null>(null)
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
   const currentRun = shallowRef<RunHandle>()
   const sessionLoadGuard = createLatestRequestGuard()
   const api = options.api || createAgentApi(options.apiBase)
   let sessionsRefreshTimer: number | undefined
+  let messageSubmissionInFlight = false
   const streamingTextBuffer = createStreamingTextBuffer({
     onFlush: (targetSessionId, text) => {
       ensureRunState(targetSessionId).streamingText = text
@@ -80,7 +94,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     pendingApproval.value?.approval_id && submittingApprovalId.value === pendingApproval.value.approval_id,
   ))
   const isRunning = computed(() => isRunActive(currentRunState.value))
-  const runError = computed(() => currentRunState.value.error)
+  const runError = computed(() => submissionError.value?.message || currentRunState.value.error)
   const runningSessionIds = computed(() =>
     Object.keys(activeRuns),
   )
@@ -132,16 +146,48 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return false
   }
 
-  async function createSession() {
-    if (serverStatus.value !== 'online' && !(await checkServer())) return false
+  function resetNewSessionDraft() {
+    newSessionDraft.approval_mode = 'manual'
+    delete newSessionDraft.workspace
+  }
 
+  function startNewSession() {
+    if (messageSubmissionInFlight) return false
+    submissionError.value = null
+    sessionLoadGuard.cancel()
+    sessionId.value = ''
+    messages.value = []
+    subscriptions.watch('')
+    resetNewSessionDraft()
+    return true
+  }
+
+  async function createSessionFromDraft() {
+    const env = {
+      approval_mode: newSessionDraft.approval_mode,
+      ...(newSessionDraft.workspace ? { workspace: { ...newSessionDraft.workspace } } : {}),
+    }
+    const nextSessionId = await api.createSession(uiText.app.newChat, env)
+
+    sessionId.value = nextSessionId
+    messages.value = []
+    resetRunState(nextSessionId)
+    subscriptions.watch(nextSessionId)
+    options.onSessionCreated?.(nextSessionId)
+    await loadSessions()
+    return nextSessionId
+  }
+
+  async function setApprovalMode(approvalMode: ApprovalMode) {
+    const targetSessionId = sessionId.value
+    if (!targetSessionId) {
+      newSessionDraft.approval_mode = approvalMode
+      submissionError.value = null
+      return true
+    }
+    if (serverStatus.value !== 'online') return false
     try {
-      const nextSessionId = await api.createSession(uiText.app.newChat)
-
-      sessionId.value = nextSessionId
-      messages.value = []
-      resetRunState(nextSessionId)
-      subscriptions.watch(nextSessionId)
+      await api.updateSessionEnvironment(targetSessionId, { approval_mode: approvalMode })
       await loadSessions()
       return true
     } catch {
@@ -149,16 +195,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
   }
 
-  async function setApprovalMode(approvalMode: ApprovalMode) {
-    const targetSessionId = sessionId.value
-    if (!targetSessionId || serverStatus.value !== 'online') return false
-    try {
-      await api.updateSessionEnvironment(targetSessionId, approvalMode)
-      await loadSessions()
-      return true
-    } catch {
-      return false
+  function setDraftWorkspace(root: string) {
+    if (sessionId.value || messageSubmissionInFlight) return false
+    submissionError.value = null
+    const normalizedRoot = root.trim()
+    if (normalizedRoot) {
+      newSessionDraft.workspace = { root: normalizedRoot }
+    } else {
+      delete newSessionDraft.workspace
     }
+    return true
   }
 
   async function archiveSession(id: string) {
@@ -171,7 +217,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     sessionId.value = ''
     messages.value = []
-    return createSession()
+    subscriptions.watch('')
+    submissionError.value = null
+    resetNewSessionDraft()
+    return true
   }
 
   async function loadSessionMessages(id: string, optionsOverride: { notify?: boolean } = {}) {
@@ -184,6 +233,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       sessionId.value = id
       messages.value = loadedMessages
       subscriptions.watch(id)
+      submissionError.value = null
+      resetNewSessionDraft()
 
       if (optionsOverride.notify !== false) {
         await nextTick()
@@ -204,6 +255,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   async function selectSession(id: string) {
+    if (messageSubmissionInFlight) return false
     if (id === sessionId.value) return false
     return loadSessionMessages(id)
   }
@@ -222,6 +274,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     await loadSessions()
     sessionId.value = forked.sessionId
     messages.value = forked.messages
+    submissionError.value = null
     resetRunState(forked.sessionId)
     subscriptions.watch(forked.sessionId)
     await nextTick()
@@ -233,43 +286,74 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const draft = typeof input === 'string' ? { content: input } : input
     const trimmedContent = draft.content.trim()
     const attachments = draft.attachments || []
-    if ((!trimmedContent && !attachments.length) || isRunning.value) return false
+    if ((!trimmedContent && !attachments.length) || isRunning.value || messageSubmissionInFlight) return false
 
-    if (serverStatus.value !== 'online' && !(await checkServer())) return false
-    if (!sessionId.value) await createSession()
-    if (!sessionId.value) return false
-
-    const targetSessionId = sessionId.value
-    const state = ensureRunState(targetSessionId)
-    state.events = []
-    state.seenEventKeys.clear()
-    streamingTextBuffer.clear(targetSessionId)
-    startRun(state)
-    const optimisticMessage = appendOptimisticUserMessage(messages.value, {
-      content: trimmedContent,
-      attachments,
-    })
-    pendingLocalSessions.add(targetSessionId)
-
+    const startedAsDraft = !sessionId.value
+    let createdSessionForSend = false
+    submissionError.value = null
+    messageSubmissionInFlight = true
     try {
-      const run = await api.sendMessage(targetSessionId, {
+      if (serverStatus.value !== 'online' && !(await checkServer())) {
+        submissionError.value = startedAsDraft
+          ? { code: 'SESSION_CREATE_FAILED', message: uiText.app.sessionCreateFailed }
+          : { code: 'MESSAGE_SEND_FAILED', message: uiText.app.sendFailed }
+        return false
+      }
+      if (!sessionId.value) {
+        try {
+          await createSessionFromDraft()
+          createdSessionForSend = true
+        } catch {
+          submissionError.value = {
+            code: 'SESSION_CREATE_FAILED',
+            message: uiText.app.sessionCreateFailed,
+          }
+          return false
+        }
+      }
+      if (!sessionId.value) return false
+
+      const targetSessionId = sessionId.value
+      const state = ensureRunState(targetSessionId)
+      state.events = []
+      state.seenEventKeys.clear()
+      streamingTextBuffer.clear(targetSessionId)
+      startRun(state)
+      const optimisticMessage = appendOptimisticUserMessage(messages.value, {
         content: trimmedContent,
         attachments,
-        reasoningEffort: draft.options?.reasoningEffort,
       })
+      pendingLocalSessions.add(targetSessionId)
 
-      localRunIds.add(run.id)
-      if (currentRun.value?.id !== run.id) currentRun.value = run
-      if (state.runId !== run.id || state.lifecycle.status === 'starting') connectRun(state, run.id)
-      scheduleSessionsRefresh()
-      return true
+      try {
+        const run = await api.sendMessage(targetSessionId, {
+          content: trimmedContent,
+          attachments,
+          reasoningEffort: draft.options?.reasoningEffort,
+        })
+
+        localRunIds.add(run.id)
+        if (currentRun.value?.id !== run.id) currentRun.value = run
+        if (state.runId !== run.id || state.lifecycle.status === 'starting') connectRun(state, run.id)
+        scheduleSessionsRefresh()
+        return true
+      } catch {
+        const message = createdSessionForSend ? uiText.app.firstMessageSendFailed : uiText.app.sendFailed
+        submissionError.value = { code: 'MESSAGE_SEND_FAILED', message }
+        finishRunState(state, message)
+        optimisticMessage.rollback()
+        void checkServer()
+        return false
+      } finally {
+        pendingLocalSessions.delete(targetSessionId)
+      }
     } catch {
-      finishRunState(state, uiText.app.sendFailed)
-      optimisticMessage.rollback()
-      void checkServer()
+      submissionError.value = startedAsDraft && !sessionId.value
+        ? { code: 'SESSION_CREATE_FAILED', message: uiText.app.sessionCreateFailed }
+        : { code: 'MESSAGE_SEND_FAILED', message: uiText.app.sendFailed }
       return false
     } finally {
-      pendingLocalSessions.delete(targetSessionId)
+      messageSubmissionInFlight = false
     }
   }
 
@@ -430,7 +514,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     cancelRun,
     archiveSession,
     checkServer,
-    createSession,
     decideApproval,
     disposeAgentSession,
     events,
@@ -441,6 +524,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     loadSessions,
     loadSessionMessages,
     messages,
+    newSessionDraft,
     pendingApproval,
     pendingAsk,
     pinSession,
@@ -449,6 +533,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     runId,
     runningSessionIds,
     selectAskOption,
+    setDraftWorkspace,
     setApprovalMode,
     selectSession,
     sendMessage,
@@ -456,7 +541,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessionId,
     sessions,
     sortedSessions,
+    startNewSession,
     streamingText,
+    submissionError,
   }
 }
 

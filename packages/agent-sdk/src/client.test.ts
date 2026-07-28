@@ -56,6 +56,32 @@ test('health invokes fetch with the global context required by browser implement
   assert.deepEqual(await client.health(), { status: 'ok' });
 });
 
+test('sessions.create sends the creation-only workspace environment', async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return json({ session: { id: 'sess_1' } });
+  }) as typeof fetch;
+  const client = new MokeClient({ baseUrl: 'http://127.0.0.1:4010', fetch: fetcher });
+
+  const session = await client.sessions.create({
+    title: 'Project A',
+    env: {
+      approval_mode: 'manual',
+      workspace: { root: 'E:\\work\\project-a' },
+    },
+  });
+
+  assert.equal(session.id, 'sess_1');
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+    title: 'Project A',
+    env: {
+      approval_mode: 'manual',
+      workspace: { root: 'E:\\work\\project-a' },
+    },
+  });
+});
+
 test('SessionHandle.send maps the message request and returns a RunHandle', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
@@ -64,7 +90,13 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
   }) as typeof fetch;
   const client = new MokeClient({ baseUrl: 'http://127.0.0.1:4010/', token: 'secret', fetch: fetcher });
 
-  const run = await client.session('sess_1').send({ content: 'hello', reasoningEffort: 'high' });
+  const run = await client.session('sess_1').send({
+    content: 'hello',
+    reasoningEffort: 'high',
+    env: {
+      approval_mode: 'ai_review',
+    },
+  });
 
   assert.equal(run.id, 'run_1');
   assert.equal(run.sessionId, 'sess_1');
@@ -72,6 +104,9 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
   assert.equal(new Headers(calls[0]?.init?.headers).get('Authorization'), 'Bearer secret');
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     message: { role: 'user', content: 'hello' },
+    env: {
+      approval_mode: 'ai_review',
+    },
     options: { stream: true, reasoningEffort: 'high' },
   });
 });
