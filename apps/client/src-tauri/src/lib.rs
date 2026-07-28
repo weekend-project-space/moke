@@ -1,4 +1,3 @@
-use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::fs;
@@ -334,9 +333,7 @@ fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
 
 fn normalize_url(value: Option<&str>) -> Result<Url, String> {
     let raw = value.unwrap_or("about:blank").trim();
-    let with_scheme = if raw.contains("://") {
-        raw.to_string()
-    } else if raw == "about:blank" {
+    let with_scheme = if raw.contains("://") || raw == "about:blank" {
         raw.to_string()
     } else {
         format!("https://{raw}")
@@ -523,6 +520,7 @@ fn browser_state_observer_script(page_id: u32) -> String {
 (() => {{
   if (window.__MOKE_BROWSER_STATE_OBSERVER__) return;
   window.__MOKE_BROWSER_STATE_OBSERVER__ = true;
+  document.addEventListener("contextmenu", (event) => event.preventDefault(), true);
   const pageId = {page_id};
   let lastUrl = String(window.location.href || "");
   let lastTitle = String(document.title || "");
@@ -1246,13 +1244,21 @@ fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
-    let file = fs::File::create(path).map_err(|error| error.to_string())?;
-    let writer = BufWriter::new(file);
-    let mut encoder = png::Encoder::new(writer, image.width, image.height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut png_writer = encoder.write_header().map_err(|error| error.to_string())?;
-    png_writer.write_image_data(&image.rgba).map_err(|error| error.to_string())
+    fs::write(path, encode_png(image)?).map_err(|error| error.to_string())
+}
+
+fn encode_png(image: &CapturedImage) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut bytes, image.width, image.height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut png_writer = encoder.write_header().map_err(|error| error.to_string())?;
+        png_writer
+            .write_image_data(&image.rgba)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(bytes)
 }
 
 fn crop_image(image: &CapturedImage, x: u32, y: u32, width: u32, height: u32) -> Result<CapturedImage, String> {
@@ -1335,6 +1341,94 @@ fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Re
     let width = (bounds.width * scale_x).round().max(1.0) as u32;
     let height = (bounds.height * scale_y).round().max(1.0) as u32;
     crop_image(&window_image, x, y, width, height)
+}
+
+#[cfg(windows)]
+fn read_preview_stream(
+    stream: &windows::Win32::System::Com::IStream,
+) -> Result<Vec<u8>, String> {
+    use windows::Win32::System::Com::{STREAM_SEEK_END, STREAM_SEEK_SET};
+
+    const MAX_PREVIEW_BYTES: u64 = 32 * 1024 * 1024;
+    let mut length = 0_u64;
+    unsafe {
+        stream
+            .Seek(0, STREAM_SEEK_END, Some(&mut length))
+            .map_err(|error| error.to_string())?;
+        stream
+            .Seek(0, STREAM_SEEK_SET, None)
+            .map_err(|error| error.to_string())?;
+    }
+    if length > MAX_PREVIEW_BYTES || length > u32::MAX as u64 {
+        return Err("Browser preview is too large".to_string());
+    }
+
+    let mut bytes = vec![0_u8; length as usize];
+    let mut bytes_read = 0_u32;
+    unsafe {
+        stream
+            .Read(
+                bytes.as_mut_ptr().cast(),
+                length as u32,
+                Some(&mut bytes_read),
+            )
+            .ok()
+            .map_err(|error| error.to_string())?;
+    }
+    bytes.truncate(bytes_read as usize);
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn capture_webview_preview(webview: &tauri::Webview) -> Result<Vec<u8>, String> {
+    use std::sync::mpsc;
+    use webview2_com::{
+        CapturePreviewCompletedHandler,
+        Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+    };
+    use windows::{
+        Win32::Foundation::HGLOBAL,
+        Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal,
+    };
+
+    let (sender, receiver) = mpsc::channel::<Result<Vec<u8>, String>>();
+    webview
+        .with_webview(move |platform_webview| {
+            let start_sender = sender.clone();
+            let started = (|| -> Result<(), String> {
+                unsafe {
+                    let controller = platform_webview.controller();
+                    let core_webview = controller
+                        .CoreWebView2()
+                        .map_err(|error| error.to_string())?;
+                    let stream = CreateStreamOnHGlobal(HGLOBAL::default(), true)
+                        .map_err(|error| error.to_string())?;
+                    let completed_stream = stream.clone();
+                    let handler = CapturePreviewCompletedHandler::create(Box::new(move |result| {
+                        let preview = result
+                            .map_err(|error| error.to_string())
+                            .and_then(|_| read_preview_stream(&completed_stream));
+                        let _ = sender.send(preview);
+                        Ok(())
+                    }));
+                    core_webview
+                        .CapturePreview(
+                            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+                            &stream,
+                            &handler,
+                        )
+                        .map_err(|error| error.to_string())
+                }
+            })();
+            if let Err(error) = started {
+                let _ = start_sender.send(Err(error));
+            }
+        })
+        .map_err(|error| error.to_string())?;
+
+    receiver
+        .recv_timeout(Duration::from_secs(3))
+        .map_err(|_| "Browser preview timed out".to_string())?
 }
 
 fn emit_browser_state_change(app: &tauri::AppHandle, state: &BrowserState, event_type: &str, page_id: Option<u32>) {
@@ -2244,13 +2338,29 @@ async fn browser_close(
         webview.close().map_err(|error| error.to_string())?;
     }
 
+    let current_active = *state
+        .active_page_id
+        .lock()
+        .map_err(|_| "Browser state is unavailable".to_string())?;
     let next_active = {
         let mut pages = state
             .pages
             .lock()
             .map_err(|_| "Browser state is unavailable".to_string())?;
+        let closed_index = pages.iter().position(|page| page.page_id == page_id);
         pages.retain(|page| page.page_id != page_id);
-        pages.last().map(|page| page.page_id)
+        if current_active != Some(page_id)
+            && pages
+                .iter()
+                .any(|page| Some(page.page_id) == current_active)
+        {
+            current_active
+        } else {
+            closed_index
+                .and_then(|index| pages.get(index.min(pages.len().saturating_sub(1))))
+                .or_else(|| pages.last())
+                .map(|page| page.page_id)
+        }
     };
 
     *state
@@ -2265,6 +2375,26 @@ async fn browser_close(
     let result = browser_result(&state)?;
     emit_browser_state_change(&app, &state, "tab-closed", Some(page_id));
     Ok(result)
+}
+
+#[tauri::command]
+async fn browser_capture_preview(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    page_id: u32,
+) -> Result<String, String> {
+    let page_id = active_page_id(&state, Some(page_id))?;
+    #[cfg(windows)]
+    let png = capture_webview_preview(&browser_webview(&app, &state, page_id)?)?;
+    #[cfg(not(windows))]
+    let png = {
+        let bounds = resolve_browser_bounds(&state, None)?;
+        encode_png(&capture_browser_viewport(&app, bounds)?)?
+    };
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(png)
+    ))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2286,6 +2416,7 @@ pub fn run() {
             browser_evaluate_script,
             browser_take_snapshot,
             browser_take_screenshot,
+            browser_capture_preview,
             browser_click,
             browser_hover,
             browser_fill,

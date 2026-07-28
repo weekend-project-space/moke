@@ -1,6 +1,7 @@
 @use './mixins' as *;
 
 .browser-panel {
+  container-type: inline-size;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -13,8 +14,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 10px 10px;
+  gap: 4px;
+  padding: 6px 8px;
 }
 
 .browser-tabs {
@@ -116,6 +117,10 @@
     border-radius: 8px;
     color: var(--ink-muted);
     background: var(--surface-input);
+
+    &:focus-within {
+      @include focus-ring;
+    }
   }
 
   input {
@@ -138,6 +143,12 @@
   background:
     linear-gradient(135deg, var(--surface-input), var(--surface-browser-empty-edge)),
     var(--surface-browser-empty);
+}
+
+.browser-panel-unavailable .browser-window-state {
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-glass);
 }
 
 .browser-placeholder {
@@ -164,6 +175,27 @@
     line-height: 1.35;
   }
 
+  &.desktop-required {
+    justify-content: flex-start;
+    padding-top: clamp(96px, 28vh, 220px);
+  }
+
+  &.error span {
+    max-width: min(360px, 100%);
+    overflow-wrap: anywhere;
+  }
+
+  button {
+    @include button-control(30px, 7px, 0 10px, var(--surface-control));
+    margin-top: 5px;
+    color: var(--ink-soft);
+
+    &:hover {
+      color: var(--ink);
+      background: var(--surface-popover);
+    }
+  }
+
   &.error strong {
     color: var(--danger);
     overflow-wrap: anywhere;
@@ -179,17 +211,104 @@
 
 .browser-loading {
   position: absolute;
-  z-index: 1;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  color: var(--ink-muted);
-  background: var(--surface-panel);
-  font-size: var(--font-size-meta);
-  font-weight: 620;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: 34%;
+  height: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 28%, transparent);
+  animation: browser-loading-progress 1.25s ease-in-out infinite;
   pointer-events: none;
+}
+
+.browser-viewport-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes browser-loading-progress {
+  0% {
+    transform: translateX(-105%);
+  }
+
+  55% {
+    transform: translateX(145%);
+  }
+
+  100% {
+    transform: translateX(295%);
+  }
+}
+
+.browser-tab-menu-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  background: transparent;
+}
+
+.browser-tab-context-menu {
+  position: fixed;
+  z-index: 45;
+  display: grid;
+  min-width: 176px;
+  padding: 5px;
+  border: 1px solid var(--line-medium);
+  border-radius: var(--radius-md);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-menu);
+
+  button {
+    display: flex;
+    height: 30px;
+    align-items: center;
+    padding: 0 9px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    background: transparent;
+    font-size: var(--font-size-ui);
+    text-align: left;
+
+    &:hover {
+      background: var(--surface-control-hover);
+    }
+
+    &:disabled {
+      cursor: default;
+      color: var(--ink-muted);
+      opacity: 0.48;
+
+      &:hover {
+        background: transparent;
+      }
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-loading {
+    width: 100%;
+    animation: none;
+  }
+}
+
+@container (max-width: 420px) {
+  .browser-tab {
+    width: min(164px, 74%);
+    min-width: 116px;
+  }
+
+  .browser-toolbar label > svg {
+    display: none;
+  }
 }
 
 

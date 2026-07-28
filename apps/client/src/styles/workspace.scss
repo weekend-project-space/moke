@@ -185,6 +185,16 @@
     border-left: 1px solid var(--line);
     box-shadow: var(--shadow-workspace-drawer);
   }
+
+  .workspace:has(.browser-panel) {
+    width: min(520px, calc(100vw - 48px));
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace:has(.browser-panel) {
+    width: 100vw;
+  }
 }
 
 

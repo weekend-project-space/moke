@@ -1783,6 +1783,8 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "url",
+ "webview2-com",
+ "windows 0.61.3",
  "xcap",
 ]
 

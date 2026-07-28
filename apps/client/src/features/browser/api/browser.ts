@@ -131,6 +131,10 @@ export const browserApi = {
     return tauriInvoke<BrowserResult>('browser_take_screenshot', { options })
   },
 
+  capturePreview(pageId: number) {
+    return tauriInvoke<string>('browser_capture_preview', { pageId })
+  },
+
   click(options: BrowserAutomationOptions) {
     return tauriInvoke<BrowserResult>('browser_click', { options })
   },

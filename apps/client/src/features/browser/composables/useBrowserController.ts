@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
 import type { BrowserLinkOpenMode } from '../model/preferences'
+import { pageIdsToClose, type BrowserTabCloseScope } from '../model/tabClose'
 import { waitForBrowserLayoutFrame } from '../services/browserLayout'
 
 const MAX_TABS = 8
@@ -9,6 +10,7 @@ export function useBrowserController(options: {
   active: Ref<boolean>
   windowElement: Ref<HTMLElement | null>
   viewportElement: Ref<HTMLElement | null>
+  onViewportLayoutChange?: () => void
 }) {
   const tabs = ref<BrowserPage[]>([])
   const activeTabKey = ref<string | null>(null)
@@ -17,9 +19,12 @@ export function useBrowserController(options: {
   const errorMessage = ref('')
   const isBusy = ref(false)
   const nativeAvailable = ref(false)
+  const viewportPreview = ref('')
   let resizeObserver: ResizeObserver | null = null
   let unlistenBrowserState: (() => void) | null = null
   let boundsSyncFrame: number | null = null
+  let viewportSuspended = false
+  let viewportTransition = 0
 
   const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
   const canCreateTab = computed(() => nativeAvailable.value && !isBusy.value && tabs.value.length < MAX_TABS)
@@ -86,6 +91,7 @@ export function useBrowserController(options: {
   }
 
   function scheduleBoundsSync() {
+    options.onViewportLayoutChange?.()
     if (boundsSyncFrame !== null) return
     boundsSyncFrame = window.requestAnimationFrame(() => {
       boundsSyncFrame = null
@@ -147,10 +153,22 @@ export function useBrowserController(options: {
     await withBusy(async () => applyState(await browserApi.show(tab.pageId, getViewportBounds())))
   }
 
-  async function closeTab(tab: BrowserPage) {
+  async function closeTabs(tab: BrowserPage, scope: BrowserTabCloseScope) {
+    const pageIds = pageIdsToClose(tabs.value.map((page) => page.pageId), tab.pageId, scope)
+    if (!pageIds.length) return
+
     await withBusy(async () => {
-      applyState(await browserApi.close(tab.pageId))
+      for (const pageId of pageIds) applyState(await browserApi.close(pageId))
       if (!activeTab.value) address.value = ''
+    })
+  }
+
+  async function retryPage() {
+    await withBusy(async () => {
+      const currentPage = activeTab.value
+      applyState(currentPage
+        ? await browserApi.navigate({ pageId: currentPage.pageId, type: 'reload' })
+        : await browserApi.state())
     })
   }
 
@@ -169,7 +187,7 @@ export function useBrowserController(options: {
   async function syncVisibility() {
     if (!nativeAvailable.value || !activeTab.value) return
     try {
-      if (options.active.value) {
+      if (options.active.value && !viewportSuspended) {
         await nextTick()
         await waitForBrowserLayoutFrame()
         applyState(await browserApi.show(activeTab.value.pageId, getViewportBounds()))
@@ -182,6 +200,60 @@ export function useBrowserController(options: {
     } catch (error) {
       errorMessage.value = error instanceof Error ? error.message : String(error)
     }
+  }
+
+  async function waitForPreviewImage(source: string) {
+    const image = new Image()
+    if (typeof image.decode === 'function') {
+      image.src = source
+      await image.decode()
+      return
+    }
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve()
+      image.onerror = () => reject(new Error('Browser preview could not be decoded'))
+      image.src = source
+    })
+  }
+
+  async function waitForPaint() {
+    await nextTick()
+    await waitForBrowserLayoutFrame()
+    await waitForBrowserLayoutFrame()
+  }
+
+  async function suspendViewport() {
+    if (!nativeAvailable.value || !activeTab.value || !options.active.value) return false
+    if (viewportSuspended && viewportPreview.value) return true
+
+    const transition = ++viewportTransition
+    const pageId = activeTab.value.pageId
+    try {
+      const preview = await browserApi.capturePreview(pageId)
+      await waitForPreviewImage(preview)
+      if (transition !== viewportTransition || activeTab.value?.pageId !== pageId) return false
+
+      viewportPreview.value = preview
+      await waitForPaint()
+      if (transition !== viewportTransition) return false
+
+      viewportSuspended = true
+      applyState(await browserApi.hide())
+      return true
+    } catch {
+      if (transition === viewportTransition) viewportPreview.value = ''
+      return false
+    }
+  }
+
+  async function resumeViewport() {
+    if (!viewportSuspended) return
+    const transition = ++viewportTransition
+    viewportSuspended = false
+    await syncVisibility()
+    await waitForPaint()
+    if (transition !== viewportTransition) return
+    viewportPreview.value = ''
   }
 
   onMounted(async () => {
@@ -221,8 +293,10 @@ export function useBrowserController(options: {
 
   return {
     tabs, activeTabKey, activeTab, address, isEditingAddress, errorMessage, isBusy, nativeAvailable,
+    viewportPreview,
     canCreateTab, canGoBack, canGoForward, canReload, tabKey, beginAddressEdit, endAddressEdit,
-    submitAddress, createTab, openUrl, selectTab, closeTab, reloadPage, navigateHistory,
+    submitAddress, createTab, openUrl, selectTab, closeTabs, reloadPage, retryPage, navigateHistory,
+    suspendViewport, resumeViewport,
     getViewportBounds,
   }
 }

@@ -18,7 +18,10 @@ const app = {
 const browser = {
   addressPlaceholder: 'Enter URL',
   back: 'Back',
+  closeOtherPages: 'Close other pages',
   closePage: 'Close page',
+  closePagesToRight: 'Close pages to the right',
+  errorTitle: 'Could not load this page',
   forward: 'Forward',
   loading: 'Loading',
   newPage: 'New page',
@@ -26,6 +29,7 @@ const browser = {
   openPromptTitle: 'Enter a URL to visit',
   pages: 'Browser pages',
   reload: 'Reload',
+  retry: 'Try again',
   requiresDesktopDescription: 'Pages are embedded in the right-side browser area.',
   requiresDesktopTitle: 'Use Moke in the Tauri desktop app',
 } as const
