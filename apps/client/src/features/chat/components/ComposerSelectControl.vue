@@ -4,7 +4,7 @@ const props = withDefaults(defineProps<{
   menuClass?: string
   open: boolean
   options: readonly string[]
-  selected: string
+  selected?: string
 }>(), {
   align: 'start',
   menuClass: '',
@@ -39,6 +39,7 @@ function select(value: string) {
         v-for="option in options"
         :key="option"
         type="button"
+        :aria-pressed="selected === undefined ? undefined : option === selected"
         :class="{ active: option === selected }"
         @click="select(option)"
       >

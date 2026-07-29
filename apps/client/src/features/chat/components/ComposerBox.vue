@@ -50,6 +50,7 @@ const isDraggingImage = ref(false)
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
+const addOptions = ['image'] as const
 const approvalOptions: ApprovalMode[] = ['manual', 'ai_review', 'auto_approve']
 
 function resize() {
@@ -184,11 +185,15 @@ function chooseImages() {
   fileInput.value?.click()
 }
 
-function toggleAddMenu() {
+function chooseAddAction(value: string) {
+  if (value === 'image') chooseImages()
+}
+
+function updateAddMenu(value: boolean) {
   thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
-  addMenuOpen.value = !addMenuOpen.value
+  addMenuOpen.value = value
 }
 
 function updateThinkingMenu(value: boolean) {
@@ -334,12 +339,6 @@ defineExpose({ focus, openWorkspaceEditor, resize })
 
 <template>
   <form ref="composerEl" class="composer" @submit.prevent="$emit('submit')">
-    <div v-if="addMenuOpen" class="composer-option-list">
-      <button type="button" @click="chooseImages">
-        <Image :size="15" stroke-width="2.1" />
-        <span>{{ uiText.composer.chooseImage }}</span>
-      </button>
-    </div>
     <div
       class="composer-panel input-mode"
       :class="{ dragging: isDraggingImage }"
@@ -376,16 +375,31 @@ defineExpose({ focus, openWorkspaceEditor, resize })
         </div>
         <div class="composer-footer">
           <div class="composer-footer-left">
-          <button
-            class="composer-secondary-action"
-            type="button"
-            :aria-label="uiText.composer.add"
-            :title="uiText.composer.add"
-            :class="{ active: addMenuOpen }"
-            @click="toggleAddMenu"
+          <ComposerSelectControl
+            :open="addMenuOpen"
+            :options="addOptions"
+            menu-class="composer-add-menu"
+            @select="chooseAddAction"
+            @update:open="updateAddMenu"
           >
-            <Plus :size="17" stroke-width="2.2" />
-          </button>
+            <template #option-icon>
+              <Image :size="15" stroke-width="2.1" />
+            </template>
+            <template #option-label>{{ uiText.composer.chooseImage }}</template>
+            <template #trigger="{ open, toggle }">
+              <button
+                class="composer-secondary-action"
+                type="button"
+                :aria-label="uiText.composer.add"
+                :title="uiText.composer.add"
+                :aria-expanded="open"
+                :class="{ active: open }"
+                @click="toggle"
+              >
+                <Plus :size="17" stroke-width="2.2" />
+              </button>
+            </template>
+          </ComposerSelectControl>
           <ComposerSelectControl
             v-if="props.workspaceRoot !== undefined"
             :open="workspaceMenuOpen"

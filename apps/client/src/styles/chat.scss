@@ -17,7 +17,8 @@
   column-gap: 12px;
   min-height: 48px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-solid);
 }
 
 .topbar-side {
@@ -36,7 +37,8 @@
 }
 
 .sidebar-toggle,
-.new-session {
+.new-session,
+.trace-summary {
   display: inline-flex;
   width: 30px;
   min-width: 30px;
@@ -50,7 +52,11 @@
 
   &:hover {
     color: var(--ink);
-    background: var(--surface-panel-muted);
+    background: var(--surface-control-hover);
+  }
+
+  &:active {
+    background: var(--surface-control-active);
   }
 }
 
@@ -98,14 +104,6 @@
   font-size: var(--font-size-caption-plus);
   font-weight: 600;
   white-space: nowrap;
-}
-
-.trace-summary {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
 }
 
 .tool-approval-audit {
