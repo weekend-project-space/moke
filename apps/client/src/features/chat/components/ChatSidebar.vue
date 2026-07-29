@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings } from 'lucide-vue-next'
+import { Archive, CalendarClock, Clock3, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
@@ -10,12 +10,15 @@ const props = defineProps<{
   disabled: boolean
   runningSessionIds: string[]
   settingsActive: boolean
+  newSessionActive: boolean
+  scheduledTasksActive: boolean
   sessionLabel: (session: SessionSummary) => string
   sessionMeta: (session: SessionSummary) => string
 }>()
 
 const emit = defineEmits<{
   archiveSession: [id: string]
+  newSession: []
   openSettings: []
   pinSession: [id: string, pinned: boolean]
   renameSession: [id: string, title: string]
@@ -49,6 +52,14 @@ const filteredSessions = computed(() => {
 
 function clearSearch() {
   searchQuery.value = ''
+}
+
+function openScheduledTasks() {
+  window.location.hash = 'tasks'
+}
+
+function isScheduledSession(session: SessionSummary) {
+  return session.title.startsWith('Scheduled: ')
 }
 
 function openContextMenu(event: MouseEvent, session: SessionSummary) {
@@ -156,7 +167,7 @@ function submitRename(session = editingSession.value) {
 
   const title = editingTitle.value.trim()
   if (title && title !== props.sessionLabel(session)) {
-    emit('renameSession', session.id, title)
+    emit('renameSession', session.id, isScheduledSession(session) ? `Scheduled: ${title}` : title)
   }
   cancelRename()
 }
@@ -184,15 +195,46 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="sidebar" @click="closeContextMenu()">
+  <aside class="sidebar" @click="closeContextMenu()" @contextmenu.prevent>
     <section class="brand">
       <div class="brand-header">
         <span class="brand-title">{{ uiText.sidebar.title }}</span>
       </div>
-      <label class="session-search">
+    </section>
+
+    <nav class="sidebar-primary-actions" aria-label="Workspace">
+      <button type="button" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
+        <SquarePen :size="15" stroke-width="2.1" />
+        <span>{{ uiText.sidebar.newChat }}</span>
+      </button>
+      <button type="button" :class="{ active: scheduledTasksActive }" @click.stop="openScheduledTasks">
+        <CalendarClock :size="15" stroke-width="2.1" />
+        <span>{{ uiText.sidebar.scheduledTasks }}</span>
+      </button>
+    </nav>
+
+    <section class="sidebar-chat-browser">
+      <span class="sidebar-section-title">{{ uiText.sidebar.chats }}</span>
+      <div class="session-search">
         <Search :size="14" stroke-width="2.2" />
-        <input v-model="searchQuery" type="search" :placeholder="uiText.sidebar.search" @keydown.esc.prevent="clearSearch" />
-      </label>
+        <input
+          v-model="searchQuery"
+          type="search"
+          :aria-label="uiText.sidebar.search"
+          :placeholder="uiText.sidebar.search"
+          @keydown.esc.prevent="clearSearch"
+        />
+        <button
+          v-if="searchQuery"
+          class="session-search-clear"
+          type="button"
+          :aria-label="uiText.sidebar.clearSearch"
+          :title="uiText.sidebar.clearSearch"
+          @click="clearSearch"
+        >
+          <X :size="13" stroke-width="2.2" />
+        </button>
+      </div>
     </section>
 
     <section class="session-list">
@@ -225,6 +267,7 @@ onUnmounted(() => {
         >
           <span class="session-line">
             <small>
+              <Clock3 v-if="isScheduledSession(session)" class="session-origin-icon" :size="11" stroke-width="2" aria-hidden="true" />
               <span class="session-title-text">{{ sessionLabel(session) }}</span>
               <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
             </small>

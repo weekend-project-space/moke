@@ -47,6 +47,24 @@ test('new chat starts a local draft and clears the persisted session hash', asyn
   assert.deepEqual(writtenUrls, ['/chat'])
 })
 
+test('new chat clears the scheduled tasks route instead of preserving it as a parameter', async () => {
+  const writtenUrls = installWindow('#tasks')
+  const sessionId = ref('')
+  const navigation = useSessionNavigation({
+    archiveSession: async () => true,
+    clearQueuedMessages: () => undefined,
+    closeTransientPanels: () => undefined,
+    forkSession: async () => true,
+    selectAgentSession: async () => true,
+    sessionId,
+    startAgentSession: () => true,
+    sortedSessions: ref([]),
+  })
+
+  assert.equal(await navigation.startNewSession(), true)
+  assert.deepEqual(writtenUrls, ['/chat'])
+})
+
 test('failed persisted session selection does not change the hash', async () => {
   const writtenUrls = installWindow('')
   const navigation = useSessionNavigation({

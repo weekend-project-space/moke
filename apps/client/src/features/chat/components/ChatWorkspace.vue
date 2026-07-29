@@ -3,6 +3,7 @@ import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { BrowserPanel, useBrowserWorkspace } from '../../browser'
+import { ScheduledTasksWorkspace } from '../../scheduled-tasks'
 import { useWorkspacePanels } from '../../../composables/useWorkspacePanels'
 import { uiText } from '../../../text/uiText'
 import ApprovalInlineBar from './ApprovalInlineBar.vue'
@@ -39,6 +40,7 @@ const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
+const scheduledTasksActive = ref(false)
 let runtimeTimer: number | undefined
 const {
   closeSidebar,
@@ -167,8 +169,8 @@ const {
   archiveSelectedSession,
   forkMessage,
   initialSessionFromHash,
-  selectSession,
-  startNewSession,
+  selectSession: navigateToSession,
+  startNewSession: createNewSession,
 } = useSessionNavigation({
   archiveSession,
   clearQueuedMessages,
@@ -273,7 +275,8 @@ function isFinalAssistantMessage(message: Message | undefined) {
 }
 
 function sessionLabel(session: SessionSummary) {
-  return session.title || session.preview || uiText.app.newChat
+  const title = session.title || session.preview || uiText.app.newChat
+  return title.startsWith('Scheduled: ') ? title.slice('Scheduled: '.length) : title
 }
 
 function sessionMeta(session: SessionSummary) {
@@ -318,6 +321,21 @@ watch(isRunning, (running) => {
   }, 1000)
 })
 
+async function selectSession(id: string) {
+  scheduledTasksActive.value = false
+  await navigateToSession(id)
+}
+
+async function startNewSession() {
+  scheduledTasksActive.value = false
+  await createNewSession()
+}
+
+function syncWorkspaceRoute() {
+  scheduledTasksActive.value = window.location.hash === '#tasks'
+  if (scheduledTasksActive.value) closeTransientPanels()
+}
+
 watch(sortedSessions, (nextSessions) => {
   seedRecentWorkspaces(nextSessions.flatMap((session) =>
     session.env?.workspace.root ? [session.env.workspace.root] : [],
@@ -327,6 +345,8 @@ watch(sortedSessions, (nextSessions) => {
 onMounted(async () => {
   window.addEventListener('keydown', handleChatKeydown)
   window.addEventListener('resize', handleWindowResize)
+  window.addEventListener('hashchange', syncWorkspaceRoute)
+  syncWorkspaceRoute()
   loadComposerReasoningEffort()
   initBrowserWorkspace()
   initWorkspacePanels()
@@ -334,6 +354,7 @@ onMounted(async () => {
   if (await checkServer()) {
     await loadReasoningCapability()
     await loadSessions()
+    if (scheduledTasksActive.value) return
     const initialSession = initialSessionFromHash()
     if (initialSession) {
       await selectSession(initialSession.id)
@@ -347,6 +368,7 @@ onUnmounted(() => {
   window.clearInterval(runtimeTimer)
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('hashchange', syncWorkspaceRoute)
   disposeBrowserWorkspace()
   disposeAgentSession()
 })
@@ -359,7 +381,7 @@ defineExpose({
 
 <template>
   <WorkspaceLayout
-    :auxiliary-visible="!traceCollapsed"
+    :auxiliary-visible="!scheduledTasksActive && !traceCollapsed"
     :auxiliary-maximized="workspaceMaximized"
     :sidebar-collapsed="sidebarCollapsed"
     :sidebar-open="sidebarOpen"
@@ -370,14 +392,16 @@ defineExpose({
     @close-sidebar="closeSidebar"
   >
     <template #sidebar>
-      <ChatSidebar :sessions="sortedSessions" :active-session-id="sessionId"
-        :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="false" :session-label="sessionLabel"
+      <ChatSidebar :sessions="sortedSessions" :active-session-id="scheduledTasksActive ? '' : sessionId"
+        :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="false"
+        :new-session-active="!scheduledTasksActive && !sessionId"
+        :scheduled-tasks-active="scheduledTasksActive" :session-label="sessionLabel"
         :session-meta="sessionMeta"
         @select-session="selectSession" @rename-session="renameSession" @archive-session="archiveSelectedSession"
-        @pin-session="pinSession" @open-settings="openSettings" />
+        @pin-session="pinSession" @new-session="startNewSession" @open-settings="openSettings" />
     </template>
 
-    <section class="chat">
+    <section v-if="!scheduledTasksActive" class="chat">
       <ChatHeader
         :title="currentTitle"
         :subtitle="sessionSubtitle"
@@ -512,8 +536,17 @@ defineExpose({
       </div>
     </section>
 
+    <ScheduledTasksWorkspace
+      v-else
+      :api-base="apiBase"
+      :default-workspace="newSessionDraft.workspace?.root || ''"
+      :workspace-options="recentWorkspaces"
+      @open-session="selectSession"
+      @toggle-sidebar="toggleSidebar"
+    />
+
     <template #auxiliary>
-      <BrowserPanel ref="browserPanel" :active="active && !traceCollapsed" :maximized="workspaceMaximized" @toggle-maximized="toggleWorkspaceMaximized" />
+      <BrowserPanel ref="browserPanel" :active="active && !scheduledTasksActive && !traceCollapsed" :maximized="workspaceMaximized" @toggle-maximized="toggleWorkspaceMaximized" />
     </template>
   </WorkspaceLayout>
 </template>

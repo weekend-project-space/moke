@@ -306,6 +306,34 @@ export type CreateSessionRequest = {
   env?: CreateSessionEnvironmentInput;
 };
 
+export type ScheduledTaskStatus = 'enabled' | 'paused';
+
+export type ScheduledTask = {
+  id: string;
+  name: string;
+  prompt: string;
+  cron: string;
+  timezone: string;
+  status: ScheduledTaskStatus;
+  workspace_root: string;
+  approval_mode: ApprovalMode;
+  next_run_at?: string;
+  last_run_at?: string;
+  last_session_id?: string;
+  last_run_id?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateScheduledTaskRequest = Pick<
+  ScheduledTask,
+  'name' | 'prompt' | 'cron' | 'timezone' | 'workspace_root' | 'approval_mode'
+> & {
+  status?: ScheduledTaskStatus;
+};
+
+export type UpdateScheduledTaskRequest = Partial<CreateScheduledTaskRequest>;
+
 export type CreateSessionResponse = {
   session: Session;
 };

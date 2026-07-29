@@ -20,6 +20,7 @@ import { SkillSettingsService } from './services/skill-settings-service.js';
 import { JsonSessionStore } from './storage/session-store.js';
 import { AttachmentStore } from './storage/attachment-store.js';
 import { JsonMessagingStore } from './storage/messaging-store.js';
+import { ScheduledTaskStore } from './storage/scheduled-task-store.js';
 import { summarizeSession } from './domain/sessions.js';
 import { SessionApplicationService } from './services/session-application-service.js';
 import { MessagingConnectionPool } from './services/messaging/connection-pool.js';
@@ -29,6 +30,7 @@ import { WeixinLoginService } from './services/messaging/weixin-login-service.js
 import { WeixinAdapter } from '@moke/messaging-weixin';
 import { DingTalkAdapter } from '@moke/messaging-dingtalk';
 import { FeishuAdapter } from '@moke/messaging-feishu';
+import { ScheduledTaskService } from './services/scheduled-task-service.js';
 
 export {
   normalizeWindowsDrivePath,
@@ -80,6 +82,7 @@ export async function createApp(): Promise<ServerApp> {
   const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
   const attachmentStore = new AttachmentStore(storePath);
   const messagingStore = new JsonMessagingStore(storePath);
+  const scheduledTaskStore = new ScheduledTaskStore(storePath);
   const { system, toolRegistry, createSkillContentManager } = createToolRegistry({
     defaultWorkspaceRoot,
     browserBridge,
@@ -97,6 +100,7 @@ export async function createApp(): Promise<ServerApp> {
   sessionStore.initialize();
   attachmentStore.migrateInlineAttachments(sessionStore);
   messagingStore.initialize();
+  scheduledTaskStore.initialize();
 
   const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, defaultWorkspaceRoot);
   const runManager = createRunManager({
@@ -128,6 +132,7 @@ export async function createApp(): Promise<ServerApp> {
     onSessionChanged: (session) => sessionStore.save(session),
   });
   const sessionApplicationService = new SessionApplicationService(sessionStore, runManager, defaultWorkspaceRoot);
+  const scheduledTaskService = new ScheduledTaskService(scheduledTaskStore, sessionApplicationService);
   const messagingConnectionPool = new MessagingConnectionPool(messagingStore);
   messagingConnectionPool
     .register('weixin', (connection, secret) => {
@@ -187,16 +192,19 @@ export async function createApp(): Promise<ServerApp> {
       skillSettingsService,
       messagingRuntime,
       weixinLoginService,
+      scheduledTaskService,
       defaultWorkspaceRoot,
     }),
   );
 
   await messagingRuntime.start();
+  scheduledTaskService.start();
 
   return {
     port,
     server,
     close: async () => {
+      scheduledTaskService.stop();
       const httpClosed = closeHttpServer(server);
       removeMessagingObserver();
       const messagingClosed = messagingRuntime.close();

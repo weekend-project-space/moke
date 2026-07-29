@@ -14,7 +14,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="settings-navigation">
+  <aside class="settings-navigation" @contextmenu.prevent>
     <div class="settings-navigation-header">
       <h1>{{ uiText.app.settings }}</h1>
     </div>

@@ -13,6 +13,7 @@ export const listSessionsQuerySchema = z.object({
 }).strict();
 
 const approvalModeSchema = z.enum(['manual', 'ai_review', 'auto_approve']);
+const scheduledTaskStatusSchema = z.enum(['enabled', 'paused']);
 
 const createSessionEnvironmentInputSchema = z.object({
   approval_mode: approvalModeSchema.optional(),
@@ -72,6 +73,25 @@ export const sendMessageSchema = z.object({
   env: mutableSessionEnvironmentInputSchema.optional(),
   options: runOptionsSchema.optional().default({}),
 }).strict();
+
+export const listScheduledTasksQuerySchema = z.object({
+  status: scheduledTaskStatusSchema.optional(),
+}).strict();
+
+export const createScheduledTaskSchema = z.object({
+  name: nonEmptyText.max(120),
+  prompt: nonEmptyText.max(20_000),
+  cron: nonEmptyText.max(200),
+  timezone: nonEmptyText.max(100),
+  workspace_root: nonEmptyText.max(2000),
+  approval_mode: approvalModeSchema,
+  status: scheduledTaskStatusSchema.optional(),
+}).strict();
+
+export const updateScheduledTaskSchema = createScheduledTaskSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  { message: 'At least one task field is required' },
+);
 
 export const runRespondSchema = z.discriminatedUnion('type', [
   z.object({

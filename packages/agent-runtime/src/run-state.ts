@@ -5,6 +5,10 @@ import type { ApprovalMode, RunSnapshot, SessionEnvironment } from '@moke/protoc
 export type RunOrigin =
   | { kind: 'local' }
   | {
+      kind: 'scheduled';
+      task_id: string;
+    }
+  | {
       kind: 'messaging';
       platform: string;
       connection_id: string;
