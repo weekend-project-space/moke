@@ -164,19 +164,6 @@
     background: var(--sidebar-item-active);
   }
 
-  &.running::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 5px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-    transform: translateY(-50%);
-  }
-
   &.manageable:hover,
   &.manageable:focus-within {
     .session-menu-trigger {
@@ -184,7 +171,7 @@
       pointer-events: auto;
     }
 
-    time {
+    .session-meta {
       opacity: 0;
     }
   }
@@ -294,6 +281,48 @@
   flex: 0 0 auto;
   padding: 8px var(--sidebar-gutter) 12px;
   border-top: 1px solid var(--line-subtle);
+}
+
+.session-meta {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  transition: opacity 0.14s ease;
+
+  &.is-running time {
+    opacity: 0;
+  }
+}
+
+.session-running-status {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  transform: translateY(-50%);
+
+  svg {
+    animation: session-running-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes session-running-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-running-status svg {
+    animation: none;
+  }
 }
 
 .session-origin-icon {
@@ -438,7 +467,7 @@
     pointer-events: auto;
   }
 
-  .session.manageable time {
+  .session.manageable .session-meta {
     opacity: 0;
   }
 }

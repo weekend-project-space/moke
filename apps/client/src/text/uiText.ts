@@ -339,6 +339,7 @@ const sidebar = {
   noResultsTitle: 'No results',
   pin: 'Pin',
   rename: 'Rename',
+  running: 'Running',
   scheduledTasks: 'Scheduled tasks',
   search: 'Search chats',
   settings: 'Settings',

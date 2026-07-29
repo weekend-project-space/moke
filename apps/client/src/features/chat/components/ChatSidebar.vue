@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, CalendarClock, Clock3, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
+import { Archive, CalendarClock, Clock3, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
@@ -253,7 +253,6 @@ onUnmounted(() => {
         class="session"
         :class="{
           active: session.id === activeSessionId,
-          running: isSessionRunning(session.id),
           manageable: !disabled && editingSessionId !== session.id,
         }"
         @contextmenu="openContextMenu($event, session)"
@@ -271,7 +270,18 @@ onUnmounted(() => {
               <span class="session-title-text">{{ sessionLabel(session) }}</span>
               <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
             </small>
-            <time>{{ sessionMeta(session) }}</time>
+            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+              <span
+                v-if="isSessionRunning(session.id)"
+                class="session-running-status"
+                role="status"
+                :aria-label="uiText.sidebar.running"
+                :title="uiText.sidebar.running"
+              >
+                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+              </span>
+            </span>
           </span>
         </button>
         <form v-else class="session-main session-rename-form" @submit.prevent="submitRename(session)">
@@ -284,7 +294,18 @@ onUnmounted(() => {
               @blur="submitRename()"
               @keydown.esc.prevent="cancelRename"
             />
-            <time>{{ sessionMeta(session) }}</time>
+            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+              <span
+                v-if="isSessionRunning(session.id)"
+                class="session-running-status"
+                role="status"
+                :aria-label="uiText.sidebar.running"
+                :title="uiText.sidebar.running"
+              >
+                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+              </span>
+            </span>
           </span>
         </form>
         <button
