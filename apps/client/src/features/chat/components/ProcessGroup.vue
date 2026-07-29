@@ -12,6 +12,7 @@ const props = defineProps<{
   hasError: boolean
   isActive?: boolean
   renderMarkdown: (content: string) => string
+  showResultDivider?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,6 +42,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
         <ChevronDown v-else :size="15" stroke-width="2" />
       </span>
     </button>
+    <div v-if="showResultDivider" class="process-result-divider" aria-hidden="true"></div>
     <div v-if="!collapsed" class="process-list">
       <template v-for="processItem in items" :key="processItem.id">
         <div

@@ -16,7 +16,7 @@ const app = {
 } as const
 
 const browser = {
-  addressPlaceholder: 'Enter URL',
+  addressPlaceholder: 'Search or enter URL',
   back: 'Back',
   closeOtherPages: 'Close other pages',
   closePage: 'Close page',
@@ -24,12 +24,15 @@ const browser = {
   errorTitle: 'Could not load this page',
   forward: 'Forward',
   loading: 'Loading',
+  maximize: 'Maximize browser',
   newPage: 'New page',
-  openPromptDescription: 'The page will be embedded below with controls and status kept in the toolbar.',
-  openPromptTitle: 'Enter a URL to visit',
+  openPromptDescription: 'Use the address bar to search the web or open a site.',
+  openPromptTitle: 'Search or enter a URL',
   pages: 'Browser pages',
   reload: 'Reload',
+  restore: 'Restore browser',
   retry: 'Try again',
+  pageLimitReached: (count: number) => `Page limit reached (${count})`,
   requiresDesktopDescription: 'Pages are embedded in the right-side browser area.',
   requiresDesktopTitle: 'Use Moke in the Tauri desktop app',
 } as const
@@ -184,6 +187,10 @@ const settings = {
   returnToChat: 'Back to chat',
   save: 'Save',
   saved: 'Saved',
+  searchEngine: 'Search engine',
+  searchEngineBaidu: 'Baidu',
+  searchEngineBing: 'Bing',
+  searchEngineGoogle: 'Google',
   setActive: 'Set active',
   testModel: 'Test model',
   testing: 'Testing',

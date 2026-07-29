@@ -322,6 +322,7 @@ defineExpose({
         :has-error="item.hasError"
         :is-active="item.isActive"
         :render-markdown="renderMarkdown"
+        :show-result-divider="shouldShowProcessDivider(item, index)"
         @toggle="emit('toggleProcessGroup', item.id)"
       />
       <MessageBubble
@@ -336,7 +337,6 @@ defineExpose({
         @fork="emit('forkMessage', $event)"
         @continue="emit('applySuggestion', uiText.chat.continuePrompt)"
       />
-      <div v-if="shouldShowProcessDivider(item, index)" class="process-result-divider" aria-hidden="true"></div>
     </template>
 
     <div v-if="streamingText" class="message-row assistant">

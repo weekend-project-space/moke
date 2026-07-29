@@ -1,10 +1,12 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
-import type { BrowserLinkOpenMode } from '../model/preferences'
+import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
+import { resolveBrowserAddress } from '../model/address'
 import { pageIdsToClose, type BrowserTabCloseScope } from '../model/tabClose'
 import { waitForBrowserLayoutFrame } from '../services/browserLayout'
 
 const MAX_TABS = 8
+const STATE_REFRESH_INTERVAL_MS = 250
 
 export function useBrowserController(options: {
   active: Ref<boolean>
@@ -23,23 +25,20 @@ export function useBrowserController(options: {
   let resizeObserver: ResizeObserver | null = null
   let unlistenBrowserState: (() => void) | null = null
   let boundsSyncFrame: number | null = null
+  let stateRefreshTimer: number | null = null
+  let stateRefreshInFlight = false
   let viewportSuspended = false
   let viewportTransition = 0
 
   const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
-  const canCreateTab = computed(() => nativeAvailable.value && !isBusy.value && tabs.value.length < MAX_TABS)
-  const canGoBack = computed(() => Boolean(activeTab.value?.canGoBack && !isBusy.value))
-  const canGoForward = computed(() => Boolean(activeTab.value?.canGoForward && !isBusy.value))
+  const isTabLimitReached = computed(() => tabs.value.length >= MAX_TABS)
+  const canCreateTab = computed(() => nativeAvailable.value && !isBusy.value && !isTabLimitReached.value)
+  const canGoBack = computed(() => Boolean(activeTab.value?.canGoBack && !activeTab.value.isLoading && !isBusy.value))
+  const canGoForward = computed(() => Boolean(activeTab.value?.canGoForward && !activeTab.value.isLoading && !isBusy.value))
   const canReload = computed(() => Boolean(activeTab.value && !isBusy.value))
 
   function tabKey(tab: BrowserPage) {
     return `page-${tab.pageId}`
-  }
-
-  function normalizeInput(value: string) {
-    const trimmed = value.trim()
-    if (!trimmed) return 'about:blank'
-    return trimmed.includes('://') ? trimmed : `https://${trimmed}`
   }
 
   function formatAddress(url?: string) {
@@ -49,6 +48,22 @@ export function useBrowserController(options: {
 
   function syncAddressFromPage(targetPage = activeTab.value) {
     address.value = formatAddress(targetPage?.url)
+  }
+
+  function pagesMatch(current: BrowserPage[], next: BrowserPage[]) {
+    return current.length === next.length && current.every((page, index) => {
+      const candidate = next[index]
+      return candidate
+        && page.pageId === candidate.pageId
+        && page.label === candidate.label
+        && page.url === candidate.url
+        && page.title === candidate.title
+        && page.faviconUrl === candidate.faviconUrl
+        && page.canGoBack === candidate.canGoBack
+        && page.canGoForward === candidate.canGoForward
+        && page.isLoading === candidate.isLoading
+        && page.visible === candidate.visible
+    })
   }
 
   function applyState(result: { page: BrowserPage | null; pages?: BrowserPage[]; activePageId?: number | null }) {
@@ -114,7 +129,8 @@ export function useBrowserController(options: {
 
   async function submitAddress() {
     await withBusy(async () => {
-      const url = normalizeInput(address.value)
+      const preferences = loadBrowserPreferences()
+      const url = resolveBrowserAddress(address.value, preferences.searchEngine)
       const tab = activeTab.value
       isEditingAddress.value = false
       if (!tab) {
@@ -161,6 +177,21 @@ export function useBrowserController(options: {
       for (const pageId of pageIds) applyState(await browserApi.close(pageId))
       if (!activeTab.value) address.value = ''
     })
+  }
+
+  async function refreshActivePageState() {
+    const pageId = activeTab.value?.pageId
+    if (!nativeAvailable.value || !options.active.value || viewportSuspended || pageId == null || stateRefreshInFlight) return
+
+    stateRefreshInFlight = true
+    try {
+      const result = await browserApi.refreshState(pageId)
+      if (result.activePageId !== activeTab.value?.pageId || !pagesMatch(tabs.value, result.pages)) applyState(result)
+    } catch {
+      // Page teardown and navigation can briefly make the child WebView unavailable.
+    } finally {
+      stateRefreshInFlight = false
+    }
   }
 
   async function retryPage() {
@@ -268,6 +299,8 @@ export function useBrowserController(options: {
     } catch {
       unlistenBrowserState = null
     }
+    stateRefreshTimer = window.setInterval(() => void refreshActivePageState(), STATE_REFRESH_INTERVAL_MS)
+    void refreshActivePageState()
     window.addEventListener('resize', scheduleBoundsSync)
   })
 
@@ -276,6 +309,8 @@ export function useBrowserController(options: {
     resizeObserver?.disconnect()
     if (boundsSyncFrame !== null) window.cancelAnimationFrame(boundsSyncFrame)
     boundsSyncFrame = null
+    if (stateRefreshTimer !== null) window.clearInterval(stateRefreshTimer)
+    stateRefreshTimer = null
     window.removeEventListener('resize', scheduleBoundsSync)
     if (activeTab.value) void browserApi.hide()
   })
@@ -294,7 +329,8 @@ export function useBrowserController(options: {
   return {
     tabs, activeTabKey, activeTab, address, isEditingAddress, errorMessage, isBusy, nativeAvailable,
     viewportPreview,
-    canCreateTab, canGoBack, canGoForward, canReload, tabKey, beginAddressEdit, endAddressEdit,
+    canCreateTab, canGoBack, canGoForward, canReload, isTabLimitReached, maxTabs: MAX_TABS,
+    tabKey, beginAddressEdit, endAddressEdit,
     submitAddress, createTab, openUrl, selectTab, closeTabs, reloadPage, retryPage, navigateHistory,
     suspendViewport, resumeViewport,
     getViewportBounds,

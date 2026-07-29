@@ -1,13 +1,13 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::fs;
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, Runtime, WebviewUrl};
 use tauri::webview::{NewWindowResponse, WebviewBuilder};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, Runtime, WebviewUrl};
 use url::Url;
 
 struct AgentServer {
@@ -21,14 +21,11 @@ struct BrowserPageState {
     label: String,
     url: String,
     title: String,
+    favicon_url: String,
     can_go_back: bool,
     can_go_forward: bool,
     is_loading: bool,
     visible: bool,
-    #[serde(skip_serializing)]
-    history: Vec<String>,
-    #[serde(skip_serializing)]
-    history_index: usize,
 }
 
 struct BrowserState {
@@ -222,7 +219,11 @@ fn app_data_moke_dir(app: &tauri::App) -> PathBuf {
 
     std::env::var_os("APPDATA")
         .map(PathBuf::from)
-        .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_else(|_| repo_dir().join(".moke")))
+        .unwrap_or_else(|| {
+            app.path()
+                .app_data_dir()
+                .unwrap_or_else(|_| repo_dir().join(".moke"))
+        })
         .join("Moke")
 }
 
@@ -285,7 +286,10 @@ fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
             repo_dir.join(".env"),
         )
     } else {
-        let resource_dir = app.path().resource_dir().map_err(|error| error.to_string())?;
+        let resource_dir = app
+            .path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?;
         let server_dir = resource_dir.join("server");
         (
             server_dir.join("node.exe"),
@@ -298,8 +302,12 @@ fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
 
     ensure_user_env_file(app, &env_path);
 
-    let stdout = agent_server_log_file(app).map(Stdio::from).unwrap_or_else(Stdio::null);
-    let stderr = agent_server_log_file(app).map(Stdio::from).unwrap_or_else(Stdio::null);
+    let stdout = agent_server_log_file(app)
+        .map(Stdio::from)
+        .unwrap_or_else(Stdio::null);
+    let stderr = agent_server_log_file(app)
+        .map(Stdio::from)
+        .unwrap_or_else(Stdio::null);
     let mut command = Command::new(&program);
     command
         .args(args)
@@ -392,110 +400,14 @@ fn apply_webview_bounds<R: Runtime>(
     Ok(())
 }
 
-fn is_trackable_url(url: &str) -> bool {
-    let url = url.trim();
-    !url.is_empty() && url != "about:blank"
-}
-
-fn refresh_history_flags(page: &mut BrowserPageState) {
-    page.can_go_back = !page.history.is_empty() && page.history_index > 0;
-    page.can_go_forward = !page.history.is_empty() && page.history_index + 1 < page.history.len();
-}
-
-fn push_history_entry(page: &mut BrowserPageState, url: String) {
-    if !is_trackable_url(&url) {
-        return;
-    }
-
-    if page.history.is_empty() {
-        page.history.push(url);
-        page.history_index = 0;
-        refresh_history_flags(page);
-        return;
-    }
-
-    if page.history.get(page.history_index).is_some_and(|current| current == &url) {
-        refresh_history_flags(page);
-        return;
-    }
-
-    if page.history_index + 1 < page.history.len() {
-        page.history.truncate(page.history_index + 1);
-    }
-
-    page.history.push(url);
-    page.history_index = page.history.len().saturating_sub(1);
-    refresh_history_flags(page);
-}
-
-fn history_target(page: &BrowserPageState, direction: &str) -> Option<String> {
-    match direction {
-        "back" if page.history_index > 0 => page.history.get(page.history_index - 1).cloned(),
-        "forward" if page.history_index + 1 < page.history.len() => page.history.get(page.history_index + 1).cloned(),
-        _ => None,
-    }
-}
-
-fn set_history_index_for_url(page: &mut BrowserPageState, url: &str) -> bool {
-    if let Some(index) = page.history.iter().position(|entry| entry == url) {
-        page.history_index = index;
-        refresh_history_flags(page);
-        true
-    } else {
-        false
-    }
-}
-
-fn sync_history_for_page_load(page: &mut BrowserPageState, url: &str, is_loading: bool) {
-    if !is_trackable_url(url) {
-        refresh_history_flags(page);
-        return;
-    }
-
-    let previous_url = page.url.clone();
-    let was_loading = page.is_loading;
-
-    if is_loading {
-        if !set_history_index_for_url(page, url) {
-            push_history_entry(page, url.to_string());
-        }
-        return;
-    }
-
-    if was_loading
-        && previous_url != url
-        && page
-            .history
-            .get(page.history_index)
-            .is_some_and(|entry| entry == &previous_url)
-    {
-        page.history[page.history_index] = url.to_string();
-        refresh_history_flags(page);
-        return;
-    }
-
-    if !set_history_index_for_url(page, url) {
-        push_history_entry(page, url.to_string());
-    }
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BrowserPageReport {
     url: Option<String>,
     title: Option<String>,
+    favicon_url: Option<String>,
     can_go_back: Option<bool>,
     can_go_forward: Option<bool>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserPageChangeReport {
-    page_id: u32,
-    #[serde(rename = "eventType")]
-    event_type: String,
-    url: Option<String>,
-    title: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -508,85 +420,48 @@ struct BrowserStateChange {
 }
 
 const BROWSER_STATE_QUERY_SCRIPT: &str = r#"
-(() => ({
-  url: String(window.location.href || ""),
-  title: String(document.title || "")
-}))()
+(() => {
+  const value = String(document.querySelector('link[rel~="icon"][href]')?.href || "");
+  const faviconUrl = /^https?:\/\//i.test(value) || (/^data:image\//i.test(value) && value.length <= 32768) ? value : "";
+  const navigation = window.navigation;
+  return {
+    url: String(window.location.href || ""),
+    title: String(document.title || ""),
+    faviconUrl,
+    canGoBack: typeof navigation?.canGoBack === "boolean" ? navigation.canGoBack : window.history.length > 1,
+    canGoForward: typeof navigation?.canGoForward === "boolean" ? navigation.canGoForward : false
+  };
+})()
 "#;
 
-fn browser_state_observer_script(page_id: u32) -> String {
-    format!(
-        r#"
-(() => {{
-  if (window.__MOKE_BROWSER_STATE_OBSERVER__) return;
-  window.__MOKE_BROWSER_STATE_OBSERVER__ = true;
-  document.addEventListener("contextmenu", (event) => event.preventDefault(), true);
-  const pageId = {page_id};
-  let lastUrl = String(window.location.href || "");
-  let lastTitle = String(document.title || "");
-  let timer = 0;
-
-  const report = (eventType) => {{
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {{
-      const url = String(window.location.href || "");
-      const title = String(document.title || "");
-      if (url === lastUrl && title === lastTitle && eventType !== "history-changed") return;
-      lastUrl = url;
-      lastTitle = title;
-      try {{
-        window.__TAURI__?.core?.invoke?.("browser_report_state_change", {{
-          report: {{
-            pageId,
-            eventType,
-            url,
-            title
-          }}
-        }});
-      }} catch (_) {{}}
-    }}, 40);
-  }};
-
-  const wrapHistory = (name) => {{
-    const original = window.history && window.history[name];
-    if (typeof original !== "function") return;
-    window.history[name] = function (...args) {{
-      const value = original.apply(this, args);
-      report("history-changed");
-      return value;
-    }};
-  }};
-
-  wrapHistory("pushState");
-  wrapHistory("replaceState");
-  window.addEventListener("popstate", () => report("history-changed"));
-  window.addEventListener("hashchange", () => report("hash-changed"));
-
-  if (document.querySelector("title")) {{
-    new MutationObserver(() => report("title-changed")).observe(document.querySelector("title"), {{
-      childList: true,
-      characterData: true,
-      subtree: true
-    }});
-  }}
-}})();
-"#
-    )
-}
+const BROWSER_PAGE_INITIALIZATION_SCRIPT: &str = r#"
+document.addEventListener("contextmenu", (event) => event.preventDefault(), true);
+"#;
 
 const BROWSER_HISTORY_NAVIGATION_SCRIPT: &str = r#"
 (() => {
   const direction = __MOKE_HISTORY_DIRECTION__;
-  const before = String(window.location.href || "");
+  const navigation = window.navigation;
   if (direction === "back") {
-    window.history.back();
-    return { ok: true, direction, before };
+    if (typeof navigation?.back === "function") {
+      if (!navigation.canGoBack) return { ok: false, direction };
+      navigation.back();
+    } else {
+      if (window.history.length <= 1) return { ok: false, direction };
+      window.history.back();
+    }
+    return { ok: true, direction };
   }
   if (direction === "forward") {
-    window.history.forward();
-    return { ok: true, direction, before };
+    if (typeof navigation?.forward === "function") {
+      if (!navigation.canGoForward) return { ok: false, direction };
+      navigation.forward();
+    } else {
+      window.history.forward();
+    }
+    return { ok: true, direction };
   }
-  return { ok: false, direction, before };
+  return { ok: false, direction };
 })()
 "#;
 
@@ -1016,7 +891,13 @@ fn resolve_repo_path(file_path: &str) -> PathBuf {
 }
 
 fn mime_type_for_path(path: &Path) -> &'static str {
-    match path.extension().and_then(|extension| extension.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "txt" | "log" | "md" => "text/plain",
         "json" => "application/json",
         "csv" => "text/csv",
@@ -1040,8 +921,14 @@ fn upload_file_script(uid: &str, path: &Path, bytes: &[u8]) -> Result<String, St
     let base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
     let replacements = [
         ("__MOKE_UID__", serde_json::Value::String(uid.to_string())),
-        ("__MOKE_FILE_NAME__", serde_json::Value::String(file_name.to_string())),
-        ("__MOKE_MIME_TYPE__", serde_json::Value::String(mime_type_for_path(path).to_string())),
+        (
+            "__MOKE_FILE_NAME__",
+            serde_json::Value::String(file_name.to_string()),
+        ),
+        (
+            "__MOKE_MIME_TYPE__",
+            serde_json::Value::String(mime_type_for_path(path).to_string()),
+        ),
         ("__MOKE_BASE64__", serde_json::Value::String(base64)),
     ];
 
@@ -1059,13 +946,13 @@ fn update_browser_page_from_report(
 ) -> Result<(), String> {
     update_browser_page(state, page_id, |page| {
         if let Some(url) = payload.url {
-            page.url = url.clone();
-            if !set_history_index_for_url(page, &url) {
-                push_history_entry(page, url);
-            }
+            page.url = url;
         }
         if let Some(title) = payload.title {
             page.title = title;
+        }
+        if let Some(favicon_url) = payload.favicon_url {
+            page.favicon_url = sanitize_browser_favicon_url(&favicon_url);
         }
         if let Some(can_go_back) = payload.can_go_back {
             page.can_go_back = can_go_back;
@@ -1077,7 +964,11 @@ fn update_browser_page_from_report(
     })
 }
 
-fn refresh_browser_page_state(app: &tauri::AppHandle, state: &BrowserState, page_id: u32) -> Result<(), String> {
+fn refresh_browser_page_state(
+    app: &tauri::AppHandle,
+    state: &BrowserState,
+    page_id: u32,
+) -> Result<(), String> {
     let webview = browser_webview(app, state, page_id)?;
     let callback_app = app.clone();
     webview
@@ -1127,7 +1018,10 @@ fn unwrap_browser_value(value: serde_json::Value) -> Result<serde_json::Value, S
         .and_then(|value| value.as_bool())
         .unwrap_or(false)
     {
-        return Ok(value.get("value").cloned().unwrap_or(serde_json::Value::Null));
+        return Ok(value
+            .get("value")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null));
     }
 
     let message = value
@@ -1158,13 +1052,38 @@ fn element_script(
     submit_key: Option<&str>,
 ) -> Result<String, String> {
     let replacements = [
-        ("__MOKE_ACTION__", serde_json::Value::String(action.to_string())),
-        ("__MOKE_UID__", uid.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
-        ("__MOKE_VALUE__", value.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        (
+            "__MOKE_ACTION__",
+            serde_json::Value::String(action.to_string()),
+        ),
+        (
+            "__MOKE_UID__",
+            uid.map(|value| serde_json::Value::String(value.to_string()))
+                .unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "__MOKE_VALUE__",
+            value
+                .map(|value| serde_json::Value::String(value.to_string()))
+                .unwrap_or(serde_json::Value::Null),
+        ),
         ("__MOKE_DBL_CLICK__", serde_json::Value::Bool(dbl_click)),
-        ("__MOKE_KEY__", key.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
-        ("__MOKE_TEXT__", text.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
-        ("__MOKE_SUBMIT_KEY__", submit_key.map(|value| serde_json::Value::String(value.to_string())).unwrap_or(serde_json::Value::Null)),
+        (
+            "__MOKE_KEY__",
+            key.map(|value| serde_json::Value::String(value.to_string()))
+                .unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "__MOKE_TEXT__",
+            text.map(|value| serde_json::Value::String(value.to_string()))
+                .unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "__MOKE_SUBMIT_KEY__",
+            submit_key
+                .map(|value| serde_json::Value::String(value.to_string()))
+                .unwrap_or(serde_json::Value::Null),
+        ),
     ];
 
     let mut script = BROWSER_ELEMENT_SCRIPT.to_string();
@@ -1247,6 +1166,25 @@ fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
     fs::write(path, encode_png(image)?).map_err(|error| error.to_string())
 }
 
+fn sanitize_browser_favicon_url(value: &str) -> String {
+    const MAX_FAVICON_URL_BYTES: usize = 32 * 1024;
+
+    if value.len() > MAX_FAVICON_URL_BYTES {
+        return String::new();
+    }
+
+    let Ok(url) = url::Url::parse(value) else {
+        return String::new();
+    };
+    let allowed = matches!(url.scheme(), "http" | "https")
+        || (url.scheme() == "data" && value.to_ascii_lowercase().starts_with("data:image/"));
+    if allowed {
+        value.to_string()
+    } else {
+        String::new()
+    }
+}
+
 fn encode_png(image: &CapturedImage) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     {
@@ -1261,7 +1199,13 @@ fn encode_png(image: &CapturedImage) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn crop_image(image: &CapturedImage, x: u32, y: u32, width: u32, height: u32) -> Result<CapturedImage, String> {
+fn crop_image(
+    image: &CapturedImage,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Result<CapturedImage, String> {
     if width == 0 || height == 0 {
         return Err("Screenshot crop area is empty".to_string());
     }
@@ -1278,10 +1222,18 @@ fn crop_image(image: &CapturedImage, x: u32, y: u32, width: u32, height: u32) ->
         rgba[target_start..target_start + (width as usize) * 4]
             .copy_from_slice(&image.rgba[source_start..source_end]);
     }
-    Ok(CapturedImage { width, height, rgba })
+    Ok(CapturedImage {
+        width,
+        height,
+        rgba,
+    })
 }
 
-fn stitch_vertical(parts: Vec<(CapturedImage, u32)>, width: u32, height: u32) -> Result<CapturedImage, String> {
+fn stitch_vertical(
+    parts: Vec<(CapturedImage, u32)>,
+    width: u32,
+    height: u32,
+) -> Result<CapturedImage, String> {
     if width == 0 || height == 0 {
         return Err("Screenshot stitch area is empty".to_string());
     }
@@ -1292,14 +1244,22 @@ fn stitch_vertical(parts: Vec<(CapturedImage, u32)>, width: u32, height: u32) ->
         for row in 0..copy_height {
             let source_start = (row * part.width * 4) as usize;
             let target_start = (((target_y + row) * width) * 4) as usize;
-            rgba[target_start..target_start + (copy_width as usize) * 4]
-                .copy_from_slice(&part.rgba[source_start..source_start + (copy_width as usize) * 4]);
+            rgba[target_start..target_start + (copy_width as usize) * 4].copy_from_slice(
+                &part.rgba[source_start..source_start + (copy_width as usize) * 4],
+            );
         }
     }
-    Ok(CapturedImage { width, height, rgba })
+    Ok(CapturedImage {
+        width,
+        height,
+        rgba,
+    })
 }
 
-fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Result<CapturedImage, String> {
+fn capture_browser_viewport(
+    app: &tauri::AppHandle,
+    bounds: BrowserBounds,
+) -> Result<CapturedImage, String> {
     let main_window = app
         .get_window("main")
         .ok_or_else(|| "Main window was not found".to_string())?;
@@ -1309,7 +1269,9 @@ fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Re
         .into_iter()
         .find(|window| window.title() == title)
         .ok_or_else(|| format!("Could not find screenshot window for title: {title}"))?;
-    let image = captured_window.capture_image().map_err(|error| error.to_string())?;
+    let image = captured_window
+        .capture_image()
+        .map_err(|error| error.to_string())?;
     let image_width = image.width();
     let image_height = image.height();
     let rgba = image.into_raw();
@@ -1344,9 +1306,7 @@ fn capture_browser_viewport(app: &tauri::AppHandle, bounds: BrowserBounds) -> Re
 }
 
 #[cfg(windows)]
-fn read_preview_stream(
-    stream: &windows::Win32::System::Com::IStream,
-) -> Result<Vec<u8>, String> {
+fn read_preview_stream(stream: &windows::Win32::System::Com::IStream) -> Result<Vec<u8>, String> {
     use windows::Win32::System::Com::{STREAM_SEEK_END, STREAM_SEEK_SET};
 
     const MAX_PREVIEW_BYTES: u64 = 32 * 1024 * 1024;
@@ -1387,8 +1347,7 @@ fn capture_webview_preview(webview: &tauri::Webview) -> Result<Vec<u8>, String> 
         Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
     };
     use windows::{
-        Win32::Foundation::HGLOBAL,
-        Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal,
+        Win32::Foundation::HGLOBAL, Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal,
     };
 
     let (sender, receiver) = mpsc::channel::<Result<Vec<u8>, String>>();
@@ -1431,7 +1390,12 @@ fn capture_webview_preview(webview: &tauri::Webview) -> Result<Vec<u8>, String> 
         .map_err(|_| "Browser preview timed out".to_string())?
 }
 
-fn emit_browser_state_change(app: &tauri::AppHandle, state: &BrowserState, event_type: &str, page_id: Option<u32>) {
+fn emit_browser_state_change(
+    app: &tauri::AppHandle,
+    state: &BrowserState,
+    event_type: &str,
+    page_id: Option<u32>,
+) {
     if let Ok(result) = browser_result(state) {
         let _ = app.emit(
             "browser_state_change",
@@ -1483,7 +1447,11 @@ where
     Ok(())
 }
 
-fn browser_webview(app: &tauri::AppHandle, state: &BrowserState, page_id: u32) -> Result<tauri::Webview, String> {
+fn browser_webview(
+    app: &tauri::AppHandle,
+    state: &BrowserState,
+    page_id: u32,
+) -> Result<tauri::Webview, String> {
     let label = find_page_label(state, page_id)?;
     app.get_webview(&label)
         .ok_or_else(|| format!("Browser webview {label} was not found"))
@@ -1588,7 +1556,7 @@ fn create_browser_page(
         .get_window("main")
         .ok_or_else(|| "Main window was not found".to_string())?;
     let webview_builder = WebviewBuilder::new(&label, WebviewUrl::External(url.clone()))
-        .initialization_script(browser_state_observer_script(page_id))
+        .initialization_script(BROWSER_PAGE_INITIALIZATION_SCRIPT)
         .on_new_window(move |url, _features| {
             let app = popup_app.clone();
             let handler_app = app.clone();
@@ -1606,14 +1574,17 @@ fn create_browser_page(
             if let Some(state) = page_load_app.try_state::<BrowserState>() {
                 let _ = update_browser_page(&state, load_page_id, |page| {
                     let url = payload.url().to_string();
-                    sync_history_for_page_load(page, &url, is_loading);
-                    page.url = url.clone();
+                    page.url = url;
                     page.is_loading = is_loading;
                 });
                 emit_browser_state_change(
                     &page_load_app,
                     &state,
-                    if is_loading { "page-load-started" } else { "page-load-finished" },
+                    if is_loading {
+                        "page-load-started"
+                    } else {
+                        "page-load-finished"
+                    },
                     Some(load_page_id),
                 );
                 if !is_loading {
@@ -1645,12 +1616,6 @@ fn create_browser_page(
         webview.hide().map_err(|error| error.to_string())?;
     }
 
-    let initial_history = if is_trackable_url(url.as_str()) {
-        vec![url.to_string()]
-    } else {
-        Vec::new()
-    };
-
     {
         let mut pages = state
             .pages
@@ -1661,12 +1626,11 @@ fn create_browser_page(
             label,
             url: url.to_string(),
             title: "New page".to_string(),
+            favicon_url: String::new(),
             can_go_back: false,
             can_go_forward: false,
             is_loading: true,
             visible,
-            history: initial_history,
-            history_index: 0,
         });
     }
     if visible {
@@ -1700,28 +1664,7 @@ async fn browser_refresh_state(
     let report = serde_json::from_value::<BrowserPageReport>(payload)
         .map_err(|error| format!("Browser state returned invalid data: {error}"))?;
     update_browser_page_from_report(&state, page_id, report)?;
-    emit_browser_state_change(&app, &state, "state-refreshed", Some(page_id));
     browser_result(&state)
-}
-
-#[tauri::command]
-async fn browser_report_state_change(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    report: BrowserPageChangeReport,
-) -> Result<(), String> {
-    update_browser_page_from_report(
-        &state,
-        report.page_id,
-        BrowserPageReport {
-            url: report.url,
-            title: report.title,
-            can_go_back: None,
-            can_go_forward: None,
-        },
-    )?;
-    emit_browser_state_change(&app, &state, &report.event_type, Some(report.page_id));
-    Ok(())
 }
 
 #[tauri::command]
@@ -1744,7 +1687,13 @@ async fn browser_open(
         }
         return browser_result(&state);
     }
-    create_browser_page(&app, &state, url, options.visible.unwrap_or(true), options.bounds)
+    create_browser_page(
+        &app,
+        &state,
+        url,
+        options.visible.unwrap_or(true),
+        options.bounds,
+    )
 }
 
 #[tauri::command]
@@ -1759,7 +1708,9 @@ async fn browser_navigate(
     match options.nav_type.as_str() {
         "url" => {
             let url = normalize_url(options.url.as_deref())?;
-            webview.navigate(url.clone()).map_err(|error| error.to_string())?;
+            webview
+                .navigate(url.clone())
+                .map_err(|error| error.to_string())?;
             update_browser_page(&state, page_id, |page| {
                 page.url = url.to_string();
                 page.is_loading = true;
@@ -1768,7 +1719,9 @@ async fn browser_navigate(
         "reload" => {
             if options.ignore_cache.unwrap_or(false) {
                 let current_url = webview.url().map_err(|error| error.to_string())?;
-                webview.navigate(current_url).map_err(|error| error.to_string())?;
+                webview
+                    .navigate(current_url)
+                    .map_err(|error| error.to_string())?;
             } else {
                 webview.reload().map_err(|error| error.to_string())?;
             }
@@ -1777,46 +1730,24 @@ async fn browser_navigate(
             })?;
         }
         "back" | "forward" => {
-            let target_url = {
-                let pages = state
-                    .pages
-                    .lock()
-                    .map_err(|_| "Browser state is unavailable".to_string())?;
-                let page = pages
-                    .iter()
-                    .find(|page| page.page_id == page_id)
-                    .ok_or_else(|| format!("Browser page {page_id} was not found"))?;
-                history_target(page, &options.nav_type)
-                    .ok_or_else(|| format!("Cannot navigate {} from this page", options.nav_type))?
-            };
             let native_result = eval_browser_json(
                 &app,
                 &state,
                 Some(page_id),
                 history_navigation_script(&options.nav_type)?,
                 1000,
-            );
-
-            if native_result
-                .as_ref()
-                .ok()
-                .and_then(|value| value.get("ok"))
+            )?;
+            if !native_result
+                .get("ok")
                 .and_then(|value| value.as_bool())
                 .unwrap_or(false)
             {
-                update_browser_page(&state, page_id, |page| {
-                    let _ = set_history_index_for_url(page, target_url.as_str());
-                    page.is_loading = true;
-                })?;
-            } else {
-                let url = normalize_url(Some(&target_url))?;
-                webview.navigate(url.clone()).map_err(|error| error.to_string())?;
-                update_browser_page(&state, page_id, |page| {
-                    page.url = url.to_string();
-                    let _ = set_history_index_for_url(page, url.as_str());
-                    page.is_loading = true;
-                })?;
+                return Err(format!(
+                    "Cannot navigate {} from this page",
+                    options.nav_type
+                ));
             }
+            update_browser_page(&state, page_id, |page| page.is_loading = true)?;
         }
         _ => return Err("type must be url, back, forward, or reload".to_string()),
     }
@@ -1857,7 +1788,13 @@ async fn browser_evaluate_script(
 }})()
 "#
     );
-    let value = unwrap_browser_value(eval_browser_json(&app, &state, options.page_id, script, 30000)?)?;
+    let value = unwrap_browser_value(eval_browser_json(
+        &app,
+        &state,
+        options.page_id,
+        script,
+        30000,
+    )?)?;
     browser_result_with_value(&state, Some(value), None, None)
 }
 
@@ -1898,18 +1835,54 @@ async fn browser_take_screenshot(
         BROWSER_SCREENSHOT_METRICS_SCRIPT.to_string(),
         30000,
     )?;
-    let original_x = original_metrics.get("scrollX").and_then(|value| value.as_f64()).unwrap_or(0.0);
-    let original_y = original_metrics.get("scrollY").and_then(|value| value.as_f64()).unwrap_or(0.0);
+    let original_x = original_metrics
+        .get("scrollX")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0);
+    let original_y = original_metrics
+        .get("scrollY")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0);
 
     let (image, mode) = if let Some(uid) = options.uid {
-        let rect = eval_browser_json(&app, &state, Some(page_id), element_rect_script(&uid)?, 30000)?;
+        let rect = eval_browser_json(
+            &app,
+            &state,
+            Some(page_id),
+            element_rect_script(&uid)?,
+            30000,
+        )?;
         let viewport = capture_browser_viewport(&app, bounds)?;
         let scale_x = viewport.width as f64 / bounds.width.max(1.0);
         let scale_y = viewport.height as f64 / bounds.height.max(1.0);
-        let x = (rect.get("x").and_then(|value| value.as_f64()).unwrap_or(0.0).max(0.0) * scale_x).round() as u32;
-        let y = (rect.get("y").and_then(|value| value.as_f64()).unwrap_or(0.0).max(0.0) * scale_y).round() as u32;
-        let width = (rect.get("width").and_then(|value| value.as_f64()).unwrap_or(0.0).max(1.0) * scale_x).round() as u32;
-        let height = (rect.get("height").and_then(|value| value.as_f64()).unwrap_or(0.0).max(1.0) * scale_y).round() as u32;
+        let x = (rect
+            .get("x")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0)
+            .max(0.0)
+            * scale_x)
+            .round() as u32;
+        let y = (rect
+            .get("y")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0)
+            .max(0.0)
+            * scale_y)
+            .round() as u32;
+        let width = (rect
+            .get("width")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0)
+            .max(1.0)
+            * scale_x)
+            .round() as u32;
+        let height = (rect
+            .get("height")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0)
+            .max(1.0)
+            * scale_y)
+            .round() as u32;
         (crop_image(&viewport, x, y, width, height)?, "element")
     } else if options.full_page.unwrap_or(false) {
         let viewport_height = original_metrics
@@ -1930,8 +1903,17 @@ async fn browser_take_screenshot(
             } else {
                 y
             };
-            let actual = eval_browser_json(&app, &state, Some(page_id), scroll_script(original_x, target_y), 30000)?;
-            let actual_y = actual.get("scrollY").and_then(|value| value.as_f64()).unwrap_or(target_y);
+            let actual = eval_browser_json(
+                &app,
+                &state,
+                Some(page_id),
+                scroll_script(original_x, target_y),
+                30000,
+            )?;
+            let actual_y = actual
+                .get("scrollY")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(target_y);
             let viewport = capture_browser_viewport(&app, bounds)?;
             let scale_y = viewport.height as f64 / viewport_height;
             let target_pixel_y = (actual_y * scale_y).round().max(0.0) as u32;
@@ -1941,16 +1923,31 @@ async fn browser_take_screenshot(
             }
             y = target_y + viewport_height;
         }
-        let first_width = parts.first().map(|(image, _)| image.width).unwrap_or(bounds.width.max(1.0).round() as u32);
-        let first_height = parts.first().map(|(image, _)| image.height).unwrap_or(bounds.height.max(1.0).round() as u32);
+        let first_width = parts
+            .first()
+            .map(|(image, _)| image.width)
+            .unwrap_or(bounds.width.max(1.0).round() as u32);
+        let first_height = parts
+            .first()
+            .map(|(image, _)| image.height)
+            .unwrap_or(bounds.height.max(1.0).round() as u32);
         let scale_y = first_height as f64 / viewport_height;
         let output_height = (scroll_height * scale_y).ceil().max(first_height as f64) as u32;
-        (stitch_vertical(parts, first_width, output_height)?, "fullPage")
+        (
+            stitch_vertical(parts, first_width, output_height)?,
+            "fullPage",
+        )
     } else {
         (capture_browser_viewport(&app, bounds)?, "viewport")
     };
 
-    let _ = eval_browser_json(&app, &state, Some(page_id), scroll_script(original_x, original_y), 30000);
+    let _ = eval_browser_json(
+        &app,
+        &state,
+        Some(page_id),
+        scroll_script(original_x, original_y),
+        30000,
+    );
     write_png(&output_path, &image)?;
     browser_result_with_value(
         &state,
@@ -1971,10 +1968,24 @@ async fn browser_click(
     state: tauri::State<'_, BrowserState>,
     options: BrowserClickOptions,
 ) -> Result<BrowserResult, String> {
-    let script = element_script("click", Some(&options.uid), None, options.dbl_click.unwrap_or(false), None, None, None)?;
+    let script = element_script(
+        "click",
+        Some(&options.uid),
+        None,
+        options.dbl_click.unwrap_or(false),
+        None,
+        None,
+        None,
+    )?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
@@ -1990,7 +2001,13 @@ async fn browser_hover(
     let script = element_script("hover", Some(&options.uid), None, false, None, None, None)?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
@@ -2003,10 +2020,24 @@ async fn browser_fill(
     state: tauri::State<'_, BrowserState>,
     options: BrowserFillOptions,
 ) -> Result<BrowserResult, String> {
-    let script = element_script("fill", Some(&options.uid), Some(&options.value), false, None, None, None)?;
+    let script = element_script(
+        "fill",
+        Some(&options.uid),
+        Some(&options.value),
+        false,
+        None,
+        None,
+        None,
+    )?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
@@ -2020,15 +2051,34 @@ async fn browser_fill_form(
     options: BrowserFillFormOptions,
 ) -> Result<BrowserResult, String> {
     for element in &options.elements {
-        let script = element_script("fill", Some(&element.uid), Some(&element.value), false, None, None, None)?;
+        let script = element_script(
+            "fill",
+            Some(&element.uid),
+            Some(&element.value),
+            false,
+            None,
+            None,
+            None,
+        )?;
         let _ = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     }
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
-    browser_result_with_value(&state, Some(serde_json::json!({ "ok": true })), snapshot, None)
+    browser_result_with_value(
+        &state,
+        Some(serde_json::json!({ "ok": true })),
+        snapshot,
+        None,
+    )
 }
 
 #[tauri::command]
@@ -2038,15 +2088,23 @@ async fn browser_upload_file(
     options: BrowserUploadFileOptions,
 ) -> Result<BrowserResult, String> {
     let file_path = resolve_repo_path(&options.file_path);
-    let metadata = fs::metadata(&file_path).map_err(|error| format!("Failed to read upload file metadata: {error}"))?;
+    let metadata = fs::metadata(&file_path)
+        .map_err(|error| format!("Failed to read upload file metadata: {error}"))?;
     if !metadata.is_file() {
         return Err("filePath must point to a file".to_string());
     }
-    let bytes = fs::read(&file_path).map_err(|error| format!("Failed to read upload file: {error}"))?;
+    let bytes =
+        fs::read(&file_path).map_err(|error| format!("Failed to read upload file: {error}"))?;
     let script = upload_file_script(&options.uid, &file_path, &bytes)?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
@@ -2071,7 +2129,8 @@ async fn browser_wait_for(
         return Err("text must not be empty".to_string());
     }
     let timeout = options.timeout.unwrap_or(30000);
-    let targets_json = js_literal(&serde_json::to_value(&targets).map_err(|error| error.to_string())?)?;
+    let targets_json =
+        js_literal(&serde_json::to_value(&targets).map_err(|error| error.to_string())?)?;
     let script = format!(
         r#"
 new Promise((resolve, reject) => {{
@@ -2095,7 +2154,10 @@ new Promise((resolve, reject) => {{
 "#
     );
     let value = eval_browser_json(&app, &state, options.page_id, script, timeout + 1000)?;
-    let matched = value.get("matched").and_then(|value| value.as_str()).map(|value| value.to_string());
+    let matched = value
+        .get("matched")
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
     browser_result_with_value(&state, Some(value), None, matched)
 }
 
@@ -2105,10 +2167,24 @@ async fn browser_press_key(
     state: tauri::State<'_, BrowserState>,
     options: BrowserPressKeyOptions,
 ) -> Result<BrowserResult, String> {
-    let script = element_script("press_key", None, None, false, Some(&options.key), None, None)?;
+    let script = element_script(
+        "press_key",
+        None,
+        None,
+        false,
+        Some(&options.key),
+        None,
+        None,
+    )?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     let snapshot = if options.include_snapshot.unwrap_or(false) {
-        Some(eval_browser_json(&app, &state, options.page_id, snapshot_script(false), 30000)?)
+        Some(eval_browser_json(
+            &app,
+            &state,
+            options.page_id,
+            snapshot_script(false),
+            30000,
+        )?)
     } else {
         None
     };
@@ -2121,7 +2197,15 @@ async fn browser_type_text(
     state: tauri::State<'_, BrowserState>,
     options: BrowserTypeTextOptions,
 ) -> Result<BrowserResult, String> {
-    let script = element_script("type_text", None, None, false, None, Some(&options.text), options.submit_key.as_deref())?;
+    let script = element_script(
+        "type_text",
+        None,
+        None,
+        false,
+        None,
+        Some(&options.text),
+        options.submit_key.as_deref(),
+    )?;
     let value = eval_browser_json(&app, &state, options.page_id, script, 30000)?;
     browser_result_with_value(&state, Some(value), None, None)
 }
@@ -2245,10 +2329,7 @@ async fn resize_page(
         width,
         height,
     };
-    apply_webview_bounds(
-        &webview,
-        Some(bounds),
-    )?;
+    apply_webview_bounds(&webview, Some(bounds))?;
     let _ = resolve_browser_bounds(&state, Some(bounds))?;
     browser_result(&state)
 }
@@ -2298,10 +2379,7 @@ async fn browser_resize(
         width: width.unwrap_or(1.0),
         height: height.unwrap_or(1.0),
     };
-    apply_webview_bounds(
-        &webview,
-        Some(bounds),
-    )?;
+    apply_webview_bounds(&webview, Some(bounds))?;
     let _ = resolve_browser_bounds(&state, Some(bounds))?;
     Ok(())
 }
@@ -2410,7 +2488,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             browser_state,
             browser_refresh_state,
-            browser_report_state_change,
             browser_open,
             browser_navigate,
             browser_evaluate_script,
@@ -2452,4 +2529,44 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_state_query_uses_native_navigation_capabilities() {
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("window.navigation"));
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoBack"));
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoForward"));
+    }
+
+    #[test]
+    fn history_navigation_delegates_without_reconstructing_a_target_url() {
+        let script = history_navigation_script("back").expect("history script");
+
+        assert!(script.contains("navigation.back()"));
+        assert!(script.contains("window.history.back()"));
+        assert!(!script.contains("targetUrl"));
+        assert!(!script.contains("target_url"));
+    }
+
+    #[test]
+    fn favicon_urls_are_limited_to_safe_image_sources() {
+        assert_eq!(
+            sanitize_browser_favicon_url("https://example.com/favicon.ico"),
+            "https://example.com/favicon.ico"
+        );
+        assert_eq!(
+            sanitize_browser_favicon_url("data:image/png;base64,AA=="),
+            "data:image/png;base64,AA=="
+        );
+        assert!(sanitize_browser_favicon_url("file:///C:/Windows/System32/icon.ico").is_empty());
+        assert!(sanitize_browser_favicon_url(&format!(
+            "data:image/png;base64,{}",
+            "a".repeat(32 * 1024)
+        ))
+        .is_empty());
+    }
 }

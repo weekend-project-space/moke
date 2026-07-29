@@ -52,7 +52,9 @@ const {
   sidebarOpen,
   toggleSidebar,
   toggleWorkspace,
+  toggleWorkspaceMaximized,
   traceCollapsed,
+  workspaceMaximized,
 } = useWorkspacePanels()
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
@@ -358,6 +360,7 @@ defineExpose({
 <template>
   <WorkspaceLayout
     :auxiliary-visible="!traceCollapsed"
+    :auxiliary-maximized="workspaceMaximized"
     :sidebar-collapsed="sidebarCollapsed"
     :sidebar-open="sidebarOpen"
     :sidebar-preview="desktopLayout && sidebarCollapsed"
@@ -510,7 +513,7 @@ defineExpose({
     </section>
 
     <template #auxiliary>
-      <BrowserPanel ref="browserPanel" :active="active && !traceCollapsed" />
+      <BrowserPanel ref="browserPanel" :active="active && !traceCollapsed" :maximized="workspaceMaximized" @toggle-maximized="toggleWorkspaceMaximized" />
     </template>
   </WorkspaceLayout>
 </template>

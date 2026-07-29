@@ -189,6 +189,10 @@
   .workspace:has(.browser-panel) {
     width: min(520px, calc(100vw - 48px));
   }
+
+  .workspace-maximized .workspace:has(.browser-panel) {
+    width: 100vw;
+  }
 }
 
 @media (max-width: 640px) {

@@ -3,6 +3,7 @@ export type BrowserPage = {
   label: string
   url: string
   title: string
+  faviconUrl: string
   canGoBack: boolean
   canGoForward: boolean
   isLoading: boolean

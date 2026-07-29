@@ -106,6 +106,22 @@
 }
 
 @media (min-width: 981px) {
+  .shell.workspace-maximized {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell.workspace-maximized > .sidebar-host,
+  .shell.workspace-maximized > .sidebar-resizer,
+  .shell.workspace-maximized > .workspace-layout-main,
+  .shell.workspace-maximized > .workspace-resizer {
+    display: none;
+  }
+
+  .shell.workspace-maximized > .workspace {
+    grid-column: 1;
+    border-left: 0;
+  }
+
   .shell > .sidebar-host > .sidebar {
     grid-column: 1;
   }

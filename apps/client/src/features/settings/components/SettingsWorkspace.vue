@@ -12,6 +12,7 @@ import {
   loadBrowserPreferences,
   saveBrowserPreferences as persistBrowserPreferences,
   type BrowserLinkOpenMode,
+  type BrowserPreferences,
 } from '../../browser'
 import { uiText } from '../../../text/uiText'
 import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
@@ -19,11 +20,6 @@ import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavi
 type WorkspaceRootPermission = {
   path: string
   added_at: string
-}
-
-type BrowserSettings = {
-  browserHomeUrl: string
-  linkOpenMode: BrowserLinkOpenMode
 }
 
 const props = defineProps<{
@@ -39,7 +35,7 @@ const emit = defineEmits<{
 const activeSettingsTab = ref<SettingsTab>('model')
 const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
 const skillSettingsDirty = ref(false)
-const browserSettings = reactive<BrowserSettings>({ ...DEFAULT_BROWSER_PREFERENCES })
+const browserSettings = reactive<BrowserPreferences>({ ...DEFAULT_BROWSER_PREFERENCES })
 const permissions = ref<WorkspaceRootPermission[]>([])
 const loadingPermissions = ref(false)
 const permissionError = ref('')
@@ -186,6 +182,14 @@ onMounted(() => {
         <select v-model="browserSettings.linkOpenMode">
           <option value="current">{{ uiText.settings.currentTab }}</option>
           <option value="new-tab">{{ uiText.settings.newTab }}</option>
+        </select>
+      </label>
+      <label class="settings-row">
+        <span>{{ uiText.settings.searchEngine }}</span>
+        <select v-model="browserSettings.searchEngine">
+          <option value="bing">{{ uiText.settings.searchEngineBing }}</option>
+          <option value="google">{{ uiText.settings.searchEngineGoogle }}</option>
+          <option value="baidu">{{ uiText.settings.searchEngineBaidu }}</option>
         </select>
       </label>
       <div class="settings-actions">

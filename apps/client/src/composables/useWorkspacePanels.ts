@@ -9,6 +9,7 @@ export function useWorkspacePanels() {
   const desktopLayout = ref(false)
   const sidebarOpen = ref(false)
   const sidebarCollapsed = ref(false)
+  const workspaceMaximized = ref(false)
 
   function isDesktopLayout() {
     return window.innerWidth > DESKTOP_BREAKPOINT
@@ -63,8 +64,15 @@ export function useWorkspacePanels() {
       return
     }
 
+    workspaceMaximized.value = false
     traceCollapsed.value = true
     localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+  }
+
+  function toggleWorkspaceMaximized() {
+    if (traceCollapsed.value) openWorkspace()
+    sidebarOpen.value = false
+    workspaceMaximized.value = !workspaceMaximized.value
   }
 
   function closeTransientPanels() {
@@ -76,6 +84,11 @@ export function useWorkspacePanels() {
 
     if (sidebarOpen.value) {
       sidebarOpen.value = false
+      return
+    }
+
+    if (workspaceMaximized.value) {
+      workspaceMaximized.value = false
       return
     }
 
@@ -109,6 +122,8 @@ export function useWorkspacePanels() {
     sidebarOpen,
     toggleSidebar,
     toggleWorkspace,
+    toggleWorkspaceMaximized,
     traceCollapsed,
+    workspaceMaximized,
   }
 }

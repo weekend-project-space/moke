@@ -50,6 +50,7 @@ const DESKTOP_BREAKPOINT = 980
 
 const props = defineProps<{
   auxiliaryLabel?: string
+  auxiliaryMaximized?: boolean
   auxiliaryVisible?: boolean
   closeSidebarLabel?: string
   sidebarCollapsed?: boolean
@@ -123,7 +124,7 @@ function setAuxiliaryWidth(width: number, persist = false) {
 }
 
 function fitPanelWidths() {
-  if (!isDesktopLayout() || !availableWidth()) return
+  if (props.auxiliaryMaximized || !isDesktopLayout() || !availableWidth()) return
 
   if (props.auxiliaryVisible) setAuxiliaryWidth(sharedAuxiliaryWidth.value)
   if (!props.sidebarCollapsed) setSidebarWidth(sharedSidebarWidth.value)
@@ -182,7 +183,7 @@ function stopAuxiliaryResize() {
 }
 
 function startAuxiliaryResize(event: PointerEvent) {
-  if (!props.auxiliaryVisible || !isDesktopLayout()) return
+  if (!props.auxiliaryVisible || props.auxiliaryMaximized || !isDesktopLayout()) return
 
   event.preventDefault()
   auxiliaryResizing.value = true
@@ -193,7 +194,7 @@ function startAuxiliaryResize(event: PointerEvent) {
 }
 
 function handleAuxiliaryResizeKeydown(event: KeyboardEvent) {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  if (props.auxiliaryMaximized || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
 
   event.preventDefault()
   const step = event.shiftKey ? 24 : 8
@@ -222,7 +223,7 @@ function observeAuxiliaryPanel() {
 }
 
 watch(
-  () => [props.auxiliaryVisible, props.sidebarCollapsed],
+  () => [props.auxiliaryVisible, props.auxiliaryMaximized, props.sidebarCollapsed],
   async () => {
     await nextTick()
     observeAuxiliaryPanel()
@@ -253,6 +254,7 @@ onBeforeUnmount(() => {
       'trace-collapsed': !auxiliaryVisible,
       'sidebar-collapsed': sidebarCollapsed,
       'sidebar-open': sidebarOpen,
+      'workspace-maximized': auxiliaryMaximized,
       'sidebar-resizing': sidebarResizing,
       'workspace-resizing': auxiliaryResizing,
     }"

@@ -16,15 +16,39 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
+  background: var(--surface-solid);
+}
+
+.browser-tabs-row {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
 }
 
 .browser-tabs {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
   gap: 6px;
   min-height: 30px;
   overflow-x: auto;
-  padding-bottom: 1px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.browser-tabs-maximize {
+  @include icon-control(30px);
+
+  &:hover {
+    color: var(--ink);
+    background: var(--surface-control-hover);
+  }
 }
 
 .browser-tab {
@@ -32,18 +56,22 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   width: min(178px, 72%);
   min-width: 132px;
+  flex: 0 0 min(178px, 72%);
   height: 30px;
   align-items: center;
   gap: 5px;
   padding: 0 3px 0 8px;
   border-radius: 8px;
   color: var(--ink-soft);
-  background: var(--surface-control-hover);
+  background: transparent;
+
+  &:hover {
+    background: var(--surface-muted-soft);
+  }
 
   &.active {
     color: var(--ink);
-    background: var(--surface-solid);
-    box-shadow: var(--shadow-soft);
+    background: var(--surface-control-hover);
   }
 
   &-select {
@@ -79,57 +107,90 @@
     @include icon-control(22px);
   }
 
+  &-close {
+    opacity: 0;
+  }
+
+  &.active &-close,
+  &:hover &-close,
+  &:focus-within &-close {
+    opacity: 1;
+  }
+
   &-add {
-    @include icon-control(30px, $background: var(--surface-control));
+    @include icon-control(30px);
   }
 
   &-close:hover,
   &-add:hover {
     color: var(--ink);
-    background: var(--surface-popover);
+    background: var(--surface-control-hover);
   }
 }
 
 .browser-toolbar {
   display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: 94px minmax(0, 1fr) 94px;
   flex: 0 0 auto;
-  gap: 5px;
   align-items: center;
 
+  &::after {
+    width: 94px;
+    content: '';
+  }
+
+  &-nav {
+    display: flex;
+    align-items: center;
+    justify-self: start;
+    gap: 5px;
+  }
+
   button {
-    @include icon-control(28px, $background: var(--surface-control));
+    @include icon-control(28px);
 
     &:hover {
       color: var(--ink);
-      background: var(--surface-popover);
+      background: var(--surface-control-hover);
     }
   }
 
   label {
+    position: relative;
     display: flex;
     min-width: 0;
     height: 30px;
     align-items: center;
-    gap: 6px;
-    padding: 0 8px;
-    border: 1px solid var(--line-medium);
+    padding: 0;
+    border: 1px solid transparent;
     border-radius: 8px;
     color: var(--ink-muted);
-    background: var(--surface-input);
+    background: transparent;
 
     &:focus-within {
       @include focus-ring;
+      background: var(--surface-input);
+    }
+
+    &.is-editing input {
+      text-align: left;
+      text-overflow: clip;
     }
   }
 
   input {
     width: 100%;
     min-width: 0;
+    height: 100%;
+    padding: 0 10px;
     border: 0;
     outline: 0;
+    overflow: hidden;
     background: transparent;
     font-size: var(--font-size-meta);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -143,6 +204,28 @@
   background:
     linear-gradient(135deg, var(--surface-input), var(--surface-browser-empty-edge)),
     var(--surface-browser-empty);
+}
+
+.browser-tab-favicon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  object-fit: contain;
+}
+
+.browser-tab-limit-notice {
+  position: absolute;
+  z-index: 3;
+  top: 33px;
+  right: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line-medium);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-menu);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
 }
 
 .browser-panel-unavailable .browser-window-state {
@@ -306,9 +389,6 @@
     min-width: 116px;
   }
 
-  .browser-toolbar label > svg {
-    display: none;
-  }
 }
 
 
