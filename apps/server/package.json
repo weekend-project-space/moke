@@ -16,6 +16,7 @@
     "@moke/messaging-core": "0.1.0",
     "@moke/messaging-dingtalk": "0.1.0",
     "@moke/messaging-feishu": "0.1.0",
+    "@moke/messaging-tools": "0.1.0",
     "@moke/messaging-weixin": "0.1.0",
     "@moke/protocol": "0.1.0",
     "cron-parser": "^5.6.2",

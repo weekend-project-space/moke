@@ -1,5 +1,6 @@
 import type { RunManager, RuntimeRun } from '@moke/agent-runtime';
 import { MessagingDeliveryError } from '@moke/messaging-core';
+import type { MessagingOutboundAccess } from '@moke/messaging-tools';
 import type {
   AgentEvent,
   PendingApproval,
@@ -16,6 +17,7 @@ import type {
   MessagingOutboundOperation,
   MessagingOutboundRequest,
   MessagingOutboundResult,
+  MessagingPlatform,
   OutboundContent,
 } from '@moke/messaging-core';
 
@@ -31,7 +33,6 @@ import {
 import { SessionApplicationService } from '../session-application-service.js';
 import { readMessagingDeliveryContents, validateMessagingMediaPaths } from './outbound-media.js';
 import { MessagingConnectionPool } from './connection-pool.js';
-import type { MessagingOutboundAccess } from './send-message-tool.js';
 
 const MAX_OUTBOUND_ATTEMPTS = 8;
 
@@ -203,6 +204,26 @@ export class MessagingRuntime {
     const completed = await this.waitForOutbound(input.idempotency_key);
     if (completed.state !== 'delivered') throw new Error(completed.error || 'Messaging delivery failed');
     return { receipts: completed.receipts };
+  }
+
+  resolveTarget(input: { platform: MessagingPlatform; sessionId: string }) {
+    const availableConnectionIds = new Set(
+      this.store.listConnections()
+        .filter((connection) =>
+          connection.platform === input.platform
+          && connection.enabled
+          && connection.state === 'connected')
+        .map((connection) => connection.id),
+    );
+    const platformBindings = this.store.listBindings({ platform: input.platform })
+      .filter((binding) => availableConnectionIds.has(binding.account_id));
+    const sessionBindings = platformBindings.filter((binding) => binding.session_id === input.sessionId);
+    if (sessionBindings.length === 1) return { status: 'resolved' as const, bindingId: sessionBindings[0]!.id };
+    if (sessionBindings.length > 1) return { status: 'ambiguous' as const, count: sessionBindings.length };
+
+    if (platformBindings.length === 1) return { status: 'resolved' as const, bindingId: platformBindings[0]!.id };
+    if (platformBindings.length > 1) return { status: 'ambiguous' as const, count: platformBindings.length };
+    return { status: 'not_found' as const };
   }
 
   async validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess) {

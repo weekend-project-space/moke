@@ -90,10 +90,86 @@ test('runtime marks a permanent delivery failure instead of reporting success', 
   }
 });
 
+test('runtime resolves a session binding before a platform-wide binding', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+  try {
+    const harness = createHarness();
+    harness.messagingConnections.push(
+      connectedConnection('fsconn_session', 'feishu'),
+      connectedConnection('fsconn_other', 'feishu'),
+    );
+    harness.bindings.push(
+      { id: 'bind_session', account_id: 'fsconn_session', platform: 'feishu', session_id: 'sess_local' },
+      { id: 'bind_other', account_id: 'fsconn_other', platform: 'feishu', session_id: 'sess_other' },
+    );
+    const runtime = new MessagingRuntime(
+      harness.store as never,
+      harness.connections as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      directory,
+      () => [directory],
+    );
+
+    assert.deepEqual(runtime.resolveTarget({ platform: 'feishu', sessionId: 'sess_local' }), {
+      status: 'resolved',
+      bindingId: 'bind_session',
+    });
+    assert.deepEqual(runtime.resolveTarget({ platform: 'feishu', sessionId: 'sess_missing' }), {
+      status: 'ambiguous',
+      count: 2,
+    });
+    assert.deepEqual(runtime.resolveTarget({ platform: 'dingtalk', sessionId: 'sess_local' }), { status: 'not_found' });
+    await runtime.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('runtime excludes bindings without an available connection when resolving a target', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+  try {
+    const harness = createHarness();
+    harness.messagingConnections.push(
+      connectedConnection('wxconn_active', 'weixin'),
+      { ...connectedConnection('wxconn_disabled', 'weixin'), enabled: false },
+      { ...connectedConnection('wxconn_stopped', 'weixin'), state: 'stopped' },
+      connectedConnection('fsconn_wrong_platform', 'feishu'),
+    );
+    harness.bindings.push(
+      { id: 'bind_orphan', account_id: 'wxconn_missing', platform: 'weixin', session_id: 'sess_local' },
+      { id: 'bind_disabled', account_id: 'wxconn_disabled', platform: 'weixin', session_id: 'sess_other' },
+      { id: 'bind_stopped', account_id: 'wxconn_stopped', platform: 'weixin', session_id: 'sess_other' },
+      { id: 'bind_wrong_platform', account_id: 'fsconn_wrong_platform', platform: 'weixin', session_id: 'sess_other' },
+      { id: 'bind_active', account_id: 'wxconn_active', platform: 'weixin', session_id: 'sess_other' },
+    );
+    const runtime = new MessagingRuntime(
+      harness.store as never,
+      harness.connections as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      directory,
+      () => [directory],
+    );
+
+    assert.deepEqual(runtime.resolveTarget({ platform: 'weixin', sessionId: 'sess_local' }), {
+      status: 'resolved',
+      bindingId: 'bind_active',
+    });
+    await runtime.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function createHarness(deliveryError?: Error) {
   const jobs: Array<Record<string, any>> = [];
   const delivered: Array<Record<string, unknown>> = [];
   const startedConnections: string[] = [];
+  const bindings: Array<Record<string, string>> = [];
+  const messagingConnections: Array<Record<string, unknown>> = [];
   const weixinConnection = {
     id: 'wxconn_1',
     platform: 'weixin',
@@ -102,6 +178,7 @@ function createHarness(deliveryError?: Error) {
     state: 'connected',
   };
   const store = {
+    listConnections() { return messagingConnections; },
     createConnection() { return weixinConnection; },
     updateConnectionState() { return weixinConnection; },
     enqueueOutboundJob(input: Record<string, any>) {
@@ -136,6 +213,9 @@ function createHarness(deliveryError?: Error) {
     getBinding() {
       return { id: 'bind_1', platform: 'weixin', account_id: 'conn_1', conversation_id: 'user_1', conversation_type: 'direct' };
     },
+    listBindings(input: { platform?: string } = {}) {
+      return bindings.filter((binding) => !input.platform || binding.platform === input.platform);
+    },
     getLatestOutboundReference() { return undefined; },
     completeOutboundJob(id: string, result: any) {
       const job = jobs.find((item) => item.id === id)!;
@@ -164,5 +244,9 @@ function createHarness(deliveryError?: Error) {
     },
     async close() {},
   };
-  return { store, connections, jobs, delivered, startedConnections };
+  return { store, connections, jobs, delivered, startedConnections, bindings, messagingConnections };
+}
+
+function connectedConnection(id: string, platform: 'weixin' | 'dingtalk' | 'feishu') {
+  return { id, platform, enabled: true, state: 'connected' };
 }

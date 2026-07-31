@@ -2,6 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import type { RuntimeRun } from '@moke/agent-runtime';
+import { registerMessagingTools } from '@moke/messaging-tools';
 import {
   loadFirstEnvFile,
   resolveEnvPaths,
@@ -25,7 +26,6 @@ import { summarizeSession } from './domain/sessions.js';
 import { SessionApplicationService } from './services/session-application-service.js';
 import { MessagingConnectionPool } from './services/messaging/connection-pool.js';
 import { MessagingRuntime } from './services/messaging/messaging-runtime.js';
-import { createSendMessageTool } from './services/messaging/send-message-tool.js';
 import { WeixinLoginService } from './services/messaging/weixin-login-service.js';
 import { WeixinAdapter } from '@moke/messaging-weixin';
 import { DingTalkAdapter } from '@moke/messaging-dingtalk';
@@ -172,7 +172,7 @@ export async function createApp(): Promise<ServerApp> {
     defaultWorkspaceRoot,
     () => [...approvedMessagingRoots],
   );
-  toolRegistry.register(createSendMessageTool(messagingRuntime));
+  registerMessagingTools(toolRegistry, messagingRuntime);
   const removeMessagingObserver = runManager.addObserver((event, run) => {
     messagingRuntime.onRunEvent(event, run);
   });

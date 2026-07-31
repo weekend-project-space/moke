@@ -196,6 +196,7 @@ export interface MessagingStore {
   deleteAdapterState(connectionId: string, key: string): void;
   findBinding(connectionId: string, conversationId: string, platform?: MessagingPlatform): MessagingBinding | null;
   getBinding(bindingId: string): MessagingBinding | null;
+  listBindings(input?: { platform?: MessagingPlatform }): MessagingBinding[];
   createBinding(input: { connectionId: string; conversationId: string; conversationType?: 'direct' | 'group' | 'channel'; sessionId: string; platform?: MessagingPlatform }): MessagingBinding;
   markBindingInbound(bindingId: string, messageId: string, senderId?: string): void;
   recordInbound(connectionId: string, platform?: MessagingPlatform): void;
@@ -510,6 +511,10 @@ export class JsonMessagingStore implements MessagingStore {
 
   getBinding(bindingId: string) {
     return this.readBindings().find((binding) => binding.id === bindingId) || null;
+  }
+
+  listBindings(input: { platform?: MessagingPlatform } = {}) {
+    return this.readBindings().filter((binding) => !input.platform || binding.platform === input.platform);
   }
 
   createBinding(input: {

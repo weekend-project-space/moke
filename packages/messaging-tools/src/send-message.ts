@@ -1,20 +1,8 @@
 import { z } from 'zod';
 
-import { ToolExecutionError, type RuntimeTool } from '@moke/agent-runtime';
-import type { MessagingOutboundRequest, MessagingOutboundResult, OutboundContent } from '@moke/messaging-core';
-
-export type MessagingOutboundService = {
-  send(input: MessagingOutboundRequest, access?: MessagingOutboundAccess): Promise<MessagingOutboundResult>;
-};
-
-export type MessagingOutboundMediaPathValidator = {
-  validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess): Promise<void>;
-};
-
-export type MessagingOutboundAccess = {
-  workspaceRoot: string;
-  approvedRoots?: string[];
-};
+import { ToolExecutionError, type RuntimeRun, type RuntimeTool } from '@moke/agent-runtime';
+import type { MessagingPlatform, OutboundContent } from '@moke/messaging-core';
+import type { MessagingToolBackend } from './messaging-tool-backend.js';
 
 const mediaSchema = z.object({
   path: z.string().min(1),
@@ -26,6 +14,7 @@ const fileSchema = mediaSchema.extend({
 });
 
 const sendMessageSchema = z.object({
+  platform: z.enum(['weixin', 'dingtalk', 'feishu']).optional(),
   text: z.string().max(8_000).optional(),
   images: z.array(mediaSchema).max(4).optional(),
   files: z.array(fileSchema).max(4).optional(),
@@ -33,38 +22,51 @@ const sendMessageSchema = z.object({
   message: 'text, images, or files is required',
 });
 
-export function createSendMessageTool(
-  outbound: MessagingOutboundService & Partial<MessagingOutboundMediaPathValidator>,
-): RuntimeTool<typeof sendMessageSchema> {
+export function createSendMessageTool(backend: MessagingToolBackend): RuntimeTool<typeof sendMessageSchema> {
   return {
     name: 'send_message',
-    description: 'Send text, images, or files to the current external messaging conversation. Media paths outside the workspace require directory approval.',
+    description: 'Send text, images, or files through a messaging platform. In an external messaging run it defaults to the current conversation; local and scheduled runs must specify a platform with one resolvable target. Media paths outside the workspace require directory approval.',
     approval: 'required',
     schema: sendMessageSchema,
     async handler(input, context) {
       const run = context.run;
-      if (!run || run.origin.kind !== 'messaging') {
-        throw toolError('send_message is only available in the current external messaging conversation', 'MESSAGING_ORIGIN_REQUIRED');
-      }
+      if (!run) throw toolError('send_message requires an active run', 'RUN_REQUIRED');
+      const bindingId = resolveBindingId(input.platform, run, backend);
       const contents = toOutboundContents(input);
       const access = {
         workspaceRoot: context.workspace,
         approvedRoots: context.workspaceRoots?.(),
       };
-      if (hasMedia(contents)) await outbound.validateMediaPaths?.(contents, access);
+      if (hasMedia(contents)) await backend.validateMediaPaths(contents, access);
       const callId = context.currentToolCall?.callId;
       if (!callId) throw toolError('send_message requires a tool call id', 'TOOL_CALL_ID_REQUIRED');
-      const result = await outbound.send({
-        binding_id: run.origin.binding_id,
+      const result = await backend.send({
+        binding_id: bindingId,
         run_id: run.id,
         idempotency_key: `${run.id}:tool:${callId}`,
         contents,
       }, access);
-      const text = input.text?.trim();
-      if (text) run.outbound_tool_texts = [...(run.outbound_tool_texts || []), text];
       return { receipts: result.receipts };
     },
   };
+}
+
+function resolveBindingId(platform: MessagingPlatform | undefined, run: RuntimeRun, backend: MessagingToolBackend) {
+  if (run.origin.kind === 'messaging' && (!platform || platform === run.origin.platform)) {
+    return run.origin.binding_id;
+  }
+  if (!platform) {
+    throw toolError('send_message requires platform outside an external messaging conversation', 'MESSAGING_TARGET_REQUIRED');
+  }
+  const target = backend.resolveTarget({ platform, sessionId: run.session_id });
+  if (target.status === 'resolved') return target.bindingId;
+  if (target.status === 'ambiguous') {
+    throw toolError(
+      `Multiple ${platform} messaging targets are available (${target.count}); a unique target is required`,
+      'MESSAGING_TARGET_AMBIGUOUS',
+    );
+  }
+  throw toolError(`No messaging target is available for ${platform}`, 'MESSAGING_TARGET_NOT_FOUND');
 }
 
 function toOutboundContents(input: z.infer<typeof sendMessageSchema>): OutboundContent[] {

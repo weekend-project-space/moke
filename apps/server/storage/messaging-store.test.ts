@@ -51,6 +51,7 @@ test('keeps bindings for different messaging platforms separate', () => {
 
     assert.equal(store.findBinding('account_1', 'conversation_1')?.id, weixin.id);
     assert.equal(store.findBinding('account_1', 'conversation_1', 'dingtalk')?.id, dingtalk.id);
+    assert.deepEqual(store.listBindings({ platform: 'dingtalk' }).map((binding) => binding.id), [dingtalk.id]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
