@@ -1,20 +1,118 @@
 @use './mixins' as *;
 
+.app-titlebar {
+  position: relative;
+  z-index: 50;
+  display: flex;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-glass);
+  user-select: none;
+}
+
+.app-menu {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.app-menu-trigger {
+  min-width: 48px;
+  padding: 0 12px;
+  color: var(--ink-soft);
+  background: transparent;
+  font-size: var(--font-size-meta);
+
+  &:hover,
+  &[aria-expanded='true'] {
+    color: var(--ink);
+    background: var(--surface-control-hover);
+  }
+}
+
+.app-menu-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 32px 0 0;
+  background: transparent;
+}
+
+.app-menu-popover {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 3px);
+  left: 4px;
+  display: grid;
+  width: 188px;
+  padding: 5px;
+  border: 1px solid var(--line-medium);
+  border-radius: var(--radius-md);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-menu);
+
+  button {
+    height: 30px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    background: transparent;
+    font-size: var(--font-size-ui);
+    text-align: left;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-control-hover);
+    }
+  }
+
+  i {
+    height: 1px;
+    margin: 4px;
+    background: var(--line-soft);
+  }
+}
+
+.app-titlebar-drag {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+[data-tauri-decorum-tb] .decorum-tb-btn {
+  width: 46px !important;
+  height: 32px !important;
+  color: var(--ink-soft);
+  background: transparent !important;
+
+  &:hover {
+    color: var(--ink);
+    background: var(--surface-control-hover) !important;
+  }
+
+  &#decorum-tb-close:hover {
+    color: #fff;
+    background: #c42b1c !important;
+  }
+}
+
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 2px var(--workspace-width, 560px);
-  height: 100dvh;
+  grid-template-columns: var(--sidebar-width, 268px) 1px minmax(420px, 1fr) 1px var(--workspace-width, 560px);
+  width: 100%;
+  height: auto;
   min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   background: var(--surface-app);
 }
 
 .shell.trace-collapsed {
-  grid-template-columns: var(--sidebar-width, 268px) 2px minmax(420px, 1fr) 0 0;
+  grid-template-columns: var(--sidebar-width, 268px) 1px minmax(420px, 1fr) 0 0;
 }
 
 .shell.sidebar-collapsed {
-  grid-template-columns: 0 0 minmax(420px, 1fr) 2px var(--workspace-width, 560px);
+  grid-template-columns: 0 0 minmax(420px, 1fr) 1px var(--workspace-width, 560px);
 }
 
 .shell.sidebar-collapsed.trace-collapsed {
@@ -38,7 +136,7 @@
   flex-direction: column;
   overflow: hidden;
   padding: 0;
-  border-right: 1px solid var(--line);
+  border-right: 0;
   background: var(--surface-glass);
 }
 
@@ -46,7 +144,7 @@
 .workspace-resizer {
   position: relative;
   z-index: 2;
-  min-width: 2px;
+  min-width: 1px;
   cursor: col-resize;
   color: var(--text-primary);
 }
@@ -56,18 +154,36 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 1px;
   content: "";
-  background: transparent;
+  background: var(--line);
   transition: background 0.14s ease;
+}
+
+.sidebar-resizer::after,
+.workspace-resizer::after {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  left: -4px;
+  content: "";
 }
 
 .sidebar-resizer::before {
   left: 0;
 }
 
+.sidebar-resizer {
+  background: var(--line);
+}
+
 .workspace-resizer::before {
   right: 0;
+}
+
+.workspace-resizer {
+  background: var(--line);
 }
 
 .sidebar-resizer:hover::before,
@@ -155,6 +271,11 @@
     box-shadow: var(--shadow-menu);
   }
 
+  #app:has(.app-titlebar) .sidebar-host.sidebar-preview {
+    top: 88px;
+    height: min(520px, calc(100dvh - 96px));
+  }
+
   .shell.sidebar-collapsed:has(
     .sidebar-toggle:hover,
     .sidebar-preview:hover,
@@ -198,8 +319,8 @@
   .shell.sidebar-collapsed.trace-collapsed {
     position: relative;
     grid-template-columns: minmax(0, 1fr);
-    height: 100dvh;
-    min-height: 100dvh;
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
   }
 

@@ -219,6 +219,7 @@ const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
+const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
 const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value || pendingApproval.value) return ''
@@ -374,6 +375,7 @@ onUnmounted(() => {
 })
 
 defineExpose({
+  newSession: startNewSession,
   openBrowser: openLinkInBrowser,
   refreshSettings: loadReasoningCapability,
 })
@@ -410,6 +412,7 @@ defineExpose({
         :trace-collapsed="traceCollapsed"
         :server-status="serverStatus"
         :server-status-label="serverStatusLabel"
+        :workspace-root="currentWorkspaceRoot"
         @new-session="startNewSession"
         @toggle-sidebar="toggleSidebar"
         @toggle-workspace="toggleWorkspace"

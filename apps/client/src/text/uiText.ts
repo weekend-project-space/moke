@@ -1,4 +1,5 @@
 const app = {
+  closeWindow: 'Close',
   connecting: 'Connecting',
   connected: 'Connected',
   disconnected: 'Disconnected',
@@ -8,9 +9,14 @@ const app = {
   responseFailed: 'Could not send your response. Please try again.',
   sendFailed: 'Failed to send. Check that Moke is connected, then try again.',
   firstMessageSendFailed: 'Chat created, but the message was not sent. Your draft is ready to retry.',
+  fileMenu: 'File',
+  exit: 'Exit',
   sessionCreateFailed: 'Could not create the chat. Check the workspace path and connection, then try again.',
   jumpToBottom: 'Jump to bottom',
+  maximizeWindow: 'Maximize',
+  minimizeWindow: 'Minimize',
   newChat: 'New chat',
+  restoreWindow: 'Restore',
   settings: 'Settings',
   working: 'Working',
 } as const
@@ -18,10 +24,18 @@ const app = {
 const browser = {
   addressPlaceholder: 'Search or enter URL',
   back: 'Back',
+  clearDownloads: 'Clear downloads',
   closeOtherPages: 'Close other pages',
   closePage: 'Close page',
   closePagesToRight: 'Close pages to the right',
   errorTitle: 'Could not load this page',
+  downloadCompleted: 'Downloaded',
+  downloadFailed: 'Download failed',
+  downloading: 'Downloading',
+  downloads: 'Downloads',
+  noDownloads: 'Downloaded files will appear here.',
+  openDownloadedFile: 'Open file',
+  revealDownloadedFile: 'Show in folder',
   forward: 'Forward',
   loading: 'Loading',
   maximize: 'Maximize browser',
@@ -92,11 +106,17 @@ const composer = {
 } as const
 
 const header = {
+  chooseWorkspaceApp: 'Choose application',
   collapseChatList: 'Collapse chat list',
   expandChatList: 'Expand chat list',
   hideBrowser: 'Hide browser',
+  loadingWorkspaceApps: 'Loading applications',
   newChat: 'New chat',
+  noWorkspace: 'Select a workspace first',
+  noWorkspaceApps: 'No supported applications found',
+  openWorkspaceIn: (name: string) => `Open workspace in ${name}`,
   showBrowser: 'Show browser',
+  workspaceOpenFailed: 'Could not open the workspace',
 } as const
 
 const message = {

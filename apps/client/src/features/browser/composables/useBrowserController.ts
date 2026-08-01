@@ -59,6 +59,7 @@ export function useBrowserController(options: {
         && page.url === candidate.url
         && page.title === candidate.title
         && page.faviconUrl === candidate.faviconUrl
+        && (page.faviconUrls || []).join('\u0000') === (candidate.faviconUrls || []).join('\u0000')
         && page.canGoBack === candidate.canGoBack
         && page.canGoForward === candidate.canGoForward
         && page.isLoading === candidate.isLoading

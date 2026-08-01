@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tauri::webview::{NewWindowResponse, WebviewBuilder};
+use tauri::webview::{DownloadEvent, NewWindowResponse, WebviewBuilder};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, Runtime, WebviewUrl};
+use tauri_plugin_decorum::WebviewWindowExt;
 use url::Url;
 
 struct AgentServer {
@@ -22,6 +23,7 @@ struct BrowserPageState {
     url: String,
     title: String,
     favicon_url: String,
+    favicon_urls: Vec<String>,
     can_go_back: bool,
     can_go_forward: bool,
     is_loading: bool,
@@ -33,6 +35,249 @@ struct BrowserState {
     active_page_id: Mutex<Option<u32>>,
     next_page_id: Mutex<u32>,
     last_bounds: Mutex<Option<BrowserBounds>>,
+}
+
+fn unique_download_path(download_dir: &Path, suggested: &Path) -> PathBuf {
+    let file_name = suggested
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| std::ffi::OsStr::new("download"));
+    let mut candidate = download_dir.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let stem = candidate
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("download")
+        .to_string();
+    let extension = candidate
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_string);
+    for index in 1..10_000 {
+        let name = match extension.as_deref() {
+            Some(extension) => format!("{stem} ({index}).{extension}"),
+            None => format!("{stem} ({index})"),
+        };
+        candidate = download_dir.join(name);
+        if !candidate.exists() {
+            break;
+        }
+    }
+    candidate
+}
+
+fn browser_download_payload(url: &Url, path: Option<&Path>, status: &str) -> serde_json::Value {
+    serde_json::json!({
+        "url": url.as_str(),
+        "path": path.map(|value| value.to_string_lossy().into_owned()),
+        "fileName": path
+            .and_then(Path::file_name)
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "download".to_string()),
+        "status": status,
+    })
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceOpener {
+    id: &'static str,
+    name: &'static str,
+}
+
+fn validated_workspace_root(root: &str) -> Result<PathBuf, String> {
+    let root = root.trim();
+    if root.is_empty() {
+        return Err("Select a workspace first".to_string());
+    }
+
+    let path = PathBuf::from(root);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("Could not resolve the workspace: {error}"))?
+            .join(path)
+    };
+    if !path.is_dir() {
+        return Err("The workspace folder no longer exists".to_string());
+    }
+    Ok(path)
+}
+
+#[cfg(target_os = "windows")]
+fn executable_on_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths)
+        .map(|directory| directory.join(name))
+        .find(|candidate| candidate.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn first_existing_path(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_vscode_executable() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(root) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(root).join("Programs/Microsoft VS Code/Code.exe"));
+    }
+    if let Some(root) = std::env::var_os("ProgramFiles") {
+        candidates.push(PathBuf::from(root).join("Microsoft VS Code/Code.exe"));
+    }
+    if let Some(root) = std::env::var_os("ProgramFiles(x86)") {
+        candidates.push(PathBuf::from(root).join("Microsoft VS Code/Code.exe"));
+    }
+    first_existing_path(candidates).or_else(|| executable_on_path("Code.exe"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_visual_studio_executable() -> Option<PathBuf> {
+    if let Some(path) = executable_on_path("devenv.exe") {
+        return Some(path);
+    }
+
+    let installer_root = std::env::var_os("ProgramFiles(x86)")?;
+    let vswhere =
+        PathBuf::from(installer_root).join("Microsoft Visual Studio/Installer/vswhere.exe");
+    if !vswhere.is_file() {
+        return None;
+    }
+    let output = Command::new(vswhere)
+        .args(["-latest", "-products", "*", "-property", "productPath"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    path.is_file().then_some(path)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_git_bash_executable() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(root) = std::env::var_os("ProgramFiles") {
+        candidates.push(PathBuf::from(root).join("Git/git-bash.exe"));
+    }
+    if let Some(root) = std::env::var_os("ProgramFiles(x86)") {
+        candidates.push(PathBuf::from(root).join("Git/git-bash.exe"));
+    }
+    if let Some(root) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(root).join("Programs/Git/git-bash.exe"));
+    }
+    first_existing_path(candidates).or_else(|| executable_on_path("git-bash.exe"))
+}
+
+#[cfg(target_os = "windows")]
+fn workspace_solution(root: &Path) -> Option<PathBuf> {
+    let mut solutions = fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    matches!(extension.to_ascii_lowercase().as_str(), "sln" | "slnx")
+                })
+        })
+        .collect::<Vec<_>>();
+    solutions.sort();
+    solutions.into_iter().next()
+}
+
+#[cfg(target_os = "windows")]
+fn available_workspace_openers(root: &Path) -> Vec<WorkspaceOpener> {
+    let mut openers = Vec::new();
+    if windows_vscode_executable().is_some() {
+        openers.push(WorkspaceOpener {
+            id: "vscode",
+            name: "VS Code",
+        });
+    }
+    if workspace_solution(root).is_some() && windows_visual_studio_executable().is_some() {
+        openers.push(WorkspaceOpener {
+            id: "visual_studio",
+            name: "Visual Studio",
+        });
+    }
+    openers.push(WorkspaceOpener {
+        id: "explorer",
+        name: "File Explorer",
+    });
+    openers.push(WorkspaceOpener {
+        id: "terminal",
+        name: "Terminal",
+    });
+    if windows_git_bash_executable().is_some() {
+        openers.push(WorkspaceOpener {
+            id: "git_bash",
+            name: "Git Bash",
+        });
+    }
+    openers
+}
+
+#[cfg(not(target_os = "windows"))]
+fn available_workspace_openers(_root: &Path) -> Vec<WorkspaceOpener> {
+    Vec::new()
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_workspace_opener(root: &Path, opener_id: &str) -> Result<(), String> {
+    let mut command = match opener_id {
+        "vscode" => Command::new(
+            windows_vscode_executable().ok_or_else(|| "VS Code is not installed".to_string())?,
+        ),
+        "visual_studio" => {
+            let mut command = Command::new(
+                windows_visual_studio_executable()
+                    .ok_or_else(|| "Visual Studio is not installed".to_string())?,
+            );
+            command.arg(workspace_solution(root).ok_or_else(|| {
+                "No Visual Studio solution was found in this workspace".to_string()
+            })?);
+            command
+        }
+        "explorer" => Command::new("explorer.exe"),
+        "terminal" => {
+            if let Some(executable) = executable_on_path("wt.exe") {
+                let mut command = Command::new(executable);
+                command.arg("-d").arg(root);
+                command
+            } else {
+                let mut command = Command::new("cmd.exe");
+                command.arg("/K").current_dir(root);
+                command
+            }
+        }
+        "git_bash" => Command::new(
+            windows_git_bash_executable().ok_or_else(|| "Git Bash is not installed".to_string())?,
+        ),
+        _ => return Err("Unknown workspace application".to_string()),
+    };
+
+    if matches!(opener_id, "vscode" | "explorer") {
+        command.arg(root);
+    }
+    if opener_id == "git_bash" {
+        command.current_dir(root);
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open the workspace: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_workspace_opener(_root: &Path, _opener_id: &str) -> Result<(), String> {
+    Err("Opening workspaces in external applications is not available on this platform".to_string())
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -406,6 +651,7 @@ struct BrowserPageReport {
     url: Option<String>,
     title: Option<String>,
     favicon_url: Option<String>,
+    favicon_urls: Option<Vec<String>>,
     can_go_back: Option<bool>,
     can_go_forward: Option<bool>,
 }
@@ -421,13 +667,32 @@ struct BrowserStateChange {
 
 const BROWSER_STATE_QUERY_SCRIPT: &str = r#"
 (() => {
-  const value = String(document.querySelector('link[rel~="icon"][href]')?.href || "");
-  const faviconUrl = /^https?:\/\//i.test(value) || (/^data:image\//i.test(value) && value.length <= 32768) ? value : "";
+  const faviconUrls = [];
+  const addFavicon = (value) => {
+    const url = String(value || "");
+    const isAllowed = /^https?:\/\//i.test(url) || (/^data:image\//i.test(url) && url.length <= 32768);
+    if (isAllowed && !faviconUrls.includes(url) && faviconUrls.length < 12) faviconUrls.push(url);
+  };
+  const faviconLinks = Array.from(document.querySelectorAll('link[rel][href]'))
+    .map((link) => {
+      const tokens = String(link.rel || "").toLowerCase().split(/\s+/);
+      if (tokens.includes("icon") && !tokens.includes("mask-icon")) return { priority: 0, href: link.href };
+      if (tokens.includes("apple-touch-icon") || tokens.includes("apple-touch-icon-precomposed")) return { priority: 1, href: link.href };
+      if (tokens.includes("fluid-icon")) return { priority: 2, href: link.href };
+      return null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.priority - right.priority);
+  faviconLinks.forEach((link) => addFavicon(link.href));
+  try {
+    addFavicon(new URL("/favicon.ico", window.location.href).href);
+  } catch {}
   const navigation = window.navigation;
   return {
     url: String(window.location.href || ""),
     title: String(document.title || ""),
-    faviconUrl,
+    faviconUrl: faviconUrls[0] || "",
+    faviconUrls,
     canGoBack: typeof navigation?.canGoBack === "boolean" ? navigation.canGoBack : window.history.length > 1,
     canGoForward: typeof navigation?.canGoForward === "boolean" ? navigation.canGoForward : false
   };
@@ -954,6 +1219,16 @@ fn update_browser_page_from_report(
         if let Some(favicon_url) = payload.favicon_url {
             page.favicon_url = sanitize_browser_favicon_url(&favicon_url);
         }
+        if let Some(favicon_urls) = payload.favicon_urls {
+            page.favicon_urls = sanitize_browser_favicon_urls(favicon_urls);
+            page.favicon_url = page.favicon_urls.first().cloned().unwrap_or_default();
+        } else {
+            page.favicon_urls = if page.favicon_url.is_empty() {
+                Vec::new()
+            } else {
+                vec![page.favicon_url.clone()]
+            };
+        }
         if let Some(can_go_back) = payload.can_go_back {
             page.can_go_back = can_go_back;
         }
@@ -1183,6 +1458,23 @@ fn sanitize_browser_favicon_url(value: &str) -> String {
     } else {
         String::new()
     }
+}
+
+fn sanitize_browser_favicon_urls(values: Vec<String>) -> Vec<String> {
+    const MAX_FAVICON_CANDIDATES: usize = 12;
+
+    let mut sanitized = Vec::with_capacity(values.len().min(MAX_FAVICON_CANDIDATES));
+    for value in values {
+        let value = sanitize_browser_favicon_url(&value);
+        if value.is_empty() || sanitized.contains(&value) {
+            continue;
+        }
+        sanitized.push(value);
+        if sanitized.len() == MAX_FAVICON_CANDIDATES {
+            break;
+        }
+    }
+    sanitized
 }
 
 fn encode_png(image: &CapturedImage) -> Result<Vec<u8>, String> {
@@ -1552,6 +1844,7 @@ fn create_browser_page(
     let page_load_app = app.clone();
     let title_app = app.clone();
     let popup_app = app.clone();
+    let download_app = app.clone();
     let main_window = app
         .get_window("main")
         .ok_or_else(|| "Main window was not found".to_string())?;
@@ -1599,6 +1892,33 @@ fn create_browser_page(
                 });
                 emit_browser_state_change(&title_app, &state, "title-changed", Some(title_page_id));
             }
+        })
+        .on_download(move |_webview, event| {
+            match event {
+                DownloadEvent::Requested { url, destination } => {
+                    if let Ok(download_dir) = download_app.path().download_dir() {
+                        if fs::create_dir_all(&download_dir).is_ok() {
+                            *destination = unique_download_path(&download_dir, destination);
+                        }
+                    }
+                    let _ = download_app.emit(
+                        "browser_download_change",
+                        browser_download_payload(&url, Some(destination), "downloading"),
+                    );
+                }
+                DownloadEvent::Finished { url, path, success } => {
+                    let _ = download_app.emit(
+                        "browser_download_change",
+                        browser_download_payload(
+                            &url,
+                            path.as_deref(),
+                            if success { "completed" } else { "failed" },
+                        ),
+                    );
+                }
+                _ => {}
+            }
+            true
         });
     let bounds = resolve_browser_bounds(state, bounds)?;
     let webview = main_window
@@ -1627,6 +1947,7 @@ fn create_browser_page(
             url: url.to_string(),
             title: "New page".to_string(),
             favicon_url: String::new(),
+            favicon_urls: Vec::new(),
             can_go_back: false,
             can_go_forward: false,
             is_loading: true,
@@ -2475,10 +2796,95 @@ async fn browser_capture_preview(
     ))
 }
 
+fn validated_download_path(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, String> {
+    let download_dir = app
+        .path()
+        .download_dir()
+        .map_err(|error| format!("Could not find the downloads folder: {error}"))?
+        .canonicalize()
+        .map_err(|error| format!("Could not open the downloads folder: {error}"))?;
+    let path = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|error| format!("The downloaded file is unavailable: {error}"))?;
+    if !path.is_file() || !path.starts_with(download_dir) {
+        return Err("The downloaded file is unavailable".to_string());
+    }
+    Ok(path)
+}
+
+#[cfg(target_os = "windows")]
+fn open_download_path(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal {
+        return Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Could not show the downloaded file: {error}"));
+    }
+
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let operation = HSTRING::from("open");
+    let file = HSTRING::from(path.to_string_lossy().as_ref());
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            &operation,
+            &file,
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as isize <= 32 {
+        return Err("Could not open the downloaded file".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_download_path(path: &Path, reveal: bool) -> Result<(), String> {
+    let target = if reveal {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(not(target_os = "macos"))]
+    let program = "xdg-open";
+    Command::new(program)
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open the downloaded file: {error}"))
+}
+
+#[tauri::command]
+fn browser_open_download(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), String> {
+    open_download_path(&validated_download_path(&app, &path)?, reveal)
+}
+
+#[tauri::command]
+fn list_workspace_openers(root: String) -> Result<Vec<WorkspaceOpener>, String> {
+    let root = validated_workspace_root(&root)?;
+    Ok(available_workspace_openers(&root))
+}
+
+#[tauri::command]
+fn open_workspace_with(root: String, opener_id: String) -> Result<(), String> {
+    let root = validated_workspace_root(&root)?;
+    spawn_workspace_opener(&root, &opener_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_decorum::init())
         .manage(BrowserState {
             pages: Mutex::new(Vec::new()),
             active_page_id: Mutex::new(None),
@@ -2494,6 +2900,7 @@ pub fn run() {
             browser_take_snapshot,
             browser_take_screenshot,
             browser_capture_preview,
+            browser_open_download,
             browser_click,
             browser_hover,
             browser_fill,
@@ -2515,8 +2922,14 @@ pub fn run() {
             show_browser,
             hide_browser,
             close_page,
+            list_workspace_openers,
+            open_workspace_with,
         ])
         .setup(|app| {
+            app.get_webview_window("main")
+                .expect("main window is not available")
+                .create_overlay_titlebar()
+                .expect("could not create the overlay titlebar");
             app.manage(AgentServer::start(app));
             Ok(())
         })
@@ -2536,10 +2949,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn workspace_opener_rejects_an_empty_root() {
+        assert_eq!(
+            validated_workspace_root("  ").unwrap_err(),
+            "Select a workspace first"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn workspace_opener_rejects_unknown_application_ids() {
+        let root = std::env::current_dir().expect("current directory");
+        assert_eq!(
+            spawn_workspace_opener(&root, "powershell").unwrap_err(),
+            "Unknown workspace application"
+        );
+    }
+
+    #[test]
     fn browser_state_query_uses_native_navigation_capabilities() {
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("window.navigation"));
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoBack"));
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoForward"));
+    }
+
+    #[test]
+    fn browser_state_query_collects_favicon_fallbacks() {
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("apple-touch-icon"));
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("/favicon.ico"));
+        assert!(BROWSER_STATE_QUERY_SCRIPT.contains("faviconUrls"));
     }
 
     #[test]
@@ -2568,5 +3006,18 @@ mod tests {
             "a".repeat(32 * 1024)
         ))
         .is_empty());
+
+        assert_eq!(
+            sanitize_browser_favicon_urls(vec![
+                "https://example.com/favicon.ico".to_string(),
+                "file:///C:/Windows/System32/icon.ico".to_string(),
+                "https://example.com/favicon.ico".to_string(),
+                "https://example.com/apple-touch-icon.png".to_string(),
+            ]),
+            vec![
+                "https://example.com/favicon.ico".to_string(),
+                "https://example.com/apple-touch-icon.png".to_string(),
+            ]
+        );
     }
 }

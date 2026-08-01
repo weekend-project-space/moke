@@ -1,13 +1,14 @@
 # Moke
 
-Moke is a lightweight agent for browsing the web pc app.
+
+Moke is a lightweight work rpa agent app.
 
 ![moke-ask-rss](./docs/img/agent-ask_rss.png)
 
 It is built around a simple idea:
 
 ```text
-LLM + tools + inner browser
+LLM + tools + inner browser + skill = agent rpa
 ```
 
 The LLM understands the task, tools provide local and external capabilities, and the inner browser opens real pages that the agent can inspect and operate.

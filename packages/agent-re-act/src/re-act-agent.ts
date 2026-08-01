@@ -148,7 +148,7 @@ export class ReActAgent {
       addTokenUsage(usage, stepResult.usage);
       if (calls.length === 0) {
         const content = stripThinkBlocks(stepResult.content);
-        finalContent = content || '我暂时没有更多可补充的信息。';
+        finalContent = content || "I'm a bit tired, I'll ask later";
         finalReasoning = stepResult.reasoning;
         finalContentStreamed = stepResult.contentStreamed;
         break;

@@ -60,6 +60,129 @@
   }
 }
 
+.workspace-open-control {
+  position: relative;
+  display: inline-flex;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-control);
+  box-shadow: var(--shadow-control);
+}
+
+.workspace-open-primary,
+.workspace-open-trigger {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  color: var(--ink-soft);
+  background: transparent;
+
+  &:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--surface-control-hover);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--surface-control-active);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+}
+
+.workspace-open-primary {
+  width: 31px;
+  border-radius: calc(var(--radius-md) - 1px) 0 0 calc(var(--radius-md) - 1px);
+}
+
+.workspace-open-trigger {
+  width: 22px;
+  border-left: 1px solid var(--line-soft);
+  border-radius: 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0;
+}
+
+.workspace-open-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+}
+
+.workspace-open-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  display: grid;
+  width: 220px;
+  padding: 5px;
+  border: 1px solid var(--line-medium);
+  border-radius: var(--radius-md);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-menu);
+
+  button {
+    display: grid;
+    width: 100%;
+    height: 34px;
+    grid-template-columns: 19px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    background: transparent;
+    text-align: left;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-control-hover);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    > svg:first-child {
+      color: var(--ink-soft);
+    }
+
+    > svg:last-child:not(:first-child) {
+      color: var(--accent);
+    }
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--font-size-ui);
+      font-weight: 500;
+    }
+  }
+
+  p {
+    margin: 0;
+    padding: 9px 8px;
+    color: var(--ink-muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.35;
+
+    &.error {
+      color: var(--text-error);
+    }
+  }
+}
+
 .chat-title-block {
   min-width: 0;
   text-align: center;
