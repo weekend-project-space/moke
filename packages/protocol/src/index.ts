@@ -1,5 +1,3 @@
-export type RiskLevel = 'safe' | 'write' | 'dangerous';
-
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export type RunStatus =
@@ -11,6 +9,12 @@ export type RunStatus =
   | 'failed'
   | 'cancelled'
   | 'timeout';
+
+export type RunLifecycleEvent = {
+  type: RunStatus;
+  sessionId: string;
+  runId: string;
+};
 
 export type AgentEvent = {
   id: string;
@@ -25,6 +29,13 @@ export type AgentEvent = {
 export type AgentEventType = keyof AgentEventPayloadMap;
 
 export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
+
+export type TokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_input_tokens?: number;
+  uncached_input_tokens?: number;
+};
 
 export type AgentStepPhase = 'reason' | 'act' | 'respond';
 
@@ -44,6 +55,20 @@ export type ImageAttachment = {
   kind: 'image';
   name?: string;
   mime_type: string;
+  relative_path: string;
+  size: number;
+  sha256: string;
+};
+
+export type ImageAttachmentUpload = {
+  id: string;
+  kind: 'image';
+  name?: string;
+  mime_type: string;
+  data_url: string;
+};
+
+export type ResolvedImageAttachment = ImageAttachment & {
   data_url: string;
 };
 
@@ -52,7 +77,15 @@ export type UserMessage = {
   role: 'user';
   content: string;
   created_at: string;
+  /** Internal context is retained for the model but not rendered in the conversation. */
+  visibility?: 'public' | 'internal';
   attachments?: ImageAttachment[];
+  source?: {
+    kind: 'messaging';
+    platform: string;
+    connection_id: string;
+    message_id: string;
+  };
 };
 
 export type AssistantMessage = {
@@ -65,6 +98,51 @@ export type AssistantMessage = {
   tool_calls?: ToolCall[];
 };
 
+export type ToolApprovalRecord = {
+  approval_id: string;
+  kind: 'workspace_path' | 'tool';
+  decision: 'approved' | 'rejected';
+  scope: 'once' | 'session' | 'persistent';
+  reason: string;
+  reviewer?: ApprovalReviewer;
+  review_reason?: string;
+  approval_mode?: ApprovalMode;
+};
+
+export type ApprovalMode = 'manual' | 'ai_review' | 'auto_approve';
+
+export type ApprovalReviewer = 'user' | 'ai' | 'auto_approve';
+
+export type SessionEnvironment = {
+  approval_mode: ApprovalMode;
+  system: {
+    platform: 'windows' | 'macos' | 'linux' | 'other';
+    arch: string;
+    shell: string;
+  };
+  workspace: {
+    root: string;
+  };
+};
+
+/** Environment fields accepted only while a Session is being created. */
+export type CreateSessionEnvironmentInput = {
+  approval_mode?: ApprovalMode;
+  workspace?: {
+    root: string;
+  };
+};
+
+/** Session policy fields that remain mutable after creation. */
+export type UpdateSessionEnvironmentInput = {
+  approval_mode: ApprovalMode;
+};
+
+/** Optional atomic policy update applied before a message starts its Run. */
+export type SendMessageEnvironmentInput = {
+  approval_mode?: ApprovalMode;
+};
+
 export type ToolMessage = {
   id: string;
   role: 'tool';
@@ -73,6 +151,7 @@ export type ToolMessage = {
   tool_call_id: string;
   name: string;
   status?: 'success' | 'error';
+  approvals?: ToolApprovalRecord[];
 };
 
 export type Message = UserMessage | AssistantMessage | ToolMessage;
@@ -84,6 +163,8 @@ export type Session = {
   updated_at: string;
   messages: Message[];
   metadata: Record<string, unknown>;
+  /** Old persisted sessions may omit this until the server normalizes them on load. */
+  env?: SessionEnvironment;
 };
 
 export type SessionSummary = Omit<Session, 'messages' | 'metadata'> & {
@@ -106,9 +187,9 @@ export type PendingAsk = {
 
 export type PendingApproval = {
   approval_id: string;
+  call_id?: string;
   kind: 'workspace_path' | 'tool';
   reason: string;
-  risk: RiskLevel;
   action: {
     tool: string;
     input: Record<string, unknown>;
@@ -160,7 +241,6 @@ export type AgentEventPayloadMap = {
     call_id: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: RiskLevel;
     source?: {
       type: 'local' | 'mcp';
       server_id?: string;
@@ -173,13 +253,30 @@ export type AgentEventPayloadMap = {
     output: unknown;
   };
   'ask_user.required': PendingAsk;
+  'ask_user.answered': {
+    ask_id: string;
+    call_id: string;
+    selected: {
+      id: string;
+      label: string;
+    };
+  };
   'approval.required': PendingApproval;
+  'approval.resolved': {
+    approval_id: string;
+    decision: 'approved' | 'rejected';
+    scope: 'once' | 'session' | 'persistent';
+  };
   'agent.done': {
     status: RunStatus;
     usage?: {
       steps: number;
       tool_calls: number;
       duration_ms: number;
+      input_tokens?: number;
+      output_tokens?: number;
+      cached_input_tokens?: number;
+      uncached_input_tokens?: number;
     };
   };
   'agent.error': {
@@ -194,3 +291,134 @@ type AgentEventPayloadUnion = {
     payload: AgentEventPayloadMap[Type];
   };
 }[AgentEventType];
+
+export type ApiErrorResponse = {
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+};
+
+export type CreateSessionRequest = {
+  title?: string;
+  metadata?: Record<string, unknown>;
+  env?: CreateSessionEnvironmentInput;
+};
+
+export type ScheduledTaskStatus = 'enabled' | 'paused';
+
+export type ScheduledTask = {
+  id: string;
+  name: string;
+  prompt: string;
+  cron: string;
+  timezone: string;
+  status: ScheduledTaskStatus;
+  workspace_root: string;
+  approval_mode: ApprovalMode;
+  next_run_at?: string;
+  last_run_at?: string;
+  last_session_id?: string;
+  last_run_id?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateScheduledTaskRequest = Pick<
+  ScheduledTask,
+  'name' | 'prompt' | 'cron' | 'timezone' | 'workspace_root' | 'approval_mode'
+> & {
+  status?: ScheduledTaskStatus;
+};
+
+export type UpdateScheduledTaskRequest = Partial<CreateScheduledTaskRequest>;
+
+export type CreateSessionResponse = {
+  session: Session;
+};
+
+export type ListSessionsResponse = {
+  sessions: SessionSummary[];
+  next_cursor: string | null;
+};
+
+export type GetSessionResponse = {
+  session: SessionSummary & Pick<Session, 'metadata'>;
+  messages: Message[];
+};
+
+export type UpdateSessionRequest = {
+  title?: string;
+  archived?: boolean;
+  pinned?: boolean;
+};
+
+export type UpdateSessionEnvironmentRequest = UpdateSessionEnvironmentInput;
+
+export type UpdateSessionResponse = {
+  session: SessionSummary;
+};
+
+export type ForkSessionRequest = {
+  message_id: string;
+  mode?: 'after';
+};
+
+export type ForkSessionResponse = GetSessionResponse;
+
+export type SendMessageRequest = {
+  message: {
+    role?: 'user';
+    content: string;
+    attachments?: ImageAttachmentUpload[];
+  };
+  env?: SendMessageEnvironmentInput;
+  options?: {
+    stream?: boolean;
+    max_steps?: number;
+    max_tool_calls?: number;
+    timeout_ms?: number;
+    reasoningEffort?: ReasoningEffort;
+  };
+};
+
+export type SendMessageResponse = {
+  run_id: string;
+  session_id: string;
+  events_url: string;
+};
+
+export type ActiveRunSummary = {
+  session_id: string;
+  run_id: string;
+  status: RunStatus;
+  events_url: string;
+  pending_ask?: PendingAsk;
+  pending_approval?: PendingApproval;
+};
+
+export type ListActiveRunsResponse = {
+  runs: ActiveRunSummary[];
+};
+
+export type GetRunResponse = {
+  run: RunSnapshot;
+};
+
+export type RespondToRunRequest =
+  | { type: 'choose'; request_id: string; option_id: string }
+  | {
+      type: 'approve';
+      request_id: string;
+      decision: 'approved' | 'rejected';
+      scope?: 'once' | 'session' | 'persistent';
+      message?: string;
+    }
+  | { type: 'cancel'; reason?: string };
+
+export type RespondToRunResponse = {
+  run_id: string;
+  request_id?: string;
+  status: RunStatus;
+};

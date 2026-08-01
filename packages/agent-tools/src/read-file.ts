@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const readFileSchema = z.object({
   path: z.string().min(1),
@@ -12,13 +12,13 @@ export function createReadFileTool(system: SystemBackend): RuntimeTool<typeof re
   return {
     name: 'read_file',
     description: 'Read a text file from the workspace.',
-    risk: 'safe',
+    approval: 'none',
     schema: readFileSchema,
-    async handler(input) {
+    async handler(input, context) {
       const result = await system.readFile(input.path, {
         offset: input.offset,
         limit: input.limit,
-      });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
       return {
         path: result.path,
         content: result.content,

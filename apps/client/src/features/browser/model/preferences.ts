@@ -1,8 +1,10 @@
 export type BrowserLinkOpenMode = 'current' | 'new-tab'
+export type BrowserSearchEngine = 'bing' | 'google' | 'baidu'
 
 export type BrowserPreferences = {
   browserHomeUrl: string
   linkOpenMode: BrowserLinkOpenMode
+  searchEngine: BrowserSearchEngine
 }
 
 export const BROWSER_PREFERENCES_KEY = 'moke.browser-settings.v1'
@@ -10,6 +12,7 @@ export const BROWSER_PREFERENCES_KEY = 'moke.browser-settings.v1'
 export const DEFAULT_BROWSER_PREFERENCES: BrowserPreferences = {
   browserHomeUrl: 'https://www.baidu.com/',
   linkOpenMode: 'current',
+  searchEngine: 'bing',
 }
 
 export function normalizeBrowserPreferences(input: Partial<BrowserPreferences> = {}): BrowserPreferences {
@@ -17,6 +20,7 @@ export function normalizeBrowserPreferences(input: Partial<BrowserPreferences> =
     ...DEFAULT_BROWSER_PREFERENCES,
     ...input,
     linkOpenMode: input.linkOpenMode === 'new-tab' ? 'new-tab' : 'current',
+    searchEngine: input.searchEngine === 'google' || input.searchEngine === 'baidu' ? input.searchEngine : 'bing',
   }
 }
 

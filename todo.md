@@ -10,8 +10,8 @@
 
 ## 存储与生命周期
 
-- [ ] 将会话、运行记录和附件迁移到 SQLite，替代单个 JSON 状态文件。
-- [ ] 图片附件保存为独立文件，消息中只保存相对路径、类型、大小和校验信息。
+- [x] 将单一 `state.json` 改为带可重建 `index.json` 的会话分片 JSON 存储，按需加载会话详情；运行中状态保持为内存态，附件由下一项独立保存。
+- [x] 图片附件保存为独立文件，消息中只保存相对路径、类型、大小和校验信息。
 - [ ] 为会话、终态运行和日志增加可配置的保留、归档与清理策略。
 - [ ] 服务关闭时主动取消所有运行中的模型请求和工具调用，再关闭 MCP 与 HTTP 服务。
 
@@ -31,7 +31,7 @@
 
 ## 服务端与运行时
 
-- [ ] 所有路由输入统一使用 Zod schema 校验，并生成一致的错误响应。
+- [x] 所有路由输入统一使用 Zod schema 校验，并生成一致的错误响应。
 - [ ] 将模型历史按完整对话轮次和 token 预算裁剪，而不是固定消息条数。
 - [ ] 将 MCP `write`、`dangerous` 工具接入现有审批流程，而不是直接拒绝。
 - [ ] 将 Rust `lib.rs` 拆为 sidecar、browser state、browser commands、snapshot 和 script 模块。
@@ -39,12 +39,12 @@
 
 ## 工程结构
 
-- [ ] 改为 npm workspaces，只保留根 lockfile，并通过包名导入 protocol/runtime 等内部包。
-- [ ] 为所有内部包补齐 exports、依赖声明和 TypeScript project references。
+- [x] 改为 npm workspaces，只保留根 lockfile，并通过包名导入 protocol/runtime 等内部包。
+- [x] 为所有内部包补齐 exports、依赖声明和 TypeScript project references。
 - [ ] 建立 CI：类型检查、测试、Vue 构建、Rust 检查、依赖审计和生成产物校验。
 
 ## 现有功能事项
-
+- [ ] 定时任务
 - [ ] 修复页面工具调用展示问题。
 - [ ] 简化工具集合和工具说明。
 - [ ] 完成 reface 应用。

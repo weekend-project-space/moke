@@ -12,23 +12,32 @@ export type ToolDescription = {
 const DONE = uiText.process.done
 const NOT_FOUND = uiText.process.notFound
 
-const CHANGE_TOOLS = new Set([
-  'apply_patch',
+const BROWSER_TOOLS = new Set([
   'click',
   'close_page',
   'create_page',
-  'edit_file',
+  'evaluate_script',
   'fill',
   'fill_form',
   'handle_dialog',
   'hide_browser',
+  'hover',
+  'list_pages',
   'navigate_page',
   'press_key',
   'resize_page',
   'select_page',
   'show_browser',
+  'take_screenshot',
+  'take_snapshot',
   'type_text',
   'upload_file',
+  'wait_for',
+])
+
+const CHANGE_TOOLS = new Set([
+  'apply_patch',
+  'edit_file',
   'write_file',
 ])
 
@@ -41,12 +50,9 @@ export function summarizeOutput(output: Record<string, unknown> | undefined) {
     return count > 0 ? `Found ${count} matching item${count === 1 ? '' : 's'}` : NOT_FOUND
   }
 
-  return DONE
-}
+  if (typeof output.status === 'string') return summarizeStatus(output)
 
-export function formatToolName(rawName: unknown, toolLabels: Record<string, string>) {
-  const name = String(rawName || '').trim()
-  return toolLabels[name] || name || uiText.tool.unknownTool
+  return DONE
 }
 
 export function formatJson(value: unknown) {
@@ -92,9 +98,13 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
   const value = firstString(args, ['value'])
   const key = firstString(args, ['key'])
   const selector = firstString(args, ['selector'])
+  const question = firstString(args, ['question'])
   let objectLabel = name
 
   switch (name) {
+    case 'ask_user':
+      objectLabel = shortText(question || uiText.tool.userInput, 96)
+      break
     case 'apply_patch':
       objectLabel = path ? shortText(path, 88) : uiText.tool.applyPatchFallback
       break
@@ -194,11 +204,11 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
     case 'hide_browser':
       objectLabel = uiText.tool.browserPanel
       break
-    case 'active_skill':
-      objectLabel = firstString(args, ['name', 'skill']) || uiText.tool.skillConfig
+    case 'activate_skill':
+      objectLabel = firstString(args, ['id', 'name']) || uiText.tool.skillConfig
       break
-    case 'list_skills':
-      objectLabel = uiText.tool.availableSkills
+    case 'send_message':
+      objectLabel = text ? shortText(text, 96) : mediaLabel(args)
       break
     default:
       objectLabel = name
@@ -219,12 +229,16 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
       url,
       uid,
       value: text || value || key,
+      question,
     },
     toolCategory: descriptor.category,
   }
 }
 
 function displayToolDescriptor(name: string): { actionLabel: string; category: ToolCategory } {
+  if (BROWSER_TOOLS.has(name)) return { actionLabel: uiText.tool.browserPage, category: 'browser' }
+  if (name === 'send_message') return { actionLabel: 'Send message', category: 'claw' }
+  if (name === 'activate_skill') return { actionLabel: uiText.tool.skillConfig, category: 'skill' }
   if (isViewTool(name)) return { actionLabel: viewActionLabel(name), category: 'view' }
   if (isChangeTool(name)) return { actionLabel: changeActionLabel(name), category: 'change' }
   return { actionLabel: runActionLabel(name), category: 'run' }
@@ -233,14 +247,9 @@ function displayToolDescriptor(name: string): { actionLabel: string; category: T
 function isViewTool(name: string) {
   return [
     'cat',
-    'hover',
-    'list_pages',
-    'list_skills',
     'ls',
     'read_file',
     'sed',
-    'take_screenshot',
-    'take_snapshot',
     'view_image',
   ].includes(name)
 }
@@ -255,7 +264,6 @@ function viewActionLabel(name: string) {
   if (name === 'list_pages' || name === 'take_snapshot' || name === 'take_screenshot' || name === 'hover') {
     return uiText.tool.viewPage
   }
-  if (name === 'list_skills') return uiText.tool.viewTools
   return uiText.tool.viewFile
 }
 
@@ -266,6 +274,7 @@ function changeActionLabel(name: string) {
 }
 
 function runActionLabel(name: string) {
+  if (name === 'ask_user') return uiText.tool.userInput
   if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return uiText.tool.runCommand
   if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return uiText.tool.runSearch
   if (name === 'evaluate_script') return uiText.tool.runScript
@@ -274,37 +283,32 @@ function runActionLabel(name: string) {
 }
 
 function toolRendererKind(name: string): ToolRendererKind {
+  if (name === 'ask_user') return 'ask-user'
+  if (name === 'send_message') return 'channel'
   if (name === 'ls') return 'directory'
   if (['read_file', 'cat', 'sed'].includes(name)) return 'file-read'
   if (['apply_patch', 'edit_file', 'write_file'].includes(name)) return 'file-change'
   if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return 'search'
   if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return 'command'
-  if (
-    [
-      'click',
-      'close_page',
-      'create_page',
-      'evaluate_script',
-      'fill',
-      'fill_form',
-      'handle_dialog',
-      'hide_browser',
-      'hover',
-      'list_pages',
-      'navigate_page',
-      'press_key',
-      'resize_page',
-      'select_page',
-      'show_browser',
-      'take_screenshot',
-      'take_snapshot',
-      'type_text',
-      'upload_file',
-      'wait_for',
-    ].includes(name)
-  ) {
-    return 'browser'
-  }
+  if (BROWSER_TOOLS.has(name)) return 'browser'
 
   return 'generic'
+}
+
+function mediaLabel(args: Record<string, unknown>) {
+  const images = Array.isArray(args.images) ? args.images.length : 0
+  const files = Array.isArray(args.files) ? args.files.length : 0
+  const parts = [
+    images ? `${images} image${images === 1 ? '' : 's'}` : '',
+    files ? `${files} file${files === 1 ? '' : 's'}` : '',
+  ].filter(Boolean)
+
+  return parts.join(' · ') || 'Message content'
+}
+
+function summarizeStatus(output: Record<string, unknown>) {
+  const parts = [String(output.status).replace(/_/g, ' ')]
+  if (output.truncated) parts.push('truncated')
+  if (typeof output.notice === 'string' && output.notice.trim()) parts.push(shortText(output.notice, 80))
+  return parts.join(' · ')
 }

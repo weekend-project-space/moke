@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, WritableSystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, WritableSystemBackend } from '@moke/agent-runtime';
 
 const writeFileSchema = z.object({
   path: z.string().min(1),
@@ -11,10 +11,13 @@ export function createWriteFileTool(system: WritableSystemBackend): RuntimeTool<
   return {
     name: 'write_file',
     description: 'Create or overwrite a workspace file.',
-    risk: 'write',
+    approval: 'required',
     schema: writeFileSchema,
-    async handler(input) {
-      return system.writeFile(input.path, input.content);
+    async handler(input, context) {
+      return system.writeFile(input.path, input.content, {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+      });
     },
   };
 }

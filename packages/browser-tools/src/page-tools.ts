@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool } from '@moke/agent-runtime';
 import type { BrowserBackend } from './browser-backend.js';
 
 const emptySchema = z.object({});
@@ -110,7 +110,7 @@ export function createListPagesTool(browser: BrowserBackend): RuntimeTool<typeof
   return {
     name: 'list_pages',
     description: 'List all open in-app browser tabs and the active tab state.',
-    risk: 'safe',
+    approval: 'none',
     schema: emptySchema,
     async handler() {
       return browser.listPages();
@@ -122,7 +122,7 @@ export function createCreatePageTool(browser: BrowserBackend): RuntimeTool<typeo
   return {
     name: 'create_page',
     description: 'Create a new in-app browser tab, optionally loading a URL.',
-    risk: 'safe',
+    approval: 'none',
     schema: createPageSchema,
     async handler(input) {
       return browser.createPage(input);
@@ -134,7 +134,7 @@ export function createSelectPageTool(browser: BrowserBackend): RuntimeTool<typeo
   return {
     name: 'select_page',
     description: 'Select an open in-app browser tab by page id.',
-    risk: 'safe',
+    approval: 'none',
     schema: pageIdSchema,
     async handler(input) {
       return browser.selectPage(input);
@@ -146,7 +146,7 @@ export function createClosePageTool(browser: BrowserBackend): RuntimeTool<typeof
   return {
     name: 'close_page',
     description: 'Close an open in-app browser tab by page id.',
-    risk: 'safe',
+    approval: 'none',
     schema: pageIdSchema,
     async handler(input) {
       return browser.closePage(input);
@@ -158,7 +158,7 @@ export function createNavigatePageTool(browser: BrowserBackend): RuntimeTool<typ
   return {
     name: 'navigate_page',
     description: 'Navigate the active in-app browser tab by URL, back, forward, or reload.',
-    risk: 'safe',
+    approval: 'none',
     schema: navigatePageSchema,
     async handler(input) {
       return browser.navigatePage(input);
@@ -170,7 +170,7 @@ export function createEvaluateScriptTool(browser: BrowserBackend): RuntimeTool<t
   return {
     name: 'evaluate_script',
     description: 'Execute a JavaScript function in the active in-app browser page.',
-    risk: 'safe',
+    approval: 'none',
     schema: evaluateScriptSchema,
     async handler(input) {
       return browser.evaluateScript(input);
@@ -183,7 +183,7 @@ export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typ
     name: 'take_snapshot',
     description:
       'Return a lightweight snapshot of the active in-app browser page, including actionable elements and page content as Markdown.',
-    risk: 'safe',
+    approval: 'none',
     schema: takeSnapshotSchema,
     async handler(input) {
       return browser.takeSnapshot(input);
@@ -195,7 +195,7 @@ export function createTakeScreenshotTool(browser: BrowserBackend): RuntimeTool<t
   return {
     name: 'take_screenshot',
     description: 'Capture a PNG screenshot of the visible viewport of the active in-app browser page.',
-    risk: 'safe',
+    approval: 'none',
     schema: takeScreenshotSchema,
     async handler(input) {
       return browser.takeScreenshot(input);
@@ -207,7 +207,7 @@ export function createClickTool(browser: BrowserBackend): RuntimeTool<typeof cli
   return {
     name: 'click',
     description: 'Click or double-click an element from the latest browser snapshot by uid.',
-    risk: 'safe',
+    approval: 'none',
     schema: clickSchema,
     async handler(input) {
       return browser.click(input);
@@ -219,7 +219,7 @@ export function createHoverTool(browser: BrowserBackend): RuntimeTool<typeof hov
   return {
     name: 'hover',
     description: 'Hover an element from the latest browser snapshot by uid.',
-    risk: 'safe',
+    approval: 'none',
     schema: hoverSchema,
     async handler(input) {
       return browser.hover(input);
@@ -231,7 +231,7 @@ export function createFillTool(browser: BrowserBackend): RuntimeTool<typeof fill
   return {
     name: 'fill',
     description: 'Fill an input, textarea, editable element, or select by browser snapshot uid.',
-    risk: 'safe',
+    approval: 'none',
     schema: fillSchema,
     async handler(input) {
       return browser.fill(input);
@@ -243,7 +243,7 @@ export function createFillFormTool(browser: BrowserBackend): RuntimeTool<typeof 
   return {
     name: 'fill_form',
     description: 'Fill multiple browser form elements by snapshot uid.',
-    risk: 'safe',
+    approval: 'none',
     schema: fillFormSchema,
     async handler(input) {
       return browser.fillForm(input);
@@ -255,7 +255,7 @@ export function createUploadFileTool(browser: BrowserBackend): RuntimeTool<typeo
   return {
     name: 'upload_file',
     description: 'Attach a local file to a file input from the latest browser snapshot by uid.',
-    risk: 'write',
+    approval: 'none',
     schema: uploadFileSchema,
     async handler(input) {
       return browser.uploadFile(input);
@@ -267,7 +267,7 @@ export function createWaitForTool(browser: BrowserBackend): RuntimeTool<typeof w
   return {
     name: 'wait_for',
     description: 'Wait until one of the target texts appears in the active browser page.',
-    risk: 'safe',
+    approval: 'none',
     schema: waitForSchema,
     async handler(input) {
       return browser.waitFor(input);
@@ -279,7 +279,7 @@ export function createPressKeyTool(browser: BrowserBackend): RuntimeTool<typeof 
   return {
     name: 'press_key',
     description: 'Dispatch a keyboard key or key combination to the active browser element.',
-    risk: 'safe',
+    approval: 'none',
     schema: pressKeySchema,
     async handler(input) {
       return browser.pressKey(input);
@@ -291,7 +291,7 @@ export function createTypeTextTool(browser: BrowserBackend): RuntimeTool<typeof 
   return {
     name: 'type_text',
     description: 'Type text into the active editable browser element, optionally submitting with a key.',
-    risk: 'safe',
+    approval: 'none',
     schema: typeTextSchema,
     async handler(input) {
       return browser.typeText(input);
@@ -303,7 +303,7 @@ export function createHandleDialogTool(browser: BrowserBackend): RuntimeTool<typ
   return {
     name: 'handle_dialog',
     description: 'Accept or dismiss the active browser dialog.',
-    risk: 'safe',
+    approval: 'none',
     schema: handleDialogSchema,
     async handler(input) {
       return browser.handleDialog(input);
@@ -315,7 +315,7 @@ export function createResizePageTool(browser: BrowserBackend): RuntimeTool<typeo
   return {
     name: 'resize_page',
     description: 'Resize the active in-app browser page viewport.',
-    risk: 'safe',
+    approval: 'none',
     schema: resizePageSchema,
     async handler(input) {
       return browser.resizePage(input);
@@ -327,7 +327,7 @@ export function createShowBrowserTool(browser: BrowserBackend): RuntimeTool<type
   return {
     name: 'show_browser',
     description: 'Show the in-app browser panel.',
-    risk: 'safe',
+    approval: 'none',
     schema: emptySchema,
     async handler() {
       return browser.showBrowser();
@@ -339,7 +339,7 @@ export function createHideBrowserTool(browser: BrowserBackend): RuntimeTool<type
   return {
     name: 'hide_browser',
     description: 'Hide the in-app browser panel.',
-    risk: 'safe',
+    approval: 'none',
     schema: emptySchema,
     async handler() {
       return browser.hideBrowser();

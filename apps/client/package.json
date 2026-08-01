@@ -1,17 +1,22 @@
 {
-  "name": "client",
+  "name": "@moke/client",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "tsc -b ../../tsconfig.json",
     "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b",
     "build:server": "npm --prefix ../.. run build:server",
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop": "tauri dev"
   },
   "dependencies": {
+    "@moke/agent-sdk": "0.1.0",
+    "@moke/protocol": "0.1.0",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "dompurify": "^3.4.11",
     "lucide-vue-next": "^0.577.0",
     "markdown-it": "^14.2.0",

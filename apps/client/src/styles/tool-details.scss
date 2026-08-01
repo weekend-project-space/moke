@@ -1,8 +1,8 @@
 .tool-detail {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
-  margin: 5px 0 8px 18px;
+  margin: 5px 0 2px 18px;
 }
 
 .tool-detail-note {
@@ -296,6 +296,7 @@
 
 .tool-detail-raw {
   min-width: 0;
+  margin-top: -1px;
 
   > summary {
     display: grid;
@@ -303,9 +304,9 @@
     grid-template-columns: minmax(0, auto) auto;
     align-items: center;
     gap: 5px;
-    color: color-mix(in srgb, var(--ink-muted), transparent 5%);
+    color: color-mix(in srgb, var(--ink-muted), transparent 18%);
     cursor: pointer;
-    font-size: var(--font-size-meta);
+    font-size: var(--font-size-code);
     line-height: 1.4;
 
     &:hover {

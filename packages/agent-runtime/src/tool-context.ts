@@ -1,13 +1,33 @@
+import type { ApprovalReviewer, ToolApprovalRecord } from '@moke/protocol';
+import type { RuntimeRun } from './run-state.js';
+
+export type RuntimeContextItem = {
+  authority: 'trusted' | 'user';
+  content: string;
+  scope?: 'run' | 'session';
+};
+
+export type RuntimeSkillActivationResult = {
+  status: 'activated' | 'already_active' | 'limit_reached' | 'content_too_large' | 'unavailable';
+  content?: string;
+  truncated?: boolean;
+};
+
 export type RuntimeContentManager = {
-  addSkill: (skill: { name: string; description: string; path: string; content: string }) => void;
-  buildContext: () => string;
-  reset?: () => void;
+  addSkill: (skill: {
+    id: string;
+    name: string;
+    description: string;
+    path: string;
+    content: string;
+    authority: 'trusted' | 'user' | 'external';
+  }) => RuntimeSkillActivationResult;
+  buildInitialContext: () => RuntimeContextItem[];
 };
 
 export type WorkspacePathApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -21,6 +41,7 @@ export type WorkspacePathApprovalRequest = {
 export type WorkspacePathApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
+  approvedRoots?: string[];
   message?: string;
   cleanup?: () => void;
 };
@@ -28,7 +49,6 @@ export type WorkspacePathApprovalDecision = {
 export type ToolApprovalRequest = {
   tool: string;
   input: Record<string, unknown>;
-  risk: 'safe' | 'write' | 'dangerous';
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
@@ -41,17 +61,21 @@ export type ToolApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
   message?: string;
+  reviewer?: ApprovalReviewer;
+  reviewReason?: string;
 };
 
 export type ToolContext = {
   workspace: string;
+  workspaceRoots?: () => string[];
+  run?: RuntimeRun;
   abortSignal?: AbortSignal;
   contentManager?: RuntimeContentManager;
+  trustedContext?: RuntimeContextItem[];
   currentToolCall?: {
     callId: string;
     tool: string;
     input: Record<string, unknown>;
-    risk: 'safe' | 'write' | 'dangerous';
   };
   askUser?: (input: {
     callId: string;
@@ -60,4 +84,5 @@ export type ToolContext = {
   }) => Promise<{ id: string; label: string }>;
   approveWorkspacePath?: (input: WorkspacePathApprovalRequest) => Promise<WorkspacePathApprovalDecision>;
   approveTool?: (input: ToolApprovalRequest) => Promise<ToolApprovalDecision>;
+  consumeApprovals?: (callId: string) => ToolApprovalRecord[];
 };

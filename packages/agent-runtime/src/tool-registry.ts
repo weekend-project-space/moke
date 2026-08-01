@@ -1,22 +1,67 @@
 import { z } from 'zod';
 
-import type { RiskLevel } from '../../protocol/src/index.js';
-import type { ToolContext } from './tool-context.js';
+import type { RuntimeContextItem, ToolContext } from './tool-context.js';
 import { isPathRequiresApprovalError } from './workspace-approval.js';
 
-export type RuntimeTool<TInput extends z.ZodType = z.ZodType> = {
+export type ToolApprovalRequirement = 'none' | 'required';
+
+export type RuntimeToolResult = {
+  type: 'runtime_tool_result';
+  publicOutput: Record<string, unknown>;
+  modelOutput?: unknown;
+  context?: RuntimeContextItem[];
+};
+
+export type RuntimeToolOutput = Record<string, unknown> | RuntimeToolResult;
+
+export type RuntimeTool<
+  TInput extends z.ZodType = z.ZodType,
+  TOutput extends RuntimeToolOutput = Record<string, unknown>,
+> = {
   name: string;
   original_name?: string;
   description: string;
-  risk: RiskLevel;
   source?: {
     type: 'local' | 'mcp';
     server_id?: string;
   };
   input_schema?: Record<string, unknown>;
+  /** Defaults to required when omitted so new tools fail closed. */
+  approval?: ToolApprovalRequirement;
   schema: TInput;
-  handler: (input: z.infer<TInput>, context: ToolContext) => Promise<Record<string, unknown>>;
+  handler: (input: z.infer<TInput>, context: ToolContext) => Promise<TOutput>;
 };
+
+export function createRuntimeToolResult(input: Omit<RuntimeToolResult, 'type'>): RuntimeToolResult {
+  return { type: 'runtime_tool_result', ...input };
+}
+
+export function normalizeRuntimeToolResult(output: RuntimeToolOutput): {
+  publicOutput: Record<string, unknown>;
+  modelOutput: unknown;
+  context: RuntimeContextItem[];
+} {
+  if (isRuntimeToolResult(output)) {
+    return {
+      publicOutput: output.publicOutput,
+      modelOutput: output.modelOutput ?? output.publicOutput,
+      context: output.context || [],
+    };
+  }
+
+  return {
+    publicOutput: output,
+    modelOutput: output,
+    context: [] as RuntimeContextItem[],
+  };
+}
+
+function isRuntimeToolResult(output: RuntimeToolOutput): output is RuntimeToolResult {
+  return output.type === 'runtime_tool_result'
+    && output.publicOutput !== null
+    && typeof output.publicOutput === 'object'
+    && !Array.isArray(output.publicOutput);
+}
 
 export class ToolExecutionError extends Error {
   constructor(
@@ -29,10 +74,10 @@ export class ToolExecutionError extends Error {
 }
 
 export class ToolRegistry {
-  private readonly tools = new Map<string, RuntimeTool>();
+  private readonly tools = new Map<string, RuntimeTool<z.ZodType, RuntimeToolOutput>>();
 
-  register(tool: RuntimeTool) {
-    this.tools.set(tool.name, tool);
+  register<TInput extends z.ZodType, TOutput extends RuntimeToolOutput>(tool: RuntimeTool<TInput, TOutput>) {
+    this.tools.set(tool.name, tool as RuntimeTool<z.ZodType, RuntimeToolOutput>);
     return this;
   }
 
@@ -64,9 +109,33 @@ export class ToolRegistry {
         callId: context.currentToolCall?.callId || '',
         tool: name,
         input: normalizedInput,
-        risk: tool.risk,
       },
     };
+
+    if (tool.approval !== 'none') {
+      if (!context.approveTool) {
+        throw approvalError(
+          'TOOL_APPROVAL_UNAVAILABLE',
+          `Tool approval is unavailable for ${name}`,
+          name,
+        );
+      }
+
+      const decision = await context.approveTool({
+        tool: name,
+        input: normalizedInput,
+        source: tool.source,
+        callId: context.currentToolCall?.callId,
+        reason: `Approval required to execute ${name}`,
+      });
+      if (!decision.approved) {
+        throw approvalError(
+          'TOOL_APPROVAL_REJECTED',
+          decision.message || `Tool execution rejected: ${name}`,
+          name,
+        );
+      }
+    }
 
     try {
       return await tool.handler(parsedInput, nextContext);
@@ -76,7 +145,6 @@ export class ToolRegistry {
       const decision = await context.approveWorkspacePath({
         tool: name,
         input: normalizedInput,
-        risk: tool.risk,
         source: tool.source,
         callId: context.currentToolCall?.callId,
         path: error.details.path,
@@ -96,7 +164,16 @@ export class ToolRegistry {
       }
 
       try {
-        return await tool.handler(parsedInput, nextContext);
+        const retryContext = decision.approvedRoots?.length
+          ? {
+              ...nextContext,
+              workspaceRoots: () => [
+                ...(nextContext.workspaceRoots?.() || []),
+                ...decision.approvedRoots!,
+              ],
+            }
+          : nextContext;
+        return await tool.handler(parsedInput, retryContext);
       } finally {
         decision.cleanup?.();
       }
@@ -104,11 +181,17 @@ export class ToolRegistry {
   }
 }
 
+function approvalError(code: 'TOOL_APPROVAL_UNAVAILABLE' | 'TOOL_APPROVAL_REJECTED', message: string, tool: string) {
+  return new ToolExecutionError(message, {
+    error: { code, message, tool },
+  });
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function parseToolInput(tool: RuntimeTool, input: unknown) {
+function parseToolInput(tool: RuntimeTool<z.ZodType, RuntimeToolOutput>, input: unknown) {
   const result = tool.schema.safeParse(input);
   if (result.success) return result.data;
 

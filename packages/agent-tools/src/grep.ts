@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const grepSchema = z.object({
   pattern: z.string().min(1),
@@ -15,16 +15,16 @@ export function createGrepTool(system: SystemBackend): RuntimeTool<typeof grepSc
   return {
     name: 'grep',
     description: 'Search workspace file contents by pattern.',
-    risk: 'safe',
+    approval: 'none',
     schema: grepSchema,
-    async handler(input) {
+    async handler(input, context) {
       return system.grep(input.pattern, {
         path: input.path,
         glob: input.glob,
         mode: input.mode,
         contextLines: input.context_lines,
         limit: input.limit,
-      });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

@@ -7,4 +7,5 @@ export {
   saveBrowserPreferences,
   type BrowserLinkOpenMode,
   type BrowserPreferences,
+  type BrowserSearchEngine,
 } from './model/preferences'

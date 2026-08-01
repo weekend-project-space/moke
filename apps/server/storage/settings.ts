@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { ChatModelSettings } from '../../../packages/agent-re-act/src/llm-client.js';
+import type { ChatModelSettings } from '@moke/agent-re-act';
 
 export type ModelProviderType = 'openai-compatible' | 'openai-responses';
 

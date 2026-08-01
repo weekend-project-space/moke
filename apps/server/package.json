@@ -1,0 +1,28 @@
+{
+  "name": "@moke/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@moke/agent-re-act": "0.1.0",
+    "@moke/agent-runtime": "0.1.0",
+    "@moke/agent-skills": "0.1.0",
+    "@moke/agent-tools": "0.1.0",
+    "@moke/browser-tools": "0.1.0",
+    "@moke/mcp-client": "0.1.0",
+    "@moke/messaging-core": "0.1.0",
+    "@moke/messaging-dingtalk": "0.1.0",
+    "@moke/messaging-feishu": "0.1.0",
+    "@moke/messaging-weixin": "0.1.0",
+    "@moke/protocol": "0.1.0",
+    "cron-parser": "^5.6.2",
+    "qrcode": "^1.5.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
+  }
+}

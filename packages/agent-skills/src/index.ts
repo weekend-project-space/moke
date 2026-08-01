@@ -1,4 +1,15 @@
 export { ContentManager } from './content-manager.js';
 export { SkillLoader } from './skill-loader.js';
-export { createListSkillsTool, createReadSkillTool } from './skill-tools.js';
-export type { LoadedSkill, SkillContentManager, SkillManifest } from './skill-types.js';
+export { SkillRepository, SkillRepositoryError } from './skill-repository.js';
+export { parseSkillFile, serializeSkillFile } from './skill-file.js';
+export { createActivateSkillTool } from './skill-tools.js';
+export type {
+  LoadedSkill,
+  ManagedSkill,
+  SkillActivationResult,
+  SkillActivationStatus,
+  SkillAuthority,
+  SkillContentManager,
+  SkillDraft,
+  SkillManifest,
+} from './skill-types.js';

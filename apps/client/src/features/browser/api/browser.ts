@@ -3,6 +3,7 @@ export type BrowserPage = {
   label: string
   url: string
   title: string
+  faviconUrl: string
   canGoBack: boolean
   canGoForward: boolean
   isLoading: boolean
@@ -129,6 +130,10 @@ export const browserApi = {
 
   takeScreenshot(options: BrowserAutomationOptions) {
     return tauriInvoke<BrowserResult>('browser_take_screenshot', { options })
+  },
+
+  capturePreview(pageId: number) {
+    return tauriInvoke<string>('browser_capture_preview', { pageId })
   },
 
   click(options: BrowserAutomationOptions) {

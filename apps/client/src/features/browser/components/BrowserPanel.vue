@@ -1,381 +1,288 @@
-﻿<script setup lang="ts">
-import {
-  ArrowLeft,
-  ArrowRight,
-  Globe2,
-  Plus,
-  RefreshCw,
-  X,
-} from 'lucide-vue-next'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
+<script setup lang="ts">
+import { ArrowLeft, ArrowRight, Globe2, Maximize2, Minimize2, Plus, RefreshCw, X } from 'lucide-vue-next'
+import { computed, nextTick, onUnmounted, ref, toRef, watch } from 'vue'
+import { useBrowserController } from '../composables/useBrowserController'
+import { formatBrowserAddressHost } from '../model/address'
 import type { BrowserLinkOpenMode } from '../model/preferences'
+import type { BrowserPage } from '../api/browser'
+import type { BrowserTabCloseScope } from '../model/tabClose'
 import { uiText } from '../../../text/uiText'
 
-const props = defineProps<{
-  active: boolean
-}>()
-
-const MAX_TABS = 8
-
-const tabs = ref<BrowserPage[]>([])
-const activeTabKey = ref<string | null>(null)
-const address = ref('')
-const isEditingAddress = ref(false)
-const errorMessage = ref('')
-const isBusy = ref(false)
-const nativeAvailable = ref(false)
+const props = defineProps<{ active: boolean; maximized?: boolean }>()
+const emit = defineEmits<{ toggleMaximized: [] }>()
 const windowElement = ref<HTMLElement | null>(null)
 const viewportElement = ref<HTMLElement | null>(null)
-let resizeObserver: ResizeObserver | null = null
-let unlistenBrowserState: (() => void) | null = null
+const tabsElement = ref<HTMLElement | null>(null)
+const addressInput = ref<HTMLInputElement | null>(null)
+const tabMenuElement = ref<HTMLElement | null>(null)
+const failedFaviconKeys = ref(new Set<string>())
+const tabLimitNotice = ref(false)
+const tabMenu = ref<{
+  tab: BrowserPage
+  trigger: HTMLElement | null
+  x: number
+  y: number
+} | null>(null)
+let viewportLayoutVersion = 0
+let tabLimitTimer: number | undefined
+const {
+  tabs, activeTabKey, activeTab, address, isEditingAddress, errorMessage, isBusy, nativeAvailable, viewportPreview,
+  canGoBack, canGoForward, canReload, isTabLimitReached, maxTabs, tabKey,
+  beginAddressEdit, endAddressEdit, submitAddress, createTab, openUrl,
+  selectTab, closeTabs, reloadPage, retryPage, navigateHistory, getViewportBounds,
+  suspendViewport, resumeViewport,
+} = useBrowserController({
+  active: toRef(props, 'active'),
+  windowElement,
+  viewportElement,
+  onViewportLayoutChange: handleViewportLayoutChange,
+})
 
-const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
-const activePage = computed(() => activeTab.value)
-const canUseBrowser = computed(() => nativeAvailable.value)
-const canCreateTab = computed(() => canUseBrowser.value && !isBusy.value && tabs.value.length < MAX_TABS)
-const canGoBack = computed(() => Boolean(activePage.value?.canGoBack && !isBusy.value))
-const canGoForward = computed(() => Boolean(activePage.value?.canGoForward && !isBusy.value))
-const canReload = computed(() => Boolean(activePage.value && !isBusy.value))
+const addressValue = computed({
+  get: () => isEditingAddress.value ? address.value : formatBrowserAddressHost(address.value),
+  set: (value: string) => { address.value = value },
+})
 
-function tabKey(tab: BrowserPage) {
-  return `page-${tab.pageId}`
+function handleAddressFocus() {
+  if (isEditingAddress.value) return
+  beginAddressEdit()
+  void nextTick(() => {
+    if (document.activeElement === addressInput.value) addressInput.value?.select()
+  })
 }
 
-function normalizeInput(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return 'about:blank'
-  return trimmed.includes('://') ? trimmed : `https://${trimmed}`
+function cancelAddressEdit() {
+  endAddressEdit()
+  addressInput.value?.blur()
 }
 
-function formatAddress(url?: string) {
-  if (!url || url === 'about:blank') return ''
-  return url
+async function handleAddressSubmit() {
+  await submitAddress()
+  addressInput.value?.blur()
 }
 
-function syncAddressFromPage(targetPage = activePage.value) {
-  address.value = formatAddress(targetPage?.url)
-}
-
-function applyState(result: { page: BrowserPage | null; pages?: BrowserPage[]; activePageId?: number | null }) {
-  tabs.value = result.pages || []
-  activeTabKey.value = result.activePageId ? `page-${result.activePageId}` : activeTabKey.value
-  if (!isEditingAddress.value && result.page && activeTabKey.value === `page-${result.page.pageId}`) {
-    syncAddressFromPage(result.page)
-  } else if (!isEditingAddress.value && !result.page) {
-    address.value = ''
+async function openTabMenu(event: MouseEvent, tab: BrowserPage) {
+  const layoutVersion = viewportLayoutVersion
+  const target = event.currentTarget
+  const trigger = target instanceof HTMLElement
+    ? target.querySelector<HTMLElement>('.browser-tab-select') || target
+    : null
+  if (!await suspendViewport()) return
+  if (layoutVersion !== viewportLayoutVersion) {
+    await resumeViewport()
+    return
   }
-}
-
-function beginAddressEdit() {
-  isEditingAddress.value = true
-}
-
-function endAddressEdit() {
-  isEditingAddress.value = false
-  syncAddressFromPage()
-}
-
-function getViewportBounds(): BrowserBounds {
-  const rect = (viewportElement.value || windowElement.value)?.getBoundingClientRect()
-
-  if (!rect) {
-    return { x: 0, y: 0, width: 1, height: 1 }
+  tabMenu.value = {
+    tab,
+    trigger,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - 192)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 116)),
   }
+  void nextTick(() => enabledTabMenuItems()[0]?.focus())
+}
 
-  return {
-    x: Math.round(rect.left),
-    y: Math.round(rect.top),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height)),
+async function closeTabMenu(restoreFocus = false, resume = true) {
+  const trigger = tabMenu.value?.trigger
+  tabMenu.value = null
+  if (restoreFocus && trigger) void nextTick(() => trigger.focus())
+  if (resume) await resumeViewport()
+}
+
+function handleViewportLayoutChange() {
+  viewportLayoutVersion += 1
+  if (tabMenu.value) void closeTabMenu()
+}
+
+function enabledTabMenuItems() {
+  return Array.from(tabMenuElement.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') || [])
+}
+
+function canCloseOtherTabs(tab: BrowserPage) {
+  return tabs.value.some((candidate) => candidate.pageId !== tab.pageId)
+}
+
+function canCloseTabsToRight(tab: BrowserPage) {
+  const index = tabs.value.findIndex((candidate) => candidate.pageId === tab.pageId)
+  return index >= 0 && index < tabs.value.length - 1
+}
+
+function faviconKey(tab: BrowserPage) {
+  return `${tab.pageId}:${tab.faviconUrl}`
+}
+
+function shouldShowFavicon(tab: BrowserPage) {
+  return Boolean(tab.faviconUrl) && !failedFaviconKeys.value.has(faviconKey(tab))
+}
+
+function handleFaviconError(tab: BrowserPage) {
+  failedFaviconKeys.value = new Set(failedFaviconKeys.value).add(faviconKey(tab))
+}
+
+function handleCreateTab() {
+  if (!isTabLimitReached.value) {
+    void createTab()
+    return
   }
+  tabLimitNotice.value = true
+  if (tabLimitTimer !== undefined) window.clearTimeout(tabLimitTimer)
+  tabLimitTimer = window.setTimeout(() => {
+    tabLimitNotice.value = false
+    tabLimitTimer = undefined
+  }, 1800)
 }
 
-async function syncBrowserBounds() {
-  if (!nativeAvailable.value || !activePage.value || !props.active) return
+function handleTabsWheel(event: WheelEvent) {
+  const element = tabsElement.value
+  if (!element || element.scrollWidth <= element.clientWidth) return
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+  element.scrollLeft += delta
+  event.preventDefault()
+}
 
-  try {
-    await browserApi.resize(activePage.value.pageId, getViewportBounds())
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
+async function handleCloseTabs(scope: BrowserTabCloseScope) {
+  const tab = tabMenu.value?.tab
+  if (!tab) return
+  await closeTabMenu(false, false)
+  await closeTabs(tab, scope)
+  await resumeViewport()
+}
+
+function handleTabMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    void closeTabMenu(true)
+    return
   }
-}
-
-async function withBusy(action: () => Promise<void>) {
-  if (isBusy.value) return
-
-  isBusy.value = true
-  errorMessage.value = ''
-  try {
-    await action()
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    isBusy.value = false
-  }
-}
-
-async function submitAddress() {
-  await withBusy(async () => {
-    const url = normalizeInput(address.value)
-    const tab = activePage.value
-    isEditingAddress.value = false
-
-    if (!tab) {
-      applyState(await browserApi.open({
-        url,
-        visible: true,
-        bounds: getViewportBounds(),
-      }))
-      return
-    }
-
-    applyState(await browserApi.navigate({
-      pageId: tab.pageId,
-      type: 'url',
-      url,
-    }))
-  })
-}
-
-async function createTab() {
-  if (!canCreateTab.value) return
-
-  await withBusy(async () => {
-    applyState(await browserApi.open({
-      url: 'about:blank',
-      visible: true,
-      bounds: getViewportBounds(),
-    }))
-    syncAddressFromPage()
-    await nextTick()
-    await syncBrowserBounds()
-  })
-}
-
-async function openUrl(url: string, mode: BrowserLinkOpenMode = 'new-tab') {
-  await withBusy(async () => {
-    await nextTick()
-    await waitForLayoutFrame()
-
-    if (mode === 'current' && activePage.value) {
-      applyState(await browserApi.navigate({
-        pageId: activePage.value.pageId,
-        type: 'url',
-        url,
-      }))
-      return
-    }
-
-    applyState(await browserApi.open({
-      url,
-      visible: true,
-      bounds: getViewportBounds(),
-    }))
-    await syncBrowserBounds()
-  })
-}
-
-async function selectTab(tab: BrowserPage) {
-  if (tabKey(tab) === activeTabKey.value) return
-
-  await withBusy(async () => {
-    applyState(await browserApi.show(tab.pageId, getViewportBounds()))
-  })
-}
-
-async function closeTab(tab: BrowserPage) {
-  await withBusy(async () => {
-    applyState(await browserApi.close(tab.pageId))
-    if (!activePage.value) address.value = ''
-  })
-}
-
-async function reloadPage(ignoreCache = false) {
-  const currentPage = activePage.value
-  if (!currentPage) return
-
-  await withBusy(async () => {
-    applyState(await browserApi.navigate({
-      pageId: currentPage.pageId,
-      type: 'reload',
-      ignoreCache,
-    }))
-  })
-}
-
-async function navigateHistory(type: 'back' | 'forward') {
-  const currentPage = activePage.value
-  if (!currentPage) return
-
-  await withBusy(async () => {
-    applyState(await browserApi.navigate({
-      pageId: currentPage.pageId,
-      type,
-    }))
-  })
-}
-
-function waitForLayoutFrame() {
-  return new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve())
-  })
-}
-
-async function syncVisibility() {
-  if (!nativeAvailable.value || !activePage.value) return
-
-  try {
-    if (props.active) {
-      await nextTick()
-      await waitForLayoutFrame()
-      applyState(await browserApi.show(activePage.value.pageId, getViewportBounds()))
-      await syncBrowserBounds()
-      await waitForLayoutFrame()
-      await syncBrowserBounds()
-    } else {
-      applyState(await browserApi.hide())
-    }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-onMounted(async () => {
-  nativeAvailable.value = isNativeBrowserAvailable()
-
-  if (!nativeAvailable.value) return
-
-  await withBusy(async () => {
-    applyState(await browserApi.state())
-    if (props.active) await syncVisibility()
-  })
-
-  try {
-    unlistenBrowserState = await browserApi.listenStateChanged((change) => {
-      applyState(change.state)
-    })
-  } catch {
-    unlistenBrowserState = null
+  if (event.key === 'Tab') {
+    void closeTabMenu()
+    return
   }
 
-  window.addEventListener('resize', syncBrowserBounds)
+  const items = enabledTabMenuItems()
+  if (!items.length) return
+  const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
+  let nextIndex: number | undefined
+  if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length
+  if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = items.length - 1
+  if (nextIndex === undefined) return
+
+  event.preventDefault()
+  items[nextIndex]?.focus()
+}
+
+watch(tabs, (pages) => {
+  const menuPageId = tabMenu.value?.tab.pageId
+  if (menuPageId !== undefined && !pages.some((page) => page.pageId === menuPageId)) void closeTabMenu()
+})
+
+watch(() => props.active, (active) => {
+  if (!active && tabMenu.value) void closeTabMenu()
+})
+
+watch(activeTabKey, async () => {
+  await nextTick()
+  tabsElement.value?.querySelector<HTMLElement>('.browser-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 })
 
 onUnmounted(() => {
-  unlistenBrowserState?.()
-  unlistenBrowserState = null
-  resizeObserver?.disconnect()
-  window.removeEventListener('resize', syncBrowserBounds)
-  if (activePage.value) void browserApi.hide()
+  if (tabLimitTimer !== undefined) window.clearTimeout(tabLimitTimer)
 })
-
-watch(
-  () => props.active,
-  () => {
-    void syncVisibility()
-  },
-  { flush: 'post' },
-)
-
-watch(
-  activeTabKey,
-  () => {
-    void syncVisibility()
-  },
-  { flush: 'post' },
-)
-
-watch(
-  windowElement,
-  (element) => {
-    resizeObserver?.disconnect()
-    resizeObserver = null
-
-    if (!element) return
-
-    resizeObserver = new ResizeObserver(() => {
-      void syncBrowserBounds()
-    })
-    resizeObserver.observe(element)
-    void syncBrowserBounds()
-  },
-  { flush: 'post' },
-)
 
 defineExpose({
   getBounds: getViewportBounds,
-  openUrl,
+  openUrl: (url: string, mode?: BrowserLinkOpenMode) => openUrl(url, mode),
 })
 </script>
 
 <template>
-  <section class="browser-panel">
-    <nav class="browser-tabs" :aria-label="uiText.browser.pages">
-      <div
-        v-for="tab in tabs"
-        :key="tabKey(tab)"
-        class="browser-tab"
-        :class="{ active: tabKey(tab) === activeTabKey }"
-      >
-        <button type="button" class="browser-tab-select" @click="selectTab(tab)">
-          <Globe2 :size="13" stroke-width="2.2" />
-          <span>{{ tab.title || (tab.url === 'about:blank' ? uiText.browser.newPage : tab.url) || uiText.browser.newPage }}</span>
+  <section class="browser-panel" :class="{ 'browser-panel-unavailable': !nativeAvailable }" @contextmenu.prevent>
+    <div v-if="nativeAvailable" class="browser-controls">
+      <div class="browser-tabs-row">
+        <nav ref="tabsElement" class="browser-tabs" :aria-label="uiText.browser.pages" @wheel="handleTabsWheel">
+          <div v-for="tab in tabs" :key="tabKey(tab)" class="browser-tab" :class="{ active: tabKey(tab) === activeTabKey }" @contextmenu.prevent.stop="openTabMenu($event, tab)">
+            <button type="button" class="browser-tab-select" @click="selectTab(tab)">
+              <img v-if="shouldShowFavicon(tab)" class="browser-tab-favicon" :src="tab.faviconUrl" alt="" aria-hidden="true" draggable="false" referrerpolicy="no-referrer" @error="handleFaviconError(tab)" />
+              <Globe2 v-else :size="13" stroke-width="2.2" />
+              <span>{{ tab.title || (tab.url === 'about:blank' ? uiText.browser.newPage : tab.url) || uiText.browser.newPage }}</span>
+            </button>
+            <i v-if="tab.isLoading" aria-hidden="true"></i>
+            <button type="button" class="browser-tab-close" :aria-label="uiText.browser.closePage" :title="uiText.browser.closePage" @click.stop="closeTabs(tab, 'tab')">
+              <X :size="12" stroke-width="2.3" />
+            </button>
+          </div>
+          <button type="button" class="browser-tab-add" :disabled="isBusy" :aria-label="isTabLimitReached ? uiText.browser.pageLimitReached(maxTabs) : uiText.browser.newPage" :title="isTabLimitReached ? uiText.browser.pageLimitReached(maxTabs) : uiText.browser.newPage" @click="handleCreateTab">
+            <Plus :size="14" stroke-width="2.2" />
+          </button>
+        </nav>
+        <button type="button" class="browser-tabs-maximize" :aria-label="maximized ? uiText.browser.restore : uiText.browser.maximize" :title="maximized ? uiText.browser.restore : uiText.browser.maximize" :aria-pressed="Boolean(maximized)" @click="emit('toggleMaximized')">
+          <Minimize2 v-if="maximized" :size="14" stroke-width="2.2" />
+          <Maximize2 v-else :size="14" stroke-width="2.2" />
         </button>
-        <i v-if="tab.isLoading" aria-hidden="true"></i>
-        <button type="button" class="browser-tab-close" :aria-label="uiText.browser.closePage" :title="uiText.browser.closePage" @click="closeTab(tab)">
-          <X :size="12" stroke-width="2.3" />
-        </button>
+        <span v-if="tabLimitNotice" class="browser-tab-limit-notice" role="status">{{ uiText.browser.pageLimitReached(maxTabs) }}</span>
       </div>
-      <button type="button" class="browser-tab-add" :disabled="!canCreateTab" :aria-label="uiText.browser.newPage" :title="uiText.browser.newPage" @click="createTab">
-        <Plus :size="14" stroke-width="2.2" />
-      </button>
-    </nav>
 
-    <form class="browser-toolbar" @submit.prevent="submitAddress">
-      <button type="button" :disabled="!canGoBack" :aria-label="uiText.browser.back" :title="uiText.browser.back" @click="navigateHistory('back')">
-        <ArrowLeft :size="15" stroke-width="2.2" />
-      </button>
-      <button type="button" :disabled="!canGoForward" :aria-label="uiText.browser.forward" :title="uiText.browser.forward" @click="navigateHistory('forward')">
-        <ArrowRight :size="15" stroke-width="2.2" />
-      </button>
-      <button type="button" :disabled="!canReload" :aria-label="uiText.browser.reload" :title="uiText.browser.reload" @click="reloadPage(false)">
-        <RefreshCw :size="15" stroke-width="2.2" />
-      </button>
-      <label>
-        <Globe2 :size="14" stroke-width="2.2" />
-        <input
-          v-model="address"
-          type="text"
-          spellcheck="false"
-          :placeholder="uiText.browser.addressPlaceholder"
-          @focus="beginAddressEdit"
-          @blur="endAddressEdit"
-        />
-      </label>
-    </form>
+      <form class="browser-toolbar" @submit.prevent="handleAddressSubmit">
+        <div class="browser-toolbar-nav">
+          <button type="button" :disabled="!canGoBack" :aria-label="uiText.browser.back" :title="uiText.browser.back" @click="navigateHistory('back')"><ArrowLeft :size="15" stroke-width="2.2" /></button>
+          <button type="button" :disabled="!canGoForward" :aria-label="uiText.browser.forward" :title="uiText.browser.forward" @click="navigateHistory('forward')"><ArrowRight :size="15" stroke-width="2.2" /></button>
+          <button type="button" :disabled="!canReload" :aria-label="uiText.browser.reload" :title="uiText.browser.reload" @click="reloadPage(false)"><RefreshCw :size="15" stroke-width="2.2" /></button>
+        </div>
+        <label :class="{ 'is-editing': isEditingAddress }">
+          <input ref="addressInput" v-model="addressValue" type="text" spellcheck="false" :placeholder="uiText.browser.addressPlaceholder" :title="isEditingAddress ? undefined : address" @focus="handleAddressFocus" @blur="endAddressEdit" @keydown.escape.prevent="cancelAddressEdit" />
+        </label>
+      </form>
+    </div>
 
     <div ref="windowElement" class="browser-window-state">
-      <div v-if="!nativeAvailable" class="browser-placeholder">
+      <div v-if="!nativeAvailable" class="browser-placeholder desktop-required">
         <Globe2 :size="24" stroke-width="2" />
         <strong>{{ uiText.browser.requiresDesktopTitle }}</strong>
         <span>{{ uiText.browser.requiresDesktopDescription }}</span>
       </div>
       <div v-else-if="errorMessage" class="browser-placeholder error">
-        <strong>{{ errorMessage }}</strong>
+        <Globe2 :size="24" stroke-width="2" />
+        <strong>{{ uiText.browser.errorTitle }}</strong>
+        <span>{{ errorMessage }}</span>
+        <button type="button" @click="retryPage">
+          <RefreshCw :size="14" stroke-width="2.2" />
+          <span>{{ uiText.browser.retry }}</span>
+        </button>
       </div>
-      <div v-else-if="!activePage" class="browser-placeholder">
+      <div v-else-if="!activeTab" class="browser-placeholder">
         <Globe2 :size="24" stroke-width="2" />
         <strong>{{ uiText.browser.openPromptTitle }}</strong>
         <span>{{ uiText.browser.openPromptDescription }}</span>
       </div>
       <div v-else ref="viewportElement" class="browser-viewport">
-        <div v-if="activePage.isLoading" class="browser-loading">
-          <Globe2 :size="18" stroke-width="2" />
-          <span>{{ uiText.browser.loading }}</span>
-        </div>
+        <img v-if="viewportPreview" class="browser-viewport-preview" :src="viewportPreview" alt="" aria-hidden="true" draggable="false" />
+        <div v-if="activeTab.isLoading" class="browser-loading" role="status" :aria-label="uiText.browser.loading"></div>
       </div>
     </div>
   </section>
-</template>
 
+  <Teleport to="body">
+    <div v-if="tabMenu" class="browser-tab-menu-backdrop" @click="closeTabMenu()" @contextmenu.prevent="closeTabMenu()"></div>
+    <div
+      v-if="tabMenu"
+      ref="tabMenuElement"
+      class="browser-tab-context-menu"
+      :style="{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }"
+      role="menu"
+      @click.stop
+      @contextmenu.prevent
+      @keydown="handleTabMenuKeydown"
+    >
+      <button type="button" role="menuitem" @click="handleCloseTabs('tab')">
+        <span>{{ uiText.browser.closePage }}</span>
+      </button>
+      <button type="button" role="menuitem" :disabled="!canCloseOtherTabs(tabMenu.tab)" @click="handleCloseTabs('others')">
+        <span>{{ uiText.browser.closeOtherPages }}</span>
+      </button>
+      <button type="button" role="menuitem" :disabled="!canCloseTabsToRight(tabMenu.tab)" @click="handleCloseTabs('right')">
+        <span>{{ uiText.browser.closePagesToRight }}</span>
+      </button>
+    </div>
+  </Teleport>
+</template>

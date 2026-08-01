@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const globSchema = z.object({
   pattern: z.string().min(1),
@@ -12,13 +12,13 @@ export function createGlobTool(system: SystemBackend): RuntimeTool<typeof globSc
   return {
     name: 'glob',
     description: 'Find files matching a glob pattern in the workspace.',
-    risk: 'safe',
+    approval: 'none',
     schema: globSchema,
-    async handler(input) {
+    async handler(input, context) {
       return system.glob(input.pattern, {
         path: input.path,
         limit: input.limit,
-      });
+      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };
 }

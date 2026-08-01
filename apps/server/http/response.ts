@@ -14,11 +14,20 @@ export class RequestBodyError extends Error {
 }
 
 export function json(res: ServerResponse, status: number, body: unknown) {
+  if (status === 204) {
+    res.writeHead(status, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Last-Event-ID',
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    });
+    res.end();
+    return;
+  }
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Last-Event-ID',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   });
   res.end(JSON.stringify(body));
 }

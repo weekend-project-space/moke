@@ -21,6 +21,11 @@ export type SystemReadOptions = {
   limit?: number;
 };
 
+export type SystemAccessOptions = {
+  workspaceRoot?: string;
+  approvedRoots?: string[];
+};
+
 export type SystemReadLine = {
   number: number;
   text: string;
@@ -97,22 +102,22 @@ export type SystemExecuteResult = {
 export interface SystemBackend {
   readonly rootDir: string;
 
-  ls(path?: string): Promise<SystemLsResult>;
-  readFile(path: string, options?: SystemReadOptions): Promise<SystemReadResult>;
-  grep(pattern: string, options?: SystemGrepOptions): Promise<SystemGrepResult>;
-  glob(pattern: string, options?: SystemGlobOptions): Promise<SystemGlobResult>;
+  ls(path?: string, access?: SystemAccessOptions): Promise<SystemLsResult>;
+  readFile(path: string, options?: SystemReadOptions, access?: SystemAccessOptions): Promise<SystemReadResult>;
+  grep(pattern: string, options?: SystemGrepOptions, access?: SystemAccessOptions): Promise<SystemGrepResult>;
+  glob(pattern: string, options?: SystemGlobOptions, access?: SystemAccessOptions): Promise<SystemGlobResult>;
 }
 
 export interface WritableSystemBackend extends SystemBackend {
-  writeFile(path: string, content: string): Promise<SystemWriteResult>;
+  writeFile(path: string, content: string, access?: SystemAccessOptions): Promise<SystemWriteResult>;
   editFile(
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }, access?: SystemAccessOptions,
   ): Promise<SystemEditResult>;
 }
 
 export interface ExecutableSystemBackend extends WritableSystemBackend {
-  execute(command: string, args?: string[], options?: SystemExecuteOptions): Promise<SystemExecuteResult>;
+  execute(command: string, args?: string[], options?: SystemExecuteOptions, access?: SystemAccessOptions): Promise<SystemExecuteResult>;
 }

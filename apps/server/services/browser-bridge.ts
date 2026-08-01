@@ -21,7 +21,7 @@ import type {
   TypeTextInput,
   UploadFileInput,
   WaitForInput,
-} from '../../../packages/browser-tools/src/index.js';
+} from '@moke/browser-tools';
 
 type BrowserRequest = {
   id: string;

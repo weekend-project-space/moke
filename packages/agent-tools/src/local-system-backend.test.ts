@@ -55,6 +55,18 @@ test('execute defaults cwd to the workspace root', async () => {
   assert.match(backend.calls[0], /npm test$/);
 });
 
+test('execute uses the invocation workspace instead of the backend default root', async () => {
+  const backend = createBackend();
+  const defaultWorkspace = path.resolve('E:/work/default');
+  const invocationWorkspace = path.resolve('E:/work/project-a');
+  const system = new LocalSystemBackend(defaultWorkspace, { backend });
+
+  await system.execute('npm test', [], undefined, { workspaceRoot: invocationWorkspace });
+
+  assert.match(backend.calls[0], new RegExp(escapeRegExp(invocationWorkspace)));
+  assert.doesNotMatch(backend.calls[0], new RegExp(escapeRegExp(defaultWorkspace)));
+});
+
 test('writeFile writes directly when parent is the backend root', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'moke-write-root-'));
   try {
@@ -68,6 +80,21 @@ test('writeFile writes directly when parent is the backend root', async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('readFile requests approval for the exact external file', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  const target = path.resolve('C:/Windows/System32/drivers/etc/hosts');
+
+  await assert.rejects(
+    () => system.readFile(target),
+    (error: unknown) => {
+      assert.equal((error as { details?: { suggestedRoot?: string } }).details?.suggestedRoot, target);
+      return true;
+    },
+  );
 });
 
 test('execute rejects absolute command paths outside workspace', async () => {
@@ -100,6 +127,21 @@ test('execute allows absolute command paths inside approved roots', async () => 
   await system.execute('type E:\\notes\\a.md');
 
   assert.equal(approval.added, true);
+  assert.equal(backend.calls.length, 1);
+});
+
+test('per-invocation roots do not leak to another session sharing the backend', async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+  const sessionARoots = ['E:/notes'];
+
+  await system.execute('type E:\\notes\\a.md', [], undefined, { approvedRoots: sessionARoots });
+
+  await assert.rejects(
+    () => system.execute('type E:\\notes\\a.md'),
+    /Command path requires approval: E:\\notes\\a\.md/,
+  );
   assert.equal(backend.calls.length, 1);
 });
 
@@ -217,6 +259,20 @@ test('execute rejects Windows drive-relative paths', async () => {
   );
 });
 
+test('execute reports cmd-style switches as PowerShell compatibility errors on Windows', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend });
+
+  await assert.rejects(
+    () => system.execute('del /q ".moke-browser-test\\manual-approval.txt"'),
+    /Command uses cmd\.exe switch \/q with PowerShell command del/,
+  );
+  assert.equal(backend.calls.length, 0);
+});
+
 test('execute rejects working directory changes outside workspace', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');
@@ -272,3 +328,7 @@ test('execute respects timeoutMs', async () => {
     /Command timed out after 1ms: npm test/,
   );
 });
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

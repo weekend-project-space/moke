@@ -20,13 +20,19 @@ const hasRawData = computed(() => Boolean(props.step.inputRaw || props.step.outp
 const outputText = computed(() => props.step.outputRaw || uiText.tool.waitingForResult)
 const commandOutput = computed(() => props.step.summary.stdout || props.step.summary.stderr || uiText.tool.commandNoOutput)
 const guardedCommandOutput = computed(() => guardToolContent(commandOutput.value))
-const commandStatusText = computed(() => (props.step.tone === 'error' ? uiText.process.failed : uiText.process.success))
+const commandStatusText = computed(() => (isCommandError.value ? uiText.process.failed : uiText.process.success))
 const commandExitCode = computed(() =>
   typeof props.step.summary.exitCode === 'number' ? props.step.summary.exitCode : props.step.tone === 'error' ? 1 : 0,
 )
-const isCommandError = computed(() => props.step.tone === 'error' || Boolean(props.step.summary.stderr && !props.step.summary.stdout))
+const isCommandError = computed(() =>
+  props.step.tone === 'error' ||
+  (typeof props.step.summary.exitCode === 'number' && props.step.summary.exitCode !== 0) ||
+  Boolean(props.step.summary.stderr && !props.step.summary.stdout),
+)
 const browserText = computed(() => props.step.summary.preview || browserFallbackText(props.step.toolName))
 const guardedBrowserText = computed(() => guardToolContent(browserText.value))
+const channelText = computed(() => props.step.summary.preview || doneText)
+const guardedChannelText = computed(() => guardToolContent(channelText.value))
 const guardedFileReadText = computed(() => guardToolContent(props.step.summary.preview || ''))
 const guardedInputRaw = computed(() => guardToolContent(props.step.inputRaw || ''))
 const guardedOutputRaw = computed(() => guardToolContent(outputText.value))
@@ -45,7 +51,7 @@ const fileHeaderStats = computed(() => {
 const guardedCliText = computed(() => guardToolContent(cliTextView.value.text))
 const resultCount = computed(() => props.step.summary.count ?? resultItems.value.length)
 const resultUnit = computed(() => (props.step.renderer === 'directory' ? 'items' : 'matches'))
-const resultStatusText = computed(() => (props.step.tone === 'error' ? uiText.process.failed : uiText.process.success))
+const resultStatusText = computed(() => (props.step.tone === 'error' ? uiText.process.failed : ''))
 const resultEmptyText = computed(() => {
   if (props.step.tone === 'error') {
     return props.step.summary.preview || (props.step.renderer === 'directory' ? uiText.tool.failedToReadDirectory : uiText.process.searchFailed)
@@ -53,7 +59,13 @@ const resultEmptyText = computed(() => {
 
   return props.step.renderer === 'directory' ? uiText.process.emptyDirectory : uiText.process.noResults
 })
-
+const latestApproval = computed(() => props.step.approvals?.at(-1))
+const approvalAuditText = computed(() => {
+  const approval = latestApproval.value
+  if (!approval) return ''
+  const reviewer = approval.reviewer || 'user'
+  return approval.review_reason ? `${reviewer}: ${approval.review_reason}` : reviewer
+})
 function browserFallbackText(toolName: string) {
   if (toolName === 'navigate_page' || toolName === 'create_page' || toolName === 'select_page') return uiText.tool.pageOpened
   if (toolName === 'click') return uiText.tool.clickCompleted
@@ -88,6 +100,10 @@ function diffStats(lines: string[]) {
 
 <template>
   <div class="tool-detail">
+    <div v-if="latestApproval" class="tool-approval-audit">
+      <span>{{ latestApproval.decision }}</span>
+      <span>{{ approvalAuditText }}</span>
+    </div>
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">
@@ -104,7 +120,7 @@ function diffStats(lines: string[]) {
         </div>
         <div class="tool-result-footer">
           <span>{{ resultCount }} {{ resultUnit }}</span>
-          <span>{{ resultStatusText }}</span>
+          <span v-if="resultStatusText">{{ resultStatusText }}</span>
         </div>
       </div>
     </template>
@@ -171,6 +187,13 @@ function diffStats(lines: string[]) {
       <pre v-else class="tool-detail-output compact">{{ guardedBrowserText.text }}</pre>
     </template>
 
+    <template v-else-if="step.renderer === 'channel'">
+      <p v-if="guardedChannelText.isOversize" class="tool-content-oversize">
+        Content is {{ formatBytes(guardedChannelText.bytes) }}. It is larger than 100 kB and is not rendered inline.
+      </p>
+      <pre v-else class="tool-detail-output compact">{{ guardedChannelText.text }}</pre>
+    </template>
+
     <template v-else>
       <div class="tool-cli-card" :class="{ error: step.tone === 'error' }">
         <p v-if="guardedCliText.isOversize" class="tool-content-oversize">
@@ -182,7 +205,7 @@ function diffStats(lines: string[]) {
 
     <details v-if="hasRawData" class="tool-detail-raw">
       <summary>
-        <span>{{ uiText.tool.json }}</span>
+        <span>{{ uiText.tool.rawDetails }}</span>
         <span class="tool-detail-raw-caret" aria-hidden="true">
           <ChevronRight class="when-closed" :size="15" stroke-width="2" />
           <ChevronDown class="when-open" :size="15" stroke-width="2" />

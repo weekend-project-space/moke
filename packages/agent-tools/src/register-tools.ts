@@ -3,7 +3,7 @@ import {
   type SystemBackend,
   type ToolRegistry,
   type WritableSystemBackend,
-} from '../../agent-runtime/src/index.js';
+} from '@moke/agent-runtime';
 import { createEditFileTool } from './edit-file.js';
 import { createExecuteTool } from './execute.js';
 import { createGlobTool } from './glob.js';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const MAX_RESULTS = 20;
 
@@ -12,12 +12,18 @@ export function createSearchTool(system: SystemBackend): RuntimeTool<typeof sear
   return {
     name: 'search',
     description: 'Search file names and text inside the workspace.',
-    risk: 'safe',
+    approval: 'none',
     schema: searchSchema,
-    async handler(input) {
+    async handler(input, context) {
       const [globResult, grepResult] = await Promise.all([
-        system.glob(`**/*${input.query}*`),
-        system.grep(input.query, { mode: 'content' }),
+        system.glob(`**/*${input.query}*`, undefined, {
+          workspaceRoot: context.workspace,
+          approvedRoots: context.workspaceRoots?.(),
+        }),
+        system.grep(input.query, { mode: 'content' }, {
+          workspaceRoot: context.workspace,
+          approvedRoots: context.workspaceRoots?.(),
+        }),
       ]);
       const results = [
         ...globResult.matches.map((match) => ({

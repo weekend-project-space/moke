@@ -1,9 +1,24 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, AgentEventPayloadMap, ImageAttachment, Message, ReasoningEffort, Session } from '../../protocol/src/index.js';
+import type {
+  AgentEvent,
+  AgentEventPayloadMap,
+  ImageAttachment,
+  Message,
+  PendingApproval,
+  ReasoningEffort,
+  ResolvedImageAttachment,
+  RunLifecycleEvent,
+  RunStatus,
+  Session,
+  SessionEnvironment,
+  ToolApprovalRecord,
+} from '@moke/protocol';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
-import type { RuntimeRun } from './run-state.js';
+import { resolveHistory, selectRecentHistory } from './history.js';
+import { RunObservers } from './run-observers.js';
+import type { RunOrigin, RuntimeRun } from './run-state.js';
 import type {
   RuntimeContentManager,
   ToolApprovalDecision,
@@ -11,6 +26,7 @@ import type {
   WorkspacePathApprovalDecision,
   WorkspacePathApprovalRequest,
 } from './tool-context.js';
+import type { AiApprovalReviewer, ApprovalReviewContext } from './approval-reviewer.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 function id(prefix: string) {
@@ -18,52 +34,43 @@ function id(prefix: string) {
 }
 
 type RunManagerConfig = {
-  sessions: Map<string, Session>;
   runs: Map<string, RuntimeRun>;
   agent: Agent;
   toolRegistry: ToolRegistry;
-  workspace: string;
-  createSkillContentManager?: () => RuntimeContentManager;
-  approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent') => (() => void) | void;
-  onChange?: () => void;
+  defaultWorkspaceRoot?: string;
+  /** @deprecated Use defaultWorkspaceRoot. */
+  workspace?: string;
+  createSkillContentManager?: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
+  approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
+  workspaceRoots?: (sessionId: string) => string[];
+  resolveImageAttachments?: (
+    attachments: ImageAttachment[],
+  ) => ResolvedImageAttachment[] | Promise<ResolvedImageAttachment[]>;
+  onSessionChanged?: (session: Session) => void;
+  aiApprovalReviewer?: AiApprovalReviewer;
 };
 
-type RunOptions = {
+export type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
   reasoningEffort?: ReasoningEffort;
   timeout_ms?: number;
+  origin?: RunOrigin;
+  /**
+   * Called after the run is registered but before agent execution starts.
+   * Adapters use this to atomically associate external queue state with the run.
+   */
+  beforeStart?: (run: RuntimeRun) => void;
 };
 
 type RunMessageInput = {
   content: string;
-  attachments?: ImageAttachment[];
+  attachments?: ResolvedImageAttachment[];
 };
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
 
-export function selectRecentHistory(messages: Message[], maxMessages = 12) {
-  if (messages.length <= maxMessages) return messages.slice();
-
-  const cutoff = Math.max(0, messages.length - maxMessages);
-  let start = cutoff;
-  const cutoffMessage = messages[start];
-  if (cutoffMessage?.role !== 'tool') return messages.slice(start);
-
-  const firstToolCallId = cutoffMessage.tool_call_id;
-  while (start > 0) {
-    start--;
-    const candidate = messages[start];
-    if (candidate.role === 'assistant' && candidate.tool_calls?.some((call) => call.id === firstToolCallId)) {
-      return messages.slice(start);
-    }
-    if (candidate.role === 'user') break;
-  }
-
-  start = cutoff;
-  while (start < messages.length && messages[start]?.role === 'tool') start++;
-  return messages.slice(start);
-}
+export { selectRecentHistory } from './history.js';
 
 function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
@@ -90,6 +97,8 @@ function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap[
 
 export class RunManager {
   private readonly abortControllers = new Map<string, AbortController>();
+  private readonly activeExecutions = new Map<string, Promise<void>>();
+  private shuttingDown = false;
   private readonly pendingAsks = new Map<
     string,
     {
@@ -104,12 +113,18 @@ export class RunManager {
       runId: string;
       resolve: (decision: WorkspacePathApprovalDecision | ToolApprovalDecision) => void;
       reject: (error: Error) => void;
+      reviewer?: 'user' | 'ai' | 'auto_approve';
+      reviewReason?: string;
     }
   >();
+  private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
+  private readonly observers = new RunObservers();
 
   constructor(private readonly config: RunManagerConfig) { }
 
   createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
+    if (this.shuttingDown) throw new Error('Run manager is shutting down');
+    const env = snapshotEnvironment(session.env, this.defaultWorkspaceRoot());
     const run: RuntimeRun = {
       id: id('run'),
       session_id: session.id,
@@ -119,43 +134,57 @@ export class RunManager {
       clients: new Set(),
       started_at: Date.now(),
       abort: false,
+      origin: options.origin || { kind: 'local' },
+      approval_mode: env.approval_mode,
+      env,
     };
 
     this.config.runs.set(run.id, run);
-    this.config.onChange?.();
-    void this.execute(run, session, input, options);
+    try {
+      options.beforeStart?.(run);
+    } catch (error) {
+      this.config.runs.delete(run.id);
+      throw error;
+    }
+    this.observers.notifyInitial(run);
+    const execution = this.execute(run, session, input, options);
+    this.activeExecutions.set(run.id, execution);
+    void execution.then(
+      () => this.activeExecutions.delete(run.id),
+      () => this.activeExecutions.delete(run.id),
+    );
     return run;
   }
 
   private async execute(run: RuntimeRun, session: Session, input: RunMessageInput, options: RunOptions) {
-    let assistantMessageSaved = false;
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const eventBus = new EventBus(run, (event) => {
+      this.observers.notify(event, run);
+      if (run.abort) return;
       if (event.type !== 'agent.message.done') {
         return;
       }
 
       const message = readSessionMessage(event);
-      if (!message) {
-        this.config.onChange?.();
-        return;
-      }
+      if (!message) return;
 
       session.messages.push(message);
       session.updated_at = message.created_at;
-      assistantMessageSaved = true;
-      this.config.onChange?.();
+      this.config.onSessionChanged?.(session);
     });
     const limits = {
       max_steps: options.max_steps || 999,
       max_tool_calls: options.max_tool_calls || 99,
       timeout_ms: options.timeout_ms || 120000,
     };
-    const history = selectRecentHistory(session.messages.slice(0, -1));
-    const contentManager = this.config.createSkillContentManager?.();
+    const history = await resolveHistory(
+      selectRecentHistory(session.messages.slice(0, -1)),
+      this.config.resolveImageAttachments,
+    );
 
     try {
+      const contentManager = await this.config.createSkillContentManager?.(run.env.workspace.root);
       const result = await this.config.agent.run({
         input: input.content,
         attachments: input.attachments,
@@ -166,29 +195,49 @@ export class RunManager {
         eventBus,
         toolRegistry: this.config.toolRegistry,
         context: {
-          workspace: this.config.workspace,
+          workspace: run.env.workspace.root,
+          workspaceRoots: () => this.config.workspaceRoots?.(session.id) || [],
+          run,
           abortSignal: abortController.signal,
           contentManager,
+          trustedContext: [
+            {
+              authority: 'trusted',
+              scope: 'run',
+              content: `<session_environment>${JSON.stringify(run.env)}</session_environment>`,
+            },
+          ],
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
-          approveTool: (input) => this.approveTool(run, eventBus, input),
+          approveTool: (toolInput) => this.reviewTool(run, eventBus, toolInput, {
+            approvalMode: run.approval_mode,
+            environment: run.env,
+            runId: run.id,
+            sessionId: session.id,
+            origin: run.origin,
+            userRequest: input.content,
+            signal: abortController.signal,
+          }),
+          consumeApprovals: (callId) => this.consumeApprovalRecords(run.id, callId),
         },
         limits,
       });
 
       if (run.abort) return;
 
-      if (!assistantMessageSaved) {
+      if (!session.messages.some((message) => message.id === result.message.id)) {
         session.messages.push(result.message);
         session.updated_at = result.message.created_at;
+        this.config.onSessionChanged?.(session);
       }
-      run.status = 'completed';
+      this.setStatus(run, 'completed');
       eventBus.emit('agent.done', {
         status: 'completed',
         usage: {
           steps: run.seq,
           tool_calls: result.toolCalls,
           duration_ms: Date.now() - run.started_at,
+          ...result.usage,
         },
       });
     } catch (error) {
@@ -202,7 +251,7 @@ export class RunManager {
         content: `Run failed: ${message}`,
         created_at: new Date().toISOString(),
       };
-      run.status = 'failed';
+      this.setStatus(run, 'failed');
       eventBus.emit('agent.message.done', {
         message: assistantMessage,
       });
@@ -212,6 +261,7 @@ export class RunManager {
       });
     } finally {
       this.abortControllers.delete(run.id);
+      this.approvalRecords.delete(run.id);
       this.pruneTerminalRuns();
     }
   }
@@ -222,23 +272,21 @@ export class RunManager {
     input: WorkspacePathApprovalRequest,
   ): Promise<WorkspacePathApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
-    run.pending_approval = {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
+      ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'workspace_path',
       reason: input.reason || `Allow access to ${input.suggestedRoot}?`,
-      risk: input.risk,
       action: {
         tool: input.tool,
-        input: input.input,
+        input: safeApprovalInput(input.input),
       },
       path: input.path,
       suggested_root: input.suggestedRoot,
       created_at: new Date().toISOString(),
     };
-
-    eventBus.emit('approval.required', run.pending_approval);
-    this.config.onChange?.();
+    run.pending_approval = pendingApproval;
+    this.setStatus(run, 'awaiting_approval');
 
     return new Promise<WorkspacePathApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
@@ -246,37 +294,102 @@ export class RunManager {
         resolve,
         reject,
       });
+      eventBus.emit('approval.required', pendingApproval);
     });
   }
 
-  private approveTool(
+  private defaultWorkspaceRoot() {
+    return this.config.defaultWorkspaceRoot || this.config.workspace || process.cwd();
+  }
+
+  private async reviewTool(
     run: RuntimeRun,
     eventBus: EventBus,
     input: ToolApprovalRequest,
+    context: ApprovalReviewContext,
   ): Promise<ToolApprovalDecision> {
     const approvalId = id('apv');
-    run.status = 'awaiting_approval';
-    run.pending_approval = {
+    if (context.approvalMode === 'auto_approve') {
+      this.recordToolApproval(run.id, input.callId, {
+        approvalId,
+        decision: 'approved',
+        reviewer: 'auto_approve',
+        reviewReason: 'Approved by the session auto-approve policy',
+        reason: input.reason,
+      });
+      return { approved: true, scope: 'once', reviewer: 'auto_approve', reviewReason: 'Approved by the session auto-approve policy' };
+    }
+
+    if (context.approvalMode === 'ai_review' && this.config.aiApprovalReviewer) {
+      try {
+        const review = await this.config.aiApprovalReviewer.review({
+          approvalId,
+          runId: context.runId,
+          sessionId: context.sessionId,
+          userRequest: context.userRequest,
+          environment: context.environment,
+          origin: context.origin,
+          tool: input.tool,
+          source: input.source,
+          input: input.input,
+        }, { signal: context.signal });
+        if (review.decision !== 'escalated') {
+          this.recordToolApproval(run.id, input.callId, {
+            approvalId,
+            decision: review.decision,
+            reviewer: 'ai',
+            reviewReason: review.reason,
+            reason: input.reason,
+          });
+          return {
+            approved: review.decision === 'approved',
+            scope: 'once',
+            reviewer: 'ai',
+            reviewReason: review.reason,
+            ...(review.decision === 'rejected' ? { message: review.reason } : {}),
+          };
+        }
+        return this.requestUserToolApproval(run, eventBus, input, approvalId, 'ai', review.reason);
+      } catch (error) {
+        if (context.signal?.aborted) throw error;
+        return this.requestUserToolApproval(run, eventBus, input, approvalId, 'ai', 'AI review unavailable; escalated to the user');
+      }
+    }
+
+    return this.requestUserToolApproval(run, eventBus, input, approvalId, 'user');
+  }
+
+  private requestUserToolApproval(
+    run: RuntimeRun,
+    eventBus: EventBus,
+    input: ToolApprovalRequest,
+    approvalId = id('apv'),
+    reviewer: 'user' | 'ai' = 'user',
+    reviewReason?: string,
+  ): Promise<ToolApprovalDecision> {
+    const pendingApproval: PendingApproval = {
       approval_id: approvalId,
+      ...(input.callId ? { call_id: input.callId } : {}),
       kind: 'tool',
       reason: input.reason,
-      risk: input.risk,
       action: {
         tool: input.tool,
-        input: input.input,
+        input: safeApprovalInput(input.input),
       },
       created_at: new Date().toISOString(),
     };
-
-    eventBus.emit('approval.required', run.pending_approval);
-    this.config.onChange?.();
+    run.pending_approval = pendingApproval;
+    this.setStatus(run, 'awaiting_approval');
 
     return new Promise<ToolApprovalDecision>((resolve, reject) => {
       this.pendingApprovals.set(approvalId, {
         runId: run.id,
         resolve,
         reject,
+        reviewer,
+        reviewReason,
       });
+      eventBus.emit('approval.required', pendingApproval);
     });
   }
 
@@ -286,7 +399,6 @@ export class RunManager {
     input: { callId: string; question: string; options: Array<{ id: string; label: string }> },
   ): Promise<{ id: string; label: string }> {
     const askId = id('ask');
-    run.status = 'awaiting_user';
     run.pending_ask = {
       ask_id: askId,
       call_id: input.callId,
@@ -294,6 +406,7 @@ export class RunManager {
       options: input.options,
       created_at: new Date().toISOString(),
     };
+    this.setStatus(run, 'awaiting_user');
 
     eventBus.emit('ask_user.required', run.pending_ask);
 
@@ -319,30 +432,15 @@ export class RunManager {
     this.pendingAsks.delete(askId);
     const pendingAsk = run.pending_ask;
     run.pending_ask = undefined;
-    run.status = 'running';
+    this.setStatus(run, 'running');
 
-    const session = this.config.sessions.get(run.session_id);
-    if (session) {
-      const questionCreatedAt = pendingAsk.created_at;
-      const answerCreatedAt = new Date().toISOString();
-      session.messages.push(
-        {
-          id: id('msg'),
-          role: 'assistant',
-          content: pendingAsk.question,
-          created_at: questionCreatedAt,
-        },
-        {
-          id: id('msg'),
-          role: 'user',
-          content: selected.label,
-          created_at: answerCreatedAt,
-        },
-      );
-      session.updated_at = answerCreatedAt;
-    }
+    const event = new EventBus(run).emit('ask_user.answered', {
+      ask_id: pendingAsk.ask_id,
+      call_id: pendingAsk.call_id,
+      selected,
+    });
+    this.observers.notify(event, run);
 
-    this.config.onChange?.();
     pending.resolve(selected);
 
     return { status: 200 as const, run };
@@ -366,29 +464,39 @@ export class RunManager {
     const pendingApproval = run.pending_approval;
     this.pendingApprovals.delete(approvalId);
     run.pending_approval = undefined;
-    run.status = 'running';
-    this.config.onChange?.();
-    const scope = options.scope || 'session';
-    const cleanupResult =
+    this.setStatus(run, 'running');
+    const scope = pendingApproval.kind === 'tool' ? 'once' : (options.scope || 'session');
+    this.recordApproval(run.id, pendingApproval, decision, scope, pending.reviewer || 'user', pending.reviewReason);
+    const event = new EventBus(run).emit('approval.resolved', {
+      approval_id: pendingApproval.approval_id,
+      decision,
+      scope,
+    });
+    this.observers.notify(event, run);
+    const workspaceApproval =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
-        ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope)
+        ? this.config.approveWorkspaceRoot?.(pendingApproval.suggested_root, scope, run.session_id)
         : undefined;
 
     pending.resolve({
       approved: decision === 'approved',
       scope,
       message: options.message,
-      cleanup: typeof cleanupResult === 'function' ? cleanupResult : undefined,
+      reviewer: pending.reviewer || 'user',
+      reviewReason: pending.reviewReason,
+      approvedRoots: workspaceApproval?.approvedRoots,
+      cleanup: workspaceApproval?.cleanup,
     });
 
     return { status: 200 as const, run };
   }
 
-  cancel(runId: string) {
+  cancel(runId: string, reason: 'user' | 'shutdown' = 'user') {
     const run = this.config.runs.get(runId);
     if (!run) return null;
     run.abort = true;
-    run.status = 'cancelled';
+    run.cancel_reason = reason;
+    this.setStatus(run, 'cancelled');
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
 
@@ -406,7 +514,7 @@ export class RunManager {
       pending?.reject(new Error('Run cancelled'));
     }
 
-    new EventBus(run).emit('agent.done', {
+    const event = new EventBus(run).emit('agent.done', {
       status: 'cancelled',
       usage: {
         steps: run.seq,
@@ -414,10 +522,35 @@ export class RunManager {
         duration_ms: Date.now() - run.started_at,
       },
     });
-    this.config.onChange?.();
+    this.observers.notify(event, run);
     this.pruneTerminalRuns();
 
     return run;
+  }
+
+  addObserver(observer: (event: AgentEvent, run: RuntimeRun) => void) {
+    return this.observers.addEventObserver(observer);
+  }
+
+  addLifecycleObserver(observer: (event: RunLifecycleEvent) => void) {
+    return this.observers.addLifecycleObserver(observer);
+  }
+
+  private setStatus(run: RuntimeRun, status: RunStatus) {
+    this.observers.notifyStatus(run, status);
+  }
+
+  cancelAll(reason: 'user' | 'shutdown' = 'user') {
+    for (const run of this.config.runs.values()) {
+      if (!isActiveRun(run)) continue;
+      this.cancel(run.id, reason);
+    }
+  }
+
+  async shutdown() {
+    this.shuttingDown = true;
+    this.cancelAll('shutdown');
+    await Promise.allSettled([...this.activeExecutions.values()]);
   }
 
   private pruneTerminalRuns() {
@@ -429,4 +562,111 @@ export class RunManager {
       this.config.runs.delete(run.id);
     }
   }
+
+  private recordApproval(
+    runId: string,
+    approval: PendingApproval,
+    decision: 'approved' | 'rejected',
+    scope: 'once' | 'session' | 'persistent',
+    reviewer: 'user' | 'ai' | 'auto_approve' = 'user',
+    reviewReason?: string,
+  ) {
+    if (!approval.call_id) return;
+
+    let runRecords = this.approvalRecords.get(runId);
+    if (!runRecords) {
+      runRecords = new Map();
+      this.approvalRecords.set(runId, runRecords);
+    }
+    const records = runRecords.get(approval.call_id) || [];
+    records.push({
+      approval_id: approval.approval_id,
+      kind: approval.kind,
+      decision,
+      scope,
+      reason: approval.reason,
+      reviewer,
+      ...(reviewReason ? { review_reason: reviewReason } : {}),
+      ...(reviewer === 'auto_approve' ? { approval_mode: 'auto_approve' as const } : {}),
+    });
+    runRecords.set(approval.call_id, records);
+  }
+
+  private recordToolApproval(
+    runId: string,
+    callId: string | undefined,
+    input: {
+      approvalId: string;
+      decision: 'approved' | 'rejected';
+      reviewer: 'ai' | 'auto_approve';
+      reviewReason: string;
+      reason: string;
+    },
+  ) {
+    if (!callId) return;
+    let runRecords = this.approvalRecords.get(runId);
+    if (!runRecords) {
+      runRecords = new Map();
+      this.approvalRecords.set(runId, runRecords);
+    }
+    const records = runRecords.get(callId) || [];
+    records.push({
+      approval_id: input.approvalId,
+      kind: 'tool',
+      decision: input.decision,
+      scope: 'once',
+      reason: input.reason,
+      reviewer: input.reviewer,
+      review_reason: input.reviewReason,
+      approval_mode: input.reviewer === 'auto_approve' ? 'auto_approve' : 'ai_review',
+    });
+    runRecords.set(callId, records);
+  }
+
+  private consumeApprovalRecords(runId: string, callId: string) {
+    const runRecords = this.approvalRecords.get(runId);
+    const records = runRecords?.get(callId) || [];
+    runRecords?.delete(callId);
+    if (runRecords?.size === 0) this.approvalRecords.delete(runId);
+    return records;
+  }
+
+}
+
+function isActiveRun(run: RuntimeRun) {
+  return run.status !== 'completed'
+    && run.status !== 'failed'
+    && run.status !== 'cancelled'
+    && run.status !== 'timeout';
+}
+
+function snapshotEnvironment(
+  environment: SessionEnvironment | undefined,
+  defaultWorkspaceRoot: string,
+): SessionEnvironment {
+  return structuredClone(environment || {
+    approval_mode: 'manual',
+    system: {
+      platform: 'other',
+      arch: 'unknown',
+      shell: 'unknown',
+    },
+    workspace: { root: defaultWorkspaceRoot },
+  });
+}
+
+function safeApprovalInput(value: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeApprovalValue(value) as Record<string, unknown>;
+}
+
+function sanitizeApprovalValue(value: unknown, key = ''): unknown {
+  if (/(api[_-]?key|token|password|secret|authorization|cookie)/i.test(key)) return '[REDACTED]';
+  if (typeof value === 'string') return value.length <= 512 ? value : `${value.slice(0, 512)}…`;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => sanitizeApprovalValue(item));
+  if (!value || typeof value !== 'object') return value;
+  const result: Record<string, unknown> = {};
+  for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+    result[childKey] = sanitizeApprovalValue(childValue, childKey);
+  }
+  return result;
 }

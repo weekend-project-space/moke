@@ -7,8 +7,6 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import type { RiskLevel } from '../../protocol/src/index.js';
-
 const rootConfigSchema = z.union([
   z.string().min(1),
   z.object({
@@ -26,8 +24,8 @@ const serverConfigSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   timeout_ms: z.number().int().positive().default(30000),
   max_output_chars: z.number().int().positive().default(20000),
-  tool_risks: z.record(z.string(), z.enum(['safe', 'write', 'dangerous'])).default({}),
   disabled_tools: z.array(z.string()).default([]),
+  read_only_tools: z.array(z.string()).default([]),
   roots: z.array(rootConfigSchema).optional(),
 });
 
@@ -61,9 +59,9 @@ export type McpTool = {
   originalName: string;
   serverId: string;
   description: string;
-  risk: RiskLevel;
   inputSchema: Record<string, unknown>;
   maxOutputChars: number;
+  readOnly: boolean;
 };
 
 type McpConnection = {
@@ -171,6 +169,7 @@ export class McpManager {
     }
 
     const disabledTools = new Set(config.disabled_tools);
+    const readOnlyTools = new Set(config.read_only_tools);
     const tools = (toolList.tools || [])
       .filter((tool) => !disabledTools.has(tool.name))
       .map((tool) => ({
@@ -178,9 +177,9 @@ export class McpManager {
         originalName: tool.name,
         serverId: config.id,
         description: tool.description || `MCP tool ${tool.name} from ${config.id}`,
-        risk: config.tool_risks[tool.name] || 'safe',
         inputSchema: (tool.inputSchema || {}) as Record<string, unknown>,
         maxOutputChars: config.max_output_chars,
+        readOnly: readOnlyTools.has(tool.name),
       }));
 
     const connection = {

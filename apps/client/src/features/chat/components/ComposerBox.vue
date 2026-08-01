@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, Image, Plus, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Brain, Check, ChevronDown, FolderOpen, FolderPlus, Hand, Image, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
-import type { ImageAttachment, ReasoningEffort } from '../model/conversation'
+import type { ApprovalMode, ImageAttachment, ReasoningEffort } from '../model/conversation'
+import ComposerSelectControl from './ComposerSelectControl.vue'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
 
@@ -15,15 +16,22 @@ const props = defineProps<{
   primaryIsStop: boolean
   reasoningEffort: ComposerReasoningEffort
   reasoningOptions: ReasoningEffort[]
+  approvalMode?: ApprovalMode
+  nativeWorkspacePicker?: boolean
+  workspaceRoot?: string
+  workspaceSuggestions?: string[]
 }>()
 
 const emit = defineEmits<{
   addAttachments: [attachments: ImageAttachment[]]
+  chooseWorkspaceDirectory: []
   submit: []
   input: []
   enter: [event: KeyboardEvent]
   removeAttachment: [id: string]
   'update:reasoningEffort': [value: ComposerReasoningEffort]
+  'update:approvalMode': [value: ApprovalMode]
+  'update:workspaceRoot': [value: string]
   'update:inputValue': [value: string]
 }>()
 
@@ -34,10 +42,16 @@ const dragDepth = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const thinkingMenuOpen = ref(false)
+const approvalMenuOpen = ref(false)
+const workspaceMenuOpen = ref(false)
+const workspaceCustomOpen = ref(false)
+const workspaceDraft = ref('')
 const isDraggingImage = ref(false)
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
+const addOptions = ['image'] as const
+const approvalOptions: ApprovalMode[] = ['manual', 'ai_review', 'auto_approve']
 
 function resize() {
   const input = textarea.value
@@ -76,9 +90,8 @@ function thinkingOptions() {
   return ['default' as const, ...props.reasoningOptions]
 }
 
-function chooseReasoning(value: ComposerReasoningEffort) {
-  thinkingMenuOpen.value = false
-  emit('update:reasoningEffort', value)
+function chooseReasoning(value: string) {
+  emit('update:reasoningEffort', value as ComposerReasoningEffort)
 }
 
 function imageId() {
@@ -172,22 +185,91 @@ function chooseImages() {
   fileInput.value?.click()
 }
 
-function toggleAddMenu() {
-  thinkingMenuOpen.value = false
-  addMenuOpen.value = !addMenuOpen.value
+function chooseAddAction(value: string) {
+  if (value === 'image') chooseImages()
 }
 
-function toggleThinkingMenu() {
+function updateAddMenu(value: boolean) {
+  thinkingMenuOpen.value = false
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
+  addMenuOpen.value = value
+}
+
+function updateThinkingMenu(value: boolean) {
   addMenuOpen.value = false
-  thinkingMenuOpen.value = !thinkingMenuOpen.value
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
+  thinkingMenuOpen.value = value
+}
+
+function approvalModeLabel(value: ApprovalMode) {
+  return value === 'manual' ? 'Manual' : value === 'ai_review' ? 'AI review' : 'Auto approve'
+}
+
+function updateApprovalMenu(value: boolean) {
+  addMenuOpen.value = false
+  thinkingMenuOpen.value = false
+  workspaceMenuOpen.value = false
+  approvalMenuOpen.value = value
+}
+
+function chooseApprovalMode(value: string) {
+  emit('update:approvalMode', value as ApprovalMode)
+}
+
+function updateWorkspaceMenu(value: boolean) {
+  addMenuOpen.value = false
+  thinkingMenuOpen.value = false
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = value
+  workspaceCustomOpen.value = false
+}
+
+function workspaceOptions() {
+  return [...new Set([props.workspaceRoot, ...(props.workspaceSuggestions || [])].filter((root): root is string => Boolean(root)))].slice(0, 5)
+}
+
+function workspaceName(root: string) {
+  const normalized = root.replace(/[\\/]+$/, '')
+  return normalized.split(/[\\/]/).at(-1) || root
+}
+
+function chooseWorkspace(root: string) {
+  emit('update:workspaceRoot', root)
+}
+
+function beginCustomWorkspace() {
+  if (props.nativeWorkspacePicker) {
+    workspaceMenuOpen.value = false
+    emit('chooseWorkspaceDirectory')
+    return
+  }
+  openWorkspaceEditor()
+}
+
+function openWorkspaceEditor() {
+  workspaceDraft.value = props.workspaceRoot || ''
+  workspaceMenuOpen.value = true
+  workspaceCustomOpen.value = true
+}
+
+function applyWorkspace() {
+  const value = workspaceDraft.value.trim()
+  if (!value) return
+  emit('update:workspaceRoot', value)
+  workspaceMenuOpen.value = false
+  workspaceCustomOpen.value = false
 }
 
 function closeAddMenuOnOutsideClick(event: PointerEvent) {
-  if (!addMenuOpen.value && !thinkingMenuOpen.value) return
+  if (!addMenuOpen.value && !thinkingMenuOpen.value && !approvalMenuOpen.value && !workspaceMenuOpen.value) return
   const target = event.target
   if (target instanceof Node && composerEl.value?.contains(target)) return
   addMenuOpen.value = false
   thinkingMenuOpen.value = false
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
 }
 
 onMounted(() => {
@@ -220,6 +302,8 @@ function handleDragEnter(event: DragEvent) {
   isDraggingImage.value = true
   addMenuOpen.value = false
   thinkingMenuOpen.value = false
+  approvalMenuOpen.value = false
+  workspaceMenuOpen.value = false
 }
 
 function handleDragOver(event: DragEvent) {
@@ -250,30 +334,11 @@ function handleDrop(event: DragEvent) {
   void addImageFiles(files)
 }
 
-defineExpose({ focus, resize })
+defineExpose({ focus, openWorkspaceEditor, resize })
 </script>
 
 <template>
   <form ref="composerEl" class="composer" @submit.prevent="$emit('submit')">
-    <div v-if="addMenuOpen" class="composer-option-list">
-      <button type="button" @click="chooseImages">
-        <Image :size="15" stroke-width="2.1" />
-        <span>{{ uiText.composer.chooseImage }}</span>
-      </button>
-    </div>
-    <div v-if="thinkingMenuOpen" class="composer-option-list composer-thinking-menu">
-      <button
-        v-for="option in thinkingOptions()"
-        :key="option"
-        type="button"
-        :class="{ active: option === props.reasoningEffort }"
-        @click="chooseReasoning(option)"
-      >
-        <Check v-if="option === props.reasoningEffort" :size="14" stroke-width="2.2" />
-        <Brain v-else :size="14" stroke-width="2.1" />
-        <span>{{ reasoningLabel(option) }}</span>
-      </button>
-    </div>
     <div
       class="composer-panel input-mode"
       :class="{ dragging: isDraggingImage }"
@@ -309,37 +374,162 @@ defineExpose({ focus, resize })
           ></textarea>
         </div>
         <div class="composer-footer">
-          <button
-            class="composer-secondary-action"
-            type="button"
-            :aria-label="uiText.composer.add"
-            :title="uiText.composer.add"
-            :class="{ active: addMenuOpen }"
-            @click="toggleAddMenu"
+          <div class="composer-footer-left">
+          <ComposerSelectControl
+            :open="addMenuOpen"
+            :options="addOptions"
+            menu-class="composer-add-menu"
+            @select="chooseAddAction"
+            @update:open="updateAddMenu"
           >
-            <Plus :size="17" stroke-width="2.2" />
-          </button>
-          <div
-            v-if="props.modelName"
-            class="composer-model"
-            :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
+            <template #option-icon>
+              <Image :size="15" stroke-width="2.1" />
+            </template>
+            <template #option-label>{{ uiText.composer.chooseImage }}</template>
+            <template #trigger="{ open, toggle }">
+              <button
+                class="composer-secondary-action"
+                type="button"
+                :aria-label="uiText.composer.add"
+                :title="uiText.composer.add"
+                :aria-expanded="open"
+                :class="{ active: open }"
+                @click="toggle"
+              >
+                <Plus :size="17" stroke-width="2.2" />
+              </button>
+            </template>
+          </ComposerSelectControl>
+          <ComposerSelectControl
+            v-if="props.workspaceRoot !== undefined"
+            :open="workspaceMenuOpen"
+            :options="workspaceOptions()"
+            :selected="props.workspaceRoot || ''"
+            menu-class="composer-workspace-menu"
+            @select="chooseWorkspace"
+            @update:open="updateWorkspaceMenu"
           >
-            <Box :size="14" stroke-width="1.9" />
-            <span>{{ props.modelName }}</span>
+            <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
+            <template #option-icon>
+              <FolderOpen :size="17" stroke-width="1.9" />
+            </template>
+            <template #option-label="{ option }">
+              <span class="composer-workspace-option-copy">
+                <strong>{{ workspaceName(option) }}</strong>
+                <small>{{ option }}</small>
+              </span>
+            </template>
+            <template #option-selected>
+              <Check :size="15" stroke-width="2.3" />
+            </template>
+            <template #menu-footer>
+              <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
+                <input
+                  id="composer-workspace-input"
+                  v-model="workspaceDraft"
+                  :aria-label="uiText.composer.workspace"
+                  type="text"
+                  @keydown.enter.prevent="applyWorkspace"
+                />
+                <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
+              </div>
+              <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
+                <FolderPlus :size="17" stroke-width="1.9" />
+                <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
+              </button>
+            </template>
+            <template #trigger="{ open, toggle }">
+              <button
+                class="composer-workspace-action"
+                type="button"
+                :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
+                :title="props.workspaceRoot || uiText.composer.workspace"
+                :class="{ active: open }"
+                @click="toggle"
+              >
+                <FolderOpen :size="14" stroke-width="2.1" />
+                <span>{{ props.workspaceRoot || uiText.composer.workspace }}</span>
+                <ChevronDown :size="13" stroke-width="2.2" />
+              </button>
+            </template>
+          </ComposerSelectControl>
+          <ComposerSelectControl
+            v-if="props.approvalMode"
+            :open="approvalMenuOpen"
+            :options="approvalOptions"
+            :selected="props.approvalMode"
+            menu-class="composer-approval-menu"
+            @select="chooseApprovalMode"
+            @update:open="updateApprovalMenu"
+          >
+            <template #option-icon="{ option }">
+              <Hand v-if="option === 'manual'" :size="15" stroke-width="2.1" />
+              <ShieldCheck v-else-if="option === 'ai_review'" :size="15" stroke-width="2.1" />
+              <ShieldAlert v-else :size="15" stroke-width="2.1" />
+            </template>
+            <template #option-selected>
+              <Check :size="14" stroke-width="2.3" />
+            </template>
+            <template #option-label="{ option }">{{ approvalModeLabel(option as ApprovalMode) }}</template>
+            <template #trigger="{ open, toggle }">
+              <button
+                class="composer-approval-action"
+                type="button"
+                aria-label="Approval mode"
+                title="Approval mode"
+                :class="{ active: open }"
+                @click="toggle"
+              >
+                <ShieldCheck :size="14" stroke-width="2.1" />
+                <span>{{ approvalModeLabel(props.approvalMode) }}</span>
+                <ChevronDown :size="13" stroke-width="2.2" />
+              </button>
+            </template>
+          </ComposerSelectControl>
           </div>
-          <button
-            v-if="props.reasoningOptions.length"
-            class="composer-thinking-action"
-            type="button"
-            :aria-label="uiText.composer.thinking"
-            :title="uiText.composer.thinking"
-            :class="{ active: thinkingMenuOpen }"
-            @click="toggleThinkingMenu"
-          >
-            <Brain :size="14" stroke-width="2.1" />
-            <span>{{ reasoningLabel(props.reasoningEffort) }}</span>
-            <ChevronDown :size="13" stroke-width="2.2" />
-          </button>
+          <div class="composer-footer-right">
+          <div v-if="props.modelName || props.reasoningOptions.length" class="composer-model-context">
+            <div
+              v-if="props.modelName"
+              class="composer-model"
+              :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
+            >
+              <Box :size="14" stroke-width="1.9" />
+              <span>{{ props.modelName }}</span>
+            </div>
+            <ComposerSelectControl
+              v-if="props.reasoningOptions.length"
+              align="end"
+              :open="thinkingMenuOpen"
+              :options="thinkingOptions()"
+              :selected="props.reasoningEffort"
+              menu-class="composer-thinking-menu"
+              @select="chooseReasoning"
+              @update:open="updateThinkingMenu"
+            >
+              <template #option-icon>
+                <Brain :size="14" stroke-width="2.1" />
+              </template>
+              <template #option-selected>
+                <Check :size="14" stroke-width="2.2" />
+              </template>
+              <template #option-label="{ option }">{{ reasoningLabel(option as ComposerReasoningEffort) }}</template>
+              <template #trigger="{ open, toggle }">
+                <button
+                  class="composer-thinking-action"
+                  type="button"
+                  :aria-label="uiText.composer.thinking"
+                  :title="uiText.composer.thinking"
+                  :class="{ active: open }"
+                  @click="toggle"
+                >
+                  <Brain :size="14" stroke-width="2.1" />
+                  <span>{{ reasoningLabel(props.reasoningEffort) }}</span>
+                  <ChevronDown :size="13" stroke-width="2.2" />
+                </button>
+              </template>
+            </ComposerSelectControl>
+          </div>
           <input
             ref="fileInput"
             class="composer-file-input"
@@ -359,6 +549,7 @@ defineExpose({ focus, resize })
             <Square v-if="primaryIsStop" :size="15" fill="currentColor" stroke-width="2.2" />
             <ArrowUp v-else :size="17" stroke-width="2.4" />
           </button>
+          </div>
         </div>
       </div>
       <p v-if="attachmentError" class="composer-attachment-error" role="status">{{ attachmentError }}</p>

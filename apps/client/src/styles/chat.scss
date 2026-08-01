@@ -3,6 +3,7 @@
   display: flex;
   min-height: 0;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   --content-width: min(728px, calc(100% - 48px));
   background: var(--surface-chat-panel);
@@ -16,7 +17,8 @@
   column-gap: 12px;
   min-height: 48px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-solid);
 }
 
 .topbar-side {
@@ -35,7 +37,8 @@
 }
 
 .sidebar-toggle,
-.new-session {
+.new-session,
+.trace-summary {
   display: inline-flex;
   width: 30px;
   min-width: 30px;
@@ -49,7 +52,11 @@
 
   &:hover {
     color: var(--ink);
-    background: var(--surface-panel-muted);
+    background: var(--surface-control-hover);
+  }
+
+  &:active {
+    background: var(--surface-control-active);
   }
 }
 
@@ -99,12 +106,13 @@
   white-space: nowrap;
 }
 
-.trace-summary {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
+.tool-approval-audit {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .server-pill {

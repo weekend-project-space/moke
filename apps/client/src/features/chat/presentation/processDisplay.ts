@@ -5,7 +5,9 @@ import type {
   ToolRendererKind,
   ToolStepSummary,
   ToolStepViewItem,
+  ToolStepState,
 } from './types'
+import type { ToolApprovalRecord } from '../model/conversation'
 import { summarizeOutput } from './toolDisplay'
 import { uiText } from '../../../text/uiText'
 
@@ -67,13 +69,21 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
       const step = findStep(call)
 
       if (step) {
-        step.tone = item.tone
         step.outputRaw = item.raw
+        const outputSummary = summarizeToolResult(step.renderer, item.raw)
+        const resultTone = step.renderer === 'command' && outputSummary.exitCode !== undefined && outputSummary.exitCode !== 0
+          ? 'error'
+          : item.tone
+        step.tone = resultTone
         step.summary = {
           ...step.summary,
-          ...summarizeToolResult(step.renderer, item.raw),
+          ...outputSummary,
         }
-        step.objectLabel = combineToolStepDetail(step.objectLabel, item.raw, item.tone)
+        if (step.toolCategory !== 'skill') {
+          step.objectLabel = combineToolStepDetail(step.objectLabel, item.raw, resultTone)
+        }
+        step.approvals = item.approvals
+        step.state = resolveToolStepState(resultTone, item.approvals)
         if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
         if (lastPendingCall === call) lastPendingCall = null
         continue
@@ -120,7 +130,31 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     summary: call.summary || {},
     toolCategory: call.toolCategory || 'run',
     inputRaw: call.raw,
+    approvals: call.approvals,
+    state: resolveToolStepState(call.tone, call.approvals),
   }
+}
+
+export function resolveToolStepState(
+  tone: ProcessItem['tone'],
+  approvals: ToolApprovalRecord[] = [],
+): ToolStepState | undefined {
+  const approval = approvals.at(-1)
+  if (approval?.decision === 'rejected') {
+    return { kind: 'rejected', label: uiText.tool.approvalRejected }
+  }
+  if (tone === 'error') {
+    return { kind: 'failed', label: uiText.process.failed }
+  }
+  if (approval?.decision === 'approved') {
+    const label = approval.scope === 'persistent'
+      ? uiText.tool.approvalAllowedAlways
+      : approval.scope === 'session'
+        ? uiText.tool.approvalAllowedSession
+        : uiText.tool.approvalAllowedOnce
+    return { kind: 'approved', label: approval.reviewer ? `${label} (${approval.reviewer})` : label }
+  }
+  return undefined
 }
 
 function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | undefined): ToolStepSummary {
@@ -134,12 +168,24 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
 
     const output = parsed as Record<string, unknown>
 
-    if (renderer === 'search') {
-      const matches = Array.isArray(output.matches) ? output.matches : []
+    if (renderer === 'ask-user') {
+      const selected = output.selected && typeof output.selected === 'object' && !Array.isArray(output.selected)
+        ? output.selected as Record<string, unknown>
+        : {}
       return {
-        count: typeof output.count === 'number' ? output.count : matches.length,
-        files: extractResultFiles(matches),
-        preview: output.error ? String(output.error) : undefined,
+        question: typeof output.question === 'string' ? output.question : undefined,
+        selectedLabel: typeof selected.label === 'string' ? selected.label : undefined,
+      }
+    }
+
+    if (renderer === 'search') {
+      const results = Array.isArray(output.results) ? output.results : []
+      const matches = Array.isArray(output.matches) ? output.matches : []
+      const searchableItems = results.length ? results : matches
+      return {
+        count: typeof output.count === 'number' ? output.count : searchableItems.length,
+        files: extractResultFiles(searchableItems),
+        preview: output.error ? String(output.error) : searchResultPreview(results),
       }
     }
 
@@ -174,6 +220,10 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
 
     if (renderer === 'browser') {
       return { preview: browserResultPreview(output) }
+    }
+
+    if (renderer === 'channel') {
+      return { preview: channelResultPreview(output) }
     }
 
     return { preview: summarizeOutput(output) }
@@ -225,8 +275,21 @@ function previewFromOutput(output: Record<string, unknown>) {
 }
 
 function browserResultPreview(output: Record<string, unknown>) {
-  const title = typeof output.title === 'string' ? output.title.trim() : ''
-  const url = typeof output.url === 'string' ? output.url.trim() : ''
+  const snapshot = objectValue(output.snapshot)
+  const pages = Array.isArray(output.pages) ? output.pages : []
+  const activePageId = typeof output.activePageId === 'number' ? output.activePageId : null
+  const active = objectValue(pages.find((page) => objectValue(page).pageId === activePageId))
+  const title = firstText('title', output, snapshot, active)
+  const url = firstText('url', output, snapshot, active)
+  const elements = Array.isArray(snapshot.elements) ? snapshot.elements.length : 0
+  const details = [
+    title,
+    url,
+    elements ? `${elements} elements` : '',
+    pages.length ? `${pages.length} tab${pages.length === 1 ? '' : 's'}` : '',
+  ].filter(Boolean)
+  if (details.length) return details.join(' · ')
+
   const text = typeof output.text === 'string' ? output.text.trim() : ''
   const message = typeof output.message === 'string' ? output.message.trim() : ''
 
@@ -236,6 +299,39 @@ function browserResultPreview(output: Record<string, unknown>) {
   if (text) return text
   if (message) return message
   return summarizeOutput(output)
+}
+
+function channelResultPreview(output: Record<string, unknown>) {
+  const receipts = Array.isArray(output.receipts) ? output.receipts : []
+  if (!receipts.length) return summarizeOutput(output)
+
+  const types = [...new Set(receipts.map((receipt) => objectValue(receipt).type).filter((type): type is string => typeof type === 'string'))]
+  const target = types.length ? ` (${types.join(', ')})` : ''
+  return `Delivered to ${receipts.length} message${receipts.length === 1 ? '' : 's'}${target}`
+}
+
+function searchResultPreview(results: unknown[]) {
+  const snippet = objectValue(results[0]).snippet
+  if (typeof snippet !== 'string' || !snippet.trim()) return undefined
+  return shortPreview(snippet)
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function firstText(key: string, ...sources: Record<string, unknown>[]) {
+  for (const source of sources) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return ''
+}
+
+function shortPreview(value: string) {
+  const text = value.replace(/\s+/g, ' ').trim()
+  return text.length <= 120 ? text : `${text.slice(0, 119)}...`
 }
 
 function processItemTimes(items: ProcessViewItem[]) {

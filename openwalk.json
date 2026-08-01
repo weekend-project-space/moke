@@ -4,5 +4,9 @@
     "version": "0.1.0",
     "private": true
   },
-  "tools": {}
+  "tools": {
+    "weibo/search": {},
+    "zhibo8/matches": {},
+    "zhihu/search": {}
+  }
 }

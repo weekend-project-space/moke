@@ -1,0 +1,438 @@
+.scheduled-tasks-workspace {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: var(--surface-solid);
+}
+
+.scheduled-tasks-header {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--line-faint);
+
+  h1 {
+    margin: 0;
+    font-size: var(--font-size-title);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+}
+
+.scheduled-task-primary {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border-radius: var(--radius-md);
+  color: #fff;
+  background: var(--primary);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+
+  &:hover {
+    background: var(--accent-strong);
+  }
+}
+
+.scheduled-tasks-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.scheduled-tasks-content {
+  width: min(900px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.scheduled-task-filters {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted-soft);
+
+  button {
+    height: 26px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-soft);
+    background: transparent;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+
+    &:hover {
+      color: var(--ink);
+    }
+
+    &.active {
+      color: var(--ink);
+      background: var(--surface-solid);
+      box-shadow: var(--shadow-control);
+    }
+  }
+}
+
+.scheduled-task-list {
+  margin-top: 18px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.scheduled-task-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 86px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.scheduled-task-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    overflow: hidden;
+    color: var(--ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-body);
+    font-weight: 600;
+  }
+
+  span,
+  small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    color: var(--ink-soft);
+    font-size: var(--font-size-meta);
+  }
+
+  small {
+    color: var(--ink-muted);
+    font-size: var(--font-size-caption);
+  }
+}
+
+.scheduled-task-switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--stroke-strong);
+  transition: background 0.14s ease;
+
+  span {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+    transition: transform 0.14s ease;
+  }
+
+  &[aria-checked='true'] {
+    background: var(--success);
+
+    span {
+      transform: translateX(14px);
+    }
+  }
+}
+
+.scheduled-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-icon-button);
+    color: var(--ink-muted);
+    background: transparent;
+
+    &:hover {
+      color: var(--ink);
+      background: var(--surface-control-hover);
+    }
+
+    &.danger:hover {
+      color: var(--danger);
+      background: var(--danger-soft);
+    }
+  }
+}
+
+.scheduled-task-empty {
+  display: flex;
+  min-height: 260px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ink-muted);
+  font-size: var(--font-size-ui);
+
+  strong {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  button {
+    padding: 6px 9px;
+    border-radius: var(--radius-md);
+    color: var(--accent-strong);
+    background: var(--accent-faint);
+  }
+}
+
+.scheduled-task-error {
+  margin: 12px 0 0;
+  color: var(--text-error);
+  font-size: var(--font-size-meta);
+}
+
+.scheduled-task-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--surface-overlay);
+}
+
+.scheduled-task-modal {
+  display: flex;
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-medium);
+  border-radius: var(--radius-lg);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-menu);
+
+  > header,
+  > footer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 12px 16px;
+  }
+
+  > header {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line-faint);
+
+    h2 {
+      margin: 0;
+      font-size: var(--font-size-title);
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    button {
+      display: inline-flex;
+      width: 28px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-icon-button);
+      color: var(--ink-soft);
+      background: transparent;
+
+      &:hover {
+        color: var(--ink);
+        background: var(--surface-control-hover);
+      }
+    }
+  }
+
+  > footer {
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--line-faint);
+
+    button {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-ui);
+      font-weight: 600;
+    }
+
+    .secondary {
+      border: 1px solid var(--border-control);
+      background: var(--surface-solid);
+    }
+
+    .primary {
+      color: #fff;
+      background: var(--primary);
+    }
+  }
+}
+
+.scheduled-task-form {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 15px;
+  padding: 16px;
+  overflow-y: auto;
+
+  label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+
+    > span {
+      color: var(--ink-soft);
+      font-size: var(--font-size-meta);
+      font-weight: 600;
+    }
+  }
+
+  input,
+  textarea,
+  select {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    box-shadow: var(--shadow-input);
+    font-size: var(--font-size-ui);
+
+    &:focus {
+      border-color: var(--focus-control-border);
+      outline: 3px solid var(--focus-control-ring);
+    }
+  }
+
+  input,
+  select {
+    height: 36px;
+    padding: 0 10px;
+  }
+
+  textarea {
+    min-height: 112px;
+    resize: vertical;
+    padding: 9px 10px;
+    line-height: 1.5;
+  }
+}
+
+.scheduled-task-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  .wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.scheduled-task-workspace-input {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding-left: 9px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  color: var(--ink-muted);
+  background: var(--surface-input);
+
+  &:focus-within {
+    border-color: var(--focus-control-border);
+    outline: 3px solid var(--focus-control-ring);
+  }
+
+  input {
+    border: 0;
+    box-shadow: none;
+
+    &:focus {
+      outline: 0;
+    }
+  }
+
+  button {
+    height: 28px;
+    margin-right: 4px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-soft);
+    background: var(--surface-control);
+    font-size: var(--font-size-meta);
+  }
+}
+
+.scheduled-task-enabled {
+  align-self: end;
+  display: flex !important;
+  height: 36px;
+  align-items: center;
+  flex-direction: row !important;
+  gap: 8px !important;
+
+  input {
+    width: 15px;
+    height: 15px;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .scheduled-tasks-content {
+    width: calc(100% - 28px);
+    padding-top: 18px;
+  }
+
+  .scheduled-task-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .scheduled-task-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+
+  .scheduled-task-form-grid {
+    grid-template-columns: 1fr;
+
+    .wide {
+      grid-column: auto;
+    }
+  }
+}

@@ -1,1 +1,1 @@
-{"main":{"identifier":"main","description":"Main desktop window capability","local":true,"windows":["main"],"permissions":["core:event:default"]}}
+{"main":{"identifier":"main","description":"Main desktop window capability","local":true,"windows":["main"],"permissions":["core:event:default","dialog:allow-open"]}}

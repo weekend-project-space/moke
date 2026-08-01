@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { RuntimeTool, SystemBackend } from '../../agent-runtime/src/index.js';
+import type { RuntimeTool, SystemBackend } from '@moke/agent-runtime';
 
 const lsSchema = z.object({
   path: z.string().optional(),
@@ -10,10 +10,13 @@ export function createLsTool(system: SystemBackend): RuntimeTool<typeof lsSchema
   return {
     name: 'ls',
     description: 'List files in a workspace directory with metadata.',
-    risk: 'safe',
+    approval: 'none',
     schema: lsSchema,
-    async handler(input) {
-      return system.ls(input.path);
+    async handler(input, context) {
+      return system.ls(input.path, {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+      });
     },
   };
 }

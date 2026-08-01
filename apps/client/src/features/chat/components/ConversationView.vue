@@ -9,6 +9,7 @@ import type { DisplayItem, TaskTemplate } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
+  apiBase: string
   copiedKey: string
   displayItems: DisplayItem[]
   sessionKey: string
@@ -321,10 +322,12 @@ defineExpose({
         :has-error="item.hasError"
         :is-active="item.isActive"
         :render-markdown="renderMarkdown"
+        :show-result-divider="shouldShowProcessDivider(item, index)"
         @toggle="emit('toggleProcessGroup', item.id)"
       />
       <MessageBubble
         v-else
+        :api-base="apiBase"
         :id="item.id"
         :message="item.message"
         :copied-key="copiedKey"
@@ -334,7 +337,6 @@ defineExpose({
         @fork="emit('forkMessage', $event)"
         @continue="emit('applySuggestion', uiText.chat.continuePrompt)"
       />
-      <div v-if="shouldShowProcessDivider(item, index)" class="process-result-divider" aria-hidden="true"></div>
     </template>
 
     <div v-if="streamingText" class="message-row assistant">

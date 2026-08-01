@@ -37,7 +37,7 @@ test('normalizeWindowsDrivePath removes a leading slash before a drive path', { 
   assert.equal(normalizeWindowsDrivePath('/E:/work/test/moke/.moke/state.json'), 'E:/work/test/moke/.moke/state.json');
 });
 
-test('resolveEnvPaths includes explicit env path before workspace env file', () => {
+test('resolveEnvPaths includes explicit env path before app-root env file', () => {
   const previousEnvPath = process.env.MOKE_ENV_PATH;
   try {
     process.env.MOKE_ENV_PATH = '.moke/.env';
@@ -51,23 +51,58 @@ test('resolveEnvPaths includes explicit env path before workspace env file', () 
   }
 });
 
-test('resolveServerConfig includes permissions path under workspace', async () => {
+test('resolveServerConfig separates app storage from the default workspace', async () => {
   const { resolveServerConfig } = await import(`./paths.js?permissions-test=${Date.now()}`);
+  const previousAppRoot = process.env.MOKE_APP_ROOT;
+  const previousDefaultWorkspace = process.env.MOKE_DEFAULT_WORKSPACE;
   const previousWorkspace = process.env.MOKE_WORKSPACE;
   const previousPermissionsPath = process.env.MOKE_PERMISSIONS_PATH;
 
   try {
-    process.env.MOKE_WORKSPACE = 'E:\\work\\test\\moke';
+    process.env.MOKE_APP_ROOT = 'E:\\moke-app';
+    process.env.MOKE_DEFAULT_WORKSPACE = 'E:\\work\\project-a';
+    delete process.env.MOKE_WORKSPACE;
     delete process.env.MOKE_PERMISSIONS_PATH;
 
-    assert.equal(
-      resolveServerConfig().permissionsPath,
-      resolve('E:\\work\\test\\moke', '.moke', 'permissions.json'),
-    );
+    const config = resolveServerConfig();
+    assert.equal(config.appRoot, resolve('E:\\moke-app'));
+    assert.equal(config.defaultWorkspaceRoot, resolve('E:\\work\\project-a'));
+    assert.equal(config.permissionsPath, resolve('E:\\moke-app', '.moke', 'permissions.json'));
   } finally {
+    if (previousAppRoot === undefined) delete process.env.MOKE_APP_ROOT;
+    else process.env.MOKE_APP_ROOT = previousAppRoot;
+    if (previousDefaultWorkspace === undefined) delete process.env.MOKE_DEFAULT_WORKSPACE;
+    else process.env.MOKE_DEFAULT_WORKSPACE = previousDefaultWorkspace;
     if (previousWorkspace === undefined) delete process.env.MOKE_WORKSPACE;
     else process.env.MOKE_WORKSPACE = previousWorkspace;
     if (previousPermissionsPath === undefined) delete process.env.MOKE_PERMISSIONS_PATH;
     else process.env.MOKE_PERMISSIONS_PATH = previousPermissionsPath;
+  }
+});
+
+test('resolveServerConfig keeps MOKE_WORKSPACE as the default-workspace compatibility alias', async () => {
+  const { resolveServerConfig } = await import(`./paths.js?store-test=${Date.now()}`);
+  const previousAppRoot = process.env.MOKE_APP_ROOT;
+  const previousDefaultWorkspace = process.env.MOKE_DEFAULT_WORKSPACE;
+  const previousWorkspace = process.env.MOKE_WORKSPACE;
+  const previousStorePath = process.env.MOKE_STORE_PATH;
+
+  try {
+    process.env.MOKE_APP_ROOT = 'E:\\moke-app';
+    delete process.env.MOKE_DEFAULT_WORKSPACE;
+    process.env.MOKE_WORKSPACE = 'E:\\work\\legacy-project';
+    delete process.env.MOKE_STORE_PATH;
+    const config = resolveServerConfig();
+    assert.equal(config.defaultWorkspaceRoot, resolve('E:\\work\\legacy-project'));
+    assert.equal(config.storePath, resolve('E:\\moke-app', '.moke', 'store'));
+  } finally {
+    if (previousAppRoot === undefined) delete process.env.MOKE_APP_ROOT;
+    else process.env.MOKE_APP_ROOT = previousAppRoot;
+    if (previousDefaultWorkspace === undefined) delete process.env.MOKE_DEFAULT_WORKSPACE;
+    else process.env.MOKE_DEFAULT_WORKSPACE = previousDefaultWorkspace;
+    if (previousWorkspace === undefined) delete process.env.MOKE_WORKSPACE;
+    else process.env.MOKE_WORKSPACE = previousWorkspace;
+    if (previousStorePath === undefined) delete process.env.MOKE_STORE_PATH;
+    else process.env.MOKE_STORE_PATH = previousStorePath;
   }
 });

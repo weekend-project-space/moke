@@ -7,12 +7,10 @@ type UseSessionNavigationOptions = {
   archiveSession: (id: string) => Promise<boolean>
   clearQueuedMessages: () => void
   closeTransientPanels: () => void
-  createSession: () => Promise<boolean>
   forkSession: (messageId: string) => Promise<boolean>
-  onCloseSettings: () => void
   selectAgentSession: (id: string) => Promise<boolean>
   sessionId: Ref<string>
-  showSettings: Ref<boolean>
+  startAgentSession: () => boolean
   sortedSessions: Readonly<Ref<SessionSummary[]>>
 }
 
@@ -28,18 +26,16 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
     if (!(await options.selectAgentSession(id))) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
     writeSessionIdToHash(id)
     options.closeTransientPanels()
     return true
   }
 
   async function startNewSession() {
-    if (!(await options.createSession())) return false
+    if (!options.startAgentSession()) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
-    writeSessionIdToHash(options.sessionId.value)
+    writeSessionIdToHash('')
     options.closeTransientPanels()
     return true
   }
@@ -48,7 +44,6 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
     if (!(await options.forkSession(messageId))) return false
 
     options.clearQueuedMessages()
-    options.showSettings.value = false
     writeSessionIdToHash(options.sessionId.value)
     options.closeTransientPanels()
     return true
@@ -60,22 +55,10 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
     return true
   }
 
-  function openSettings() {
-    options.showSettings.value = true
-    options.closeTransientPanels()
-  }
-
-  function closeSettings() {
-    options.showSettings.value = false
-    options.onCloseSettings()
-  }
-
   return {
     archiveSelectedSession,
-    closeSettings,
     forkMessage,
     initialSessionFromHash,
-    openSettings,
     selectSession,
     startNewSession,
   }

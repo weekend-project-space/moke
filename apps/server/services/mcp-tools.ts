@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 
 import { z } from 'zod';
 
-import { ToolExecutionError, type ToolRegistry } from '../../../packages/agent-runtime/src/index.js';
-import { McpManager, loadMcpConfig, type McpTool } from '../../../packages/mcp-client/src/index.js';
+import { ToolExecutionError, type ToolRegistry } from '@moke/agent-runtime';
+import { McpManager, loadMcpConfig, type McpTool } from '@moke/mcp-client';
 
 function describeMcpTool(tool: McpTool) {
   const schema = JSON.stringify(tool.inputSchema);
@@ -102,27 +102,14 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
         name: mcpTool.name,
         original_name: mcpTool.originalName,
         description: describeMcpTool(mcpTool),
-        risk: mcpTool.risk,
         source: {
           type: 'mcp',
           server_id: mcpTool.serverId,
         },
+        approval: mcpTool.readOnly ? 'none' : 'required',
         input_schema: mcpTool.inputSchema,
         schema: jsonSchemaToZod(mcpTool.inputSchema),
         async handler(input) {
-          if (mcpTool.risk !== 'safe') {
-            throw new ToolExecutionError(`MCP tool is not allowed without approval: ${mcpTool.name}`, {
-              error: {
-                code: 'TOOL_NOT_ALLOWED',
-                message: `MCP tool is not allowed without approval: ${mcpTool.name}`,
-                tool: mcpTool.name,
-                original_name: mcpTool.originalName,
-                server_id: mcpTool.serverId,
-                risk: mcpTool.risk,
-              },
-            });
-          }
-
           const toolInput = input && typeof input === 'object' ? input : {};
           try {
             const result = await mcpManager.callTool(mcpTool.name, toolInput as Record<string, unknown>);

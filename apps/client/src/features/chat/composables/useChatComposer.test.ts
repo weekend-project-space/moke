@@ -60,10 +60,17 @@ test('useChatComposer restores a failed direct submission', async () => {
     runId: ref(''),
     sendMessage: async () => false,
     serverStatus: ref('online'),
-    sessionId: ref('session_1'),
+    sessionId: ref(''),
   })
   composer.input.value = 'retry me'
+  composer.attachments.value = [{
+    id: 'image_retry',
+    kind: 'image',
+    mime_type: 'image/png',
+    data_url: 'data:image/png;base64,AA==',
+  }]
 
   assert.equal(await composer.submitMessage(), false)
   assert.equal(composer.input.value, 'retry me')
+  assert.equal(composer.attachments.value[0]?.id, 'image_retry')
 })

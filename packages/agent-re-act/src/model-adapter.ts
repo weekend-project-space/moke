@@ -1,11 +1,13 @@
 import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
-import type { AgentStep, ImageAttachment, Message, ToolCall } from '../../protocol/src/index.js';
-import type { AgentRunInput } from '../../agent-runtime/src/index.js';
+import type { AgentStep, ResolvedImageAttachment, TokenUsage } from '@moke/protocol';
+import type { AgentRunInput, RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
   createHistoryMessages,
+  createRuntimeContextMessages,
+  createSystemPrompt,
   createSystemMessage,
   createThinkTagSplitter,
   createUserMessage,
@@ -14,50 +16,18 @@ import {
   isAI,
 } from './messages.js';
 import { createChatModel, type ChatModelSettings, withTimeout } from './llm-client.js';
+import {
+  type ModelAdapter,
+  type ModelConversationState,
+  type ModelStepInput,
+  type ModelStepResult,
+  type ResponseContentItem,
+  type ResponsesInputItem,
+  toToolCallArgs,
+} from './model-adapter-types.js';
+import { collectResponseOutput, collectTextValue, readSseEvents } from './responses-stream.js';
 
-export type ModelStepInput = {
-  eventBus: AgentRunInput['eventBus'];
-  input: string;
-  attachments: ImageAttachment[];
-  context: AgentRunInput['context'];
-  history: Message[];
-  messages: ModelConversationState;
-  runtimeTools: AgentToolSpec[];
-  showRawReasoning: boolean;
-  step?: AgentStep;
-  signal?: AbortSignal;
-  timeoutMs: number;
-};
-
-export type ModelStepResult = {
-  content: string;
-  contentStreamed: boolean;
-  message: unknown;
-  reasoning: string;
-  toolCalls: ToolCall[];
-};
-
-export type ModelConversationState = {
-  langchain?: BaseMessage[];
-  responses?: ResponsesInputItem[];
-};
-
-export type ModelAdapter = {
-  createInitialState(input: {
-    context: AgentRunInput['context'];
-    history: Message[];
-    input: string;
-    attachments: ImageAttachment[];
-    runtimeTools: AgentToolSpec[];
-  }): ModelConversationState;
-  appendToolResult(state: ModelConversationState, input: {
-    callId: string;
-    name: string;
-    output: unknown;
-    status?: 'error' | 'success';
-  }): void;
-  streamStep(input: ModelStepInput): Promise<ModelStepResult>;
-};
+export type { ModelAdapter, ModelConversationState, ModelStepInput, ModelStepResult } from './model-adapter-types.js';
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('Run cancelled');
@@ -76,30 +46,11 @@ function createModelTool(runtimeTool: AgentToolSpec) {
   );
 }
 
-function toToolCallArgs(args: unknown): Record<string, unknown> {
-  return args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
-}
-
-type ResponseContentItem =
-  | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string }
-  | { type: 'output_text'; text: string };
-
-type ResponsesInputItem =
-  | { role: 'system' | 'user' | 'assistant'; content: string | ResponseContentItem[] }
-  | { type: 'function_call'; call_id: string; name: string; arguments: string }
-  | { type: 'function_call_output'; call_id: string; output: string };
-
 type ResponsesFunctionTool = {
   type: 'function';
   name: string;
   description?: string;
   parameters: Record<string, unknown>;
-};
-
-type ResponsesStreamEvent = {
-  event: string;
-  data: unknown;
 };
 
 function resolveResponsesUrl(apiBaseUrl: string) {
@@ -109,6 +60,54 @@ function resolveResponsesUrl(apiBaseUrl: string) {
 
 function stringifyToolOutput(output: unknown) {
   return typeof output === 'string' ? output : JSON.stringify(output);
+}
+
+function tokenCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+export function normalizeTokenUsage(value: unknown, fallback?: unknown): TokenUsage | undefined {
+  const usage = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const metadata = fallback && typeof fallback === 'object' ? fallback as Record<string, unknown> : {};
+  const inputDetails = usage.input_tokens_details && typeof usage.input_tokens_details === 'object'
+    ? usage.input_tokens_details as Record<string, unknown>
+    : usage.prompt_tokens_details && typeof usage.prompt_tokens_details === 'object'
+      ? usage.prompt_tokens_details as Record<string, unknown>
+      : metadata.input_token_details && typeof metadata.input_token_details === 'object'
+        ? metadata.input_token_details as Record<string, unknown>
+        : {};
+  const inputTokens = tokenCount(usage.input_tokens ?? usage.prompt_tokens ?? metadata.input_tokens);
+  const outputTokens = tokenCount(usage.output_tokens ?? usage.completion_tokens ?? metadata.output_tokens);
+  const cachedInputTokens = tokenCount(
+    usage.prompt_cache_hit_tokens ?? inputDetails.cached_tokens ?? inputDetails.cache_read,
+  );
+  const uncachedInputTokens = tokenCount(
+    usage.prompt_cache_miss_tokens ?? inputDetails.cache_creation,
+  ) ?? (inputTokens !== undefined && cachedInputTokens !== undefined
+    ? Math.max(0, inputTokens - cachedInputTokens)
+    : undefined);
+  const normalized = {
+    ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+    ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
+    ...(uncachedInputTokens !== undefined ? { uncached_input_tokens: uncachedInputTokens } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function messageTokenUsage(message: AIMessageChunk) {
+  const responseMetadata = message.response_metadata as Record<string, unknown>;
+  return normalizeTokenUsage(responseMetadata.usage, message.usage_metadata);
+}
+
+function responsesTokenUsage(output: unknown[]) {
+  for (let index = output.length - 1; index >= 0; index--) {
+    const item = output[index];
+    if (!item || typeof item !== 'object') continue;
+    const usage = normalizeTokenUsage((item as Record<string, unknown>).usage);
+    if (usage) return usage;
+  }
+  return undefined;
 }
 
 function createJsonSchemaForTool(runtimeTool: AgentToolSpec): Record<string, unknown> {
@@ -135,7 +134,7 @@ function createResponsesReasoning(settings: ChatModelSettings): { effort: string
   return { effort: settings.reasoningEffort };
 }
 
-function createResponsesUserContent(content: string, attachments: ImageAttachment[]): ResponseContentItem[] {
+function createResponsesUserContent(content: string, attachments: ResolvedImageAttachment[]): ResponseContentItem[] {
   return [
     ...(content ? [{ type: 'input_text' as const, text: content }] : []),
     ...attachments.map((attachment) => ({
@@ -145,7 +144,7 @@ function createResponsesUserContent(content: string, attachments: ImageAttachmen
   ];
 }
 
-function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[] {
+function createResponsesHistoryMessages(history: RuntimeMessage[]): ResponsesInputItem[] {
   const messages: ResponsesInputItem[] = [];
   const knownToolCallIds = new Set<string>();
 
@@ -191,120 +190,11 @@ function createResponsesHistoryMessages(history: Message[]): ResponsesInputItem[
   return messages;
 }
 
-function parseJsonRecord(input: string): Record<string, unknown> {
-  try {
-    const value = JSON.parse(input);
-    return toToolCallArgs(value);
-  } catch {
-    return {};
-  }
-}
-
-function collectTextValue(value: unknown): string {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map(collectTextValue).filter(Boolean).join('');
-  if (typeof value !== 'object') return '';
-
-  const record = value as Record<string, unknown>;
-  return collectTextValue(record.text) || collectTextValue(record.content) || collectTextValue(record.delta);
-}
-
-function collectResponseOutput(input: unknown) {
-  const toolCalls: ToolCall[] = [];
-  const seenToolCalls = new Set<string>();
-  const text: string[] = [];
-
-  function visit(value: unknown) {
-    if (!value || typeof value !== 'object') return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-
-    const record = value as Record<string, unknown>;
-    if (record.type === 'function_call' || record.type === 'function_call_output') {
-      const callId = typeof record.call_id === 'string' ? record.call_id : typeof record.id === 'string' ? record.id : '';
-      const name = typeof record.name === 'string' ? record.name : '';
-      const rawArgs = typeof record.arguments === 'string' ? record.arguments : '{}';
-      const key = `${callId}:${name}:${rawArgs}`;
-      if (record.type === 'function_call' && name && !seenToolCalls.has(key)) {
-        seenToolCalls.add(key);
-        toolCalls.push({
-          id: callId,
-          name,
-          args: parseJsonRecord(rawArgs),
-        });
-      }
-    }
-
-    if (record.type === 'output_text' || record.type === 'text') {
-      const valueText = collectTextValue(record);
-      if (valueText) text.push(valueText);
-    }
-
-    visit(record.content);
-    visit(record.output);
-  }
-
-  visit(input);
-  return {
-    content: text.join(''),
-    toolCalls,
-  };
-}
-
-async function* readSseEvents(response: Response): AsyncGenerator<ResponsesStreamEvent> {
-  if (!response.body) return;
-
-  const decoder = new TextDecoder();
-  const reader = response.body.getReader();
-  let buffer = '';
-
-  function parseBlock(block: string): ResponsesStreamEvent | undefined {
-    let event = 'message';
-    const data: string[] = [];
-
-    for (const line of block.split(/\r?\n/)) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
-    }
-
-    const rawData = data.join('\n');
-    if (!rawData || rawData === '[DONE]') return undefined;
-
-    try {
-      return { event, data: JSON.parse(rawData) };
-    } catch {
-      return { event, data: rawData };
-    }
-  }
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let separatorIndex = buffer.search(/\r?\n\r?\n/);
-      while (separatorIndex >= 0) {
-        const block = buffer.slice(0, separatorIndex);
-        const separator = buffer.slice(separatorIndex).match(/^\r?\n\r?\n/)?.[0] || '\n\n';
-        buffer = buffer.slice(separatorIndex + separator.length);
-        const event = parseBlock(block);
-        if (event) yield event;
-        separatorIndex = buffer.search(/\r?\n\r?\n/);
-      }
-    }
-
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-      const event = parseBlock(buffer);
-      if (event) yield event;
-    }
-  } finally {
-    reader.releaseLock();
-  }
+function createResponsesContextItems(context: RuntimeContextItem[]): ResponsesInputItem[] {
+  return context.map((item) => ({
+    role: item.authority === 'trusted' ? 'developer' : 'user',
+    content: item.content,
+  }));
 }
 
 async function readErrorMessage(response: Response) {
@@ -387,10 +277,12 @@ async function streamChatModel(input: {
     throw new Error('LLM stream completed without output');
   }
 
+  const message = chunks.slice(1).reduce((combined, chunk) => combined.concat(chunk), chunks[0]);
   return {
     contentStreamed,
-    message: chunks.slice(1).reduce((message, chunk) => message.concat(chunk), chunks[0]),
+    message,
     reasoning,
+    usage: messageTokenUsage(message),
   };
 }
 
@@ -405,14 +297,15 @@ export class ChatCompletionsAdapter implements ModelAdapter {
 
   createInitialState(input: {
     context: AgentRunInput['context'];
-    history: Message[];
+    history: RuntimeMessage[];
     input: string;
-    attachments: ImageAttachment[];
+    attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState {
     return {
       langchain: [
-        createSystemMessage(input.runtimeTools, input.context),
+        createSystemMessage(input.runtimeTools),
+        ...createRuntimeContextMessages([...(input.context.trustedContext || []), ...(input.context.contentManager?.buildInitialContext() || [])]),
         ...createHistoryMessages(input.history),
         createUserMessage(input.input, input.attachments),
       ],
@@ -435,10 +328,12 @@ export class ChatCompletionsAdapter implements ModelAdapter {
     );
   }
 
+  appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
+    state.langchain?.push(...createRuntimeContextMessages(context));
+  }
+
   async streamStep(input: ModelStepInput): Promise<ModelStepResult> {
     if (!input.messages.langchain) throw new Error('Chat adapter state is missing');
-    input.messages.langchain[0] = createSystemMessage(input.runtimeTools, input.context);
-
     const stepResult = await streamChatModel({
       eventBus: input.eventBus,
       messages: input.messages.langchain,
@@ -456,6 +351,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
       contentStreamed: stepResult.contentStreamed,
       message: aiMessage,
       reasoning: stepResult.reasoning,
+      usage: stepResult.usage,
       toolCalls: isAI(aiMessage)
         ? (aiMessage.tool_calls || []).map((call) => ({
             id: call.id || '',
@@ -475,18 +371,18 @@ export class ResponsesAdapter implements ModelAdapter {
 
   createInitialState(input: {
     context: AgentRunInput['context'];
-    history: Message[];
+    history: RuntimeMessage[];
     input: string;
-    attachments: ImageAttachment[];
+    attachments: ResolvedImageAttachment[];
     runtimeTools: AgentToolSpec[];
   }): ModelConversationState {
-    const system = createSystemMessage(input.runtimeTools, input.context);
     return {
       responses: [
         {
-          role: 'system',
-          content: getMessageText(system),
+          role: 'developer',
+          content: createSystemPrompt(input.runtimeTools),
         },
+        ...createResponsesContextItems([...(input.context.trustedContext || []), ...(input.context.contentManager?.buildInitialContext() || [])]),
         ...createResponsesHistoryMessages(input.history),
         {
           role: 'user',
@@ -509,13 +405,12 @@ export class ResponsesAdapter implements ModelAdapter {
     });
   }
 
+  appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
+    state.responses?.push(...createResponsesContextItems(context));
+  }
+
   async streamStep(input: ModelStepInput): Promise<ModelStepResult> {
     if (!input.messages.responses) throw new Error('Responses adapter state is missing');
-    input.messages.responses[0] = {
-      role: 'system',
-      content: getMessageText(createSystemMessage(input.runtimeTools, input.context)),
-    };
-
     const outputItems: unknown[] = [];
     const textParts: string[] = [];
     let contentStreamed = false;
@@ -595,6 +490,7 @@ export class ResponsesAdapter implements ModelAdapter {
       message: outputItems,
       reasoning: '',
       toolCalls,
+      usage: responsesTokenUsage(outputItems),
     };
   }
 }

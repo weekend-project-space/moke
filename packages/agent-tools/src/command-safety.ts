@@ -37,6 +37,25 @@ export type CommandComplexityIssue = {
   reason: string;
 };
 
+export type PowerShellCompatibilityIssue = {
+  command: string;
+  token: string;
+  reason: string;
+};
+
+const POWERSHELL_CMD_ALIAS_COMMANDS = new Set([
+  'copy',
+  'del',
+  'dir',
+  'erase',
+  'move',
+  'rd',
+  'ren',
+  'rename',
+  'rmdir',
+  'type',
+]);
+
 export function analyzeCommandSafety(input: CommandSafetyInput) {
   const issues: CommandSafetyIssue[] = [];
   const commandText = maskUrls(input.commandText);
@@ -177,6 +196,30 @@ export function analyzeCommandComplexity(commandText: string) {
       code: 'background_process',
       token: match[0].trim(),
       reason: 'Command starts a background process',
+    });
+  }
+
+  return { issues };
+}
+
+export function analyzePowerShellCompatibility(commandText: string) {
+  const issues: PowerShellCompatibilityIssue[] = [];
+
+  for (const segment of commandText.split(/&&|\|\||[;|]/)) {
+    const match = segment.trim().match(/^(?:&\s*)?(?:"([^"]+)"|'([^']+)'|([^\s]+))\s+([\s\S]*)$/);
+    if (!match) continue;
+
+    const command = path.win32.basename(match[1] || match[2] || match[3] || '').toLowerCase();
+    if (!POWERSHELL_CMD_ALIAS_COMMANDS.has(command)) continue;
+
+    const switchMatch = (match[4] || '').match(/(?:^|\s)(\/[a-z?][\w?:,+-]*)(?=\s|$)/i);
+    if (!switchMatch) continue;
+
+    const token = switchMatch[1];
+    issues.push({
+      command,
+      token,
+      reason: `Command uses cmd.exe switch ${token} with PowerShell command ${command}. Use PowerShell parameters instead.`,
     });
   }
 

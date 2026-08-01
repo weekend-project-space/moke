@@ -13,6 +13,7 @@ import {
 import type {
   ExecutableSystemBackend,
   SystemEditResult,
+  SystemAccessOptions,
   SystemExecuteOptions,
   SystemExecuteResult,
   SystemFileInfo,
@@ -25,9 +26,14 @@ import type {
   SystemReadOptions,
   SystemReadResult,
   SystemWriteResult,
-} from '../../agent-runtime/src/index.js';
-import { PathRequiresApprovalError } from '../../agent-runtime/src/index.js';
-import { analyzeCommandSafety, isInsideRoot, suggestApprovalRoot } from './command-safety.js';
+} from '@moke/agent-runtime';
+import { PathRequiresApprovalError } from '@moke/agent-runtime';
+import {
+  analyzeCommandSafety,
+  analyzePowerShellCompatibility,
+  isInsideRoot,
+  suggestApprovalRoot,
+} from './command-safety.js';
 
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {
   backend?: SandboxBackendProtocolV2;
@@ -41,12 +47,12 @@ const DEFAULT_ROOT = '/';
 export class LocalSystemBackend implements ExecutableSystemBackend {
   readonly rootDir: string;
   private readonly backend: SandboxBackendProtocolV2;
-  private readonly approvedRoots: string[];
+  private readonly globallyApprovedRoots: string[];
   private readonly useLocalFsWrites: boolean;
 
   constructor(root = DEFAULT_ROOT, options: LocalSystemBackendOptions = {}) {
     this.rootDir = path.resolve(root);
-    this.approvedRoots = [this.rootDir];
+    this.globallyApprovedRoots = [];
     this.useLocalFsWrites = !options.backend;
 
     if (options.backend) {
@@ -64,30 +70,30 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   approveWorkspaceRoot(root: string) {
     const fullPath = path.resolve(root);
-    const added = !this.isInsideApprovedRoot(fullPath);
-    if (added) this.approvedRoots.push(fullPath);
+    const added = !this.globallyApprovedRoots.some((approvedRoot) => isInsideRoot(approvedRoot, fullPath));
+    if (added) this.globallyApprovedRoots.push(fullPath);
     return { path: fullPath, added };
   }
 
   revokeWorkspaceRoot(root: string) {
     const fullPath = path.resolve(root);
-    const index = this.approvedRoots.findIndex((approvedRoot) => path.resolve(approvedRoot) === fullPath);
-    if (index > 0) this.approvedRoots.splice(index, 1);
+    const index = this.globallyApprovedRoots.findIndex((approvedRoot) => path.resolve(approvedRoot) === fullPath);
+    if (index >= 0) this.globallyApprovedRoots.splice(index, 1);
   }
 
-  async ls(requestedPath = '.'): Promise<SystemLsResult> {
-    const target = this.toBackendPath(requestedPath);
+  async ls(requestedPath = '.', access?: SystemAccessOptions): Promise<SystemLsResult> {
+    const target = this.toBackendPath(requestedPath, access);
     const result = await this.backend.ls(target);
     if (result.error) throw new Error(result.error);
 
     return {
-      path: this.fromBackendPath(target),
-      entries: (result.files ?? []).map((file) => this.toSystemFileInfo(file)),
+      path: this.fromBackendPath(target, access),
+      entries: (result.files ?? []).map((file) => this.toSystemFileInfo(file, access)),
     };
   }
 
-  async readFile(filePath: string, options?: SystemReadOptions): Promise<SystemReadResult> {
-    const target = this.toBackendPath(filePath);
+  async readFile(filePath: string, options?: SystemReadOptions, access?: SystemAccessOptions): Promise<SystemReadResult> {
+    const target = this.toBackendPath(filePath, access, 'file');
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? DEFAULT_READ_LIMIT;
     const result = await this.backend.read(target, offset, limit);
@@ -98,12 +104,12 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
     if (result.content instanceof Uint8Array) {
       return {
-        path: this.fromBackendPath(target),
+        path: this.fromBackendPath(target, access),
         content: '',
         lines: [],
         offset,
         limit,
-        content_blocks: [{ type: 'file', path: this.fromBackendPath(target), mime_type: result.mimeType }],
+        content_blocks: [{ type: 'file', path: this.fromBackendPath(target, access), mime_type: result.mimeType }],
       };
     }
 
@@ -114,7 +120,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     }));
 
     return {
-      path: this.fromBackendPath(target),
+      path: this.fromBackendPath(target, access),
       content,
       lines,
       offset,
@@ -127,36 +133,36 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     };
   }
 
-  async grep(pattern: string, options?: SystemGrepOptions): Promise<SystemGrepResult> {
+  async grep(pattern: string, options?: SystemGrepOptions, access?: SystemAccessOptions): Promise<SystemGrepResult> {
     const mode = options?.mode ?? 'content';
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
-    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
+    const target = options?.path ? this.toBackendPath(options.path, access) : this.workspaceRoot(access);
     const result = await this.backend.grep(pattern, target, options?.glob ?? null);
     if (result.error) throw new Error(result.error);
 
     return {
       mode,
-      matches: this.formatGrepMatches(result, mode).slice(0, limit),
+      matches: this.formatGrepMatches(result, mode, access).slice(0, limit),
     };
   }
 
-  async glob(pattern: string, options?: SystemGlobOptions): Promise<SystemGlobResult> {
-    const target = options?.path ? this.toBackendPath(options.path) : this.rootDir;
+  async glob(pattern: string, options?: SystemGlobOptions, access?: SystemAccessOptions): Promise<SystemGlobResult> {
+    const target = options?.path ? this.toBackendPath(options.path, access) : this.workspaceRoot(access);
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
     const result = await this.backend.glob(pattern, target);
     if (result.error) throw new Error(result.error);
 
     return {
-      matches: (result.files ?? []).slice(0, limit).map((file) => this.toSystemFileInfo(file)),
+      matches: (result.files ?? []).slice(0, limit).map((file) => this.toSystemFileInfo(file, access)),
     };
   }
 
-  async writeFile(filePath: string, content: string): Promise<SystemWriteResult> {
-    const target = this.toBackendPath(filePath);
+  async writeFile(filePath: string, content: string, access?: SystemAccessOptions): Promise<SystemWriteResult> {
+    const target = this.toBackendPath(filePath, access, 'file');
     if (this.useLocalFsWrites) {
       await writeLocalTextFile(target, content);
       return {
-        path: this.fromBackendPath(target),
+        path: this.fromBackendPath(target, access),
         bytes: Buffer.byteLength(content, 'utf8'),
       };
     }
@@ -165,7 +171,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     if (result.error) throw new Error(result.error);
 
     return {
-      path: this.fromBackendPath(result.path ?? target),
+      path: this.fromBackendPath(result.path ?? target, access),
       bytes: Buffer.byteLength(content, 'utf8'),
     };
   }
@@ -174,23 +180,23 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     filePath: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }, access?: SystemAccessOptions,
   ): Promise<SystemEditResult> {
-    const target = this.toBackendPath(filePath);
+    const target = this.toBackendPath(filePath, access, 'file');
     const result = await this.backend.edit(target, oldString, newString, options?.replaceAll ?? false);
     if (result.error) throw new Error(result.error);
 
     return {
-      path: this.fromBackendPath(result.path ?? target),
+      path: this.fromBackendPath(result.path ?? target, access),
       replacements: result.occurrences ?? 0,
     };
   }
 
-  async execute(command: string, args: string[] = [], options?: SystemExecuteOptions): Promise<SystemExecuteResult> {
+  async execute(command: string, args: string[] = [], options?: SystemExecuteOptions, access?: SystemAccessOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
-    const cwd = options?.cwd ? this.toHostPath(options.cwd) : this.rootDir;
+    const cwd = options?.cwd ? this.toHostPath(options.cwd, access) : this.workspaceRoot(access);
     const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
-    this.assertCommandPathsStayInApprovedRoots(commandText, cwd);
+    this.assertCommandPathsStayInApprovedRoots(commandText, cwd, access);
     if (this.useLocalFsWrites) {
       return args.length > 0
         ? this.executeLocalProcess(command, args, cwd, startedAt, options?.timeoutMs)
@@ -237,33 +243,46 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     };
   }
 
-  private toBackendPath(requestedPath: string) {
-    return this.toHostPath(requestedPath);
+  private toBackendPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
+    return this.toHostPath(requestedPath, access, approvalScope);
   }
 
-  private toHostPath(requestedPath: string) {
-    const fullPath = path.resolve(this.rootDir, requestedPath);
-    if (!this.isInsideApprovedRoot(fullPath)) throw this.createPathApprovalError(fullPath);
+  private toHostPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
+    const fullPath = path.resolve(this.workspaceRoot(access), requestedPath);
+    if (!this.isInsideApprovedRoot(fullPath, access)) throw this.createPathApprovalError(fullPath, approvalScope);
     return fullPath;
   }
 
-  private isInsideApprovedRoot(fullPath: string) {
-    return this.approvedRoots.some((root) => isInsideRoot(root, fullPath));
+  private isInsideApprovedRoot(fullPath: string, access?: SystemAccessOptions) {
+    return [
+      this.workspaceRoot(access),
+      ...this.globallyApprovedRoots,
+      ...(access?.approvedRoots || []),
+    ].some((root) => isInsideRoot(root, fullPath));
   }
 
-  private createPathApprovalError(fullPath: string) {
+  private createPathApprovalError(fullPath: string, approvalScope: 'file' | 'directory' = 'directory') {
     return new PathRequiresApprovalError({
       path: fullPath,
-      suggestedRoot: suggestApprovalRoot(fullPath),
+      suggestedRoot: approvalScope === 'file' ? fullPath : suggestApprovalRoot(fullPath),
       reason: `Path requires approval: ${fullPath}`,
     });
   }
 
-  private assertCommandPathsStayInApprovedRoots(commandText: string, cwd: string) {
+  private assertCommandPathsStayInApprovedRoots(commandText: string, cwd: string, access?: SystemAccessOptions) {
+    if (process.platform === 'win32') {
+      const compatibilityIssue = analyzePowerShellCompatibility(commandText).issues[0];
+      if (compatibilityIssue) throw new Error(compatibilityIssue.reason);
+    }
+
     const result = analyzeCommandSafety({
       commandText,
       cwd,
-      approvedRoots: this.approvedRoots,
+      approvedRoots: [
+        this.workspaceRoot(access),
+        ...this.globallyApprovedRoots,
+        ...(access?.approvedRoots || []),
+      ],
     });
     const issue = result.issues[0];
     if (!issue) return;
@@ -275,28 +294,36 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     });
   }
 
-  private fromBackendPath(filePath: string) {
-    const normalized = path.resolve(this.rootDir, filePath);
-    if (isInsideRoot(this.rootDir, normalized)) {
-      return path.relative(this.rootDir, normalized) || '.';
+  private workspaceRoot(access?: SystemAccessOptions) {
+    return path.resolve(access?.workspaceRoot || this.rootDir);
+  }
+
+  private fromBackendPath(filePath: string, access?: SystemAccessOptions) {
+    const workspaceRoot = this.workspaceRoot(access);
+    const normalized = path.resolve(workspaceRoot, filePath);
+    if (isInsideRoot(workspaceRoot, normalized)) {
+      return path.relative(workspaceRoot, normalized) || '.';
     }
     return normalized;
   }
 
-  private toSystemFileInfo(file: { path: string; is_dir?: boolean; size?: number; modified_at?: string }): SystemFileInfo {
+  private toSystemFileInfo(
+    file: { path: string; is_dir?: boolean; size?: number; modified_at?: string },
+    access?: SystemAccessOptions,
+  ): SystemFileInfo {
     return {
-      path: this.fromBackendPath(file.path.replace(/[/\\]$/, '')),
+      path: this.fromBackendPath(file.path.replace(/[/\\]$/, ''), access),
       type: file.is_dir ? 'directory' : 'file',
       size: file.size,
       modified_at: file.modified_at || undefined,
     };
   }
 
-  private formatGrepMatches(result: GrepResult, mode: SystemGrepMode) {
+  private formatGrepMatches(result: GrepResult, mode: SystemGrepMode, access?: SystemAccessOptions) {
     const matches = result.matches ?? [];
     if (mode === 'files') {
       return [...new Set(matches.map((match) => match.path))].map((filePath) => ({
-        path: this.fromBackendPath(filePath),
+        path: this.fromBackendPath(filePath, access),
       }));
     }
     if (mode === 'count') {
@@ -305,13 +332,13 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
         counts.set(match.path, (counts.get(match.path) ?? 0) + 1);
       }
       return [...counts.entries()].map(([filePath, count]) => ({
-        path: this.fromBackendPath(filePath),
+        path: this.fromBackendPath(filePath, access),
         count,
       }));
     }
 
     return matches.map((match: GrepMatch) => ({
-      path: this.fromBackendPath(match.path),
+      path: this.fromBackendPath(match.path, access),
       line: match.line,
       text: match.text,
     }));

@@ -3,6 +3,7 @@ import type { AskOption, PendingAsk } from '../model/conversation'
 
 defineProps<{
   ask: PendingAsk
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -14,7 +15,13 @@ const emit = defineEmits<{
   <section class="ask-inline" aria-live="polite">
     <div class="ask-inline-question">{{ ask.question }}</div>
     <div class="ask-inline-options">
-      <button v-for="option in ask.options" :key="option.id" type="button" @click="emit('select', option)">
+      <button
+        v-for="option in ask.options"
+        :key="option.id"
+        type="button"
+        :disabled="submitting"
+        @click="emit('select', option)"
+      >
         {{ option.label }}
       </button>
     </div>

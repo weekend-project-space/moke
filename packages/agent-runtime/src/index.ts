@@ -1,21 +1,36 @@
-export type { Agent, AgentRunInput, AgentRunResult } from './agent.js';
-export { EventBus } from './event-bus.js';
+export type { Agent, AgentRunInput, AgentRunResult, RuntimeMessage, RuntimeUserMessage } from './agent.js';
+export { EventBus, isPublicAgentEvent } from './event-bus.js';
 export { RunManager } from './run-manager.js';
-export type { RuntimeRun } from './run-state.js';
-export { ToolExecutionError, ToolRegistry } from './tool-registry.js';
+export type { RunOptions } from './run-manager.js';
+export type { RunOrigin, RuntimeRun } from './run-state.js';
+export type {
+  AiApprovalReview,
+  AiApprovalReviewer,
+  ApprovalReviewContext,
+  ToolApprovalReviewRequest,
+} from './approval-reviewer.js';
+export {
+  createRuntimeToolResult,
+  normalizeRuntimeToolResult,
+  ToolExecutionError,
+  ToolRegistry,
+} from './tool-registry.js';
 export type {
   RuntimeContentManager,
+  RuntimeContextItem,
+  RuntimeSkillActivationResult,
   ToolApprovalDecision,
   ToolApprovalRequest,
   ToolContext,
   WorkspacePathApprovalDecision,
   WorkspacePathApprovalRequest,
 } from './tool-context.js';
-export type { RuntimeTool } from './tool-registry.js';
+export type { RuntimeTool, RuntimeToolOutput, RuntimeToolResult, ToolApprovalRequirement } from './tool-registry.js';
 export type {
   ExecutableSystemBackend,
   SystemContentBlock,
   SystemBackend,
+  SystemAccessOptions,
   SystemEditResult,
   SystemExecuteOptions,
   SystemExecuteResult,

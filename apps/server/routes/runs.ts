@@ -1,7 +1,9 @@
-import type { RuntimeRun } from '../../../packages/agent-runtime/src/index.js';
+import { isPublicAgentEvent, type RuntimeRun } from '@moke/agent-runtime';
 import { HttpError, rawResponse, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { isTerminalRun } from '../domain/sessions.js';
+import { idParamsSchema, runRespondSchema } from './schemas.js';
+import { parseBody, parseParams } from '../http/validation.js';
 
 export function registerRunRoutes(router: Router<RoutesContext>) {
   router.get('/api/runs/active', ({ context, json }) => {
@@ -19,8 +21,37 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     return json(200, { runs });
   });
 
+  router.get('/api/runs/lifecycle', ({ context, raw }) => {
+    raw.res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    raw.res.flushHeaders();
+
+    const writeEvent = (event: { type: string; sessionId: string; runId: string }) => {
+      raw.res.write(`event: run.lifecycle\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+    const removeObserver = context.runManager.addLifecycleObserver(writeEvent);
+
+    for (const run of context.runs.values()) {
+      if (isTerminalRun(run)) continue;
+      writeEvent({ type: run.status, sessionId: run.session_id, runId: run.id });
+    }
+
+    raw.req.on('close', removeObserver);
+    return rawResponse();
+  });
+
   router.get('/api/runs/:id/events', ({ context, params, raw }) => {
-    const run = getRun(context, params.id);
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
+    const afterSeq = readLastEventId(raw.req.headers['last-event-id']);
+    const firstRetainedSeq = run.events[0]?.seq;
+    if (afterSeq > 0 && firstRetainedSeq !== undefined && firstRetainedSeq > afterSeq + 1) {
+      throw new HttpError(409, 'EVENT_CURSOR_EXPIRED', 'Run event cursor is no longer available');
+    }
 
     raw.res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -30,7 +61,9 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     });
 
     for (const event of run.events) {
-      raw.res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      if (event.seq <= afterSeq) continue;
+      if (!isPublicAgentEvent(event)) continue;
+      raw.res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     }
 
     if (isTerminalRun(run)) {
@@ -44,19 +77,19 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
   });
 
   router.post('/api/runs/:id/respond', async ({ body, context, json, params }) => {
-    const run = getRun(context, params.id);
-    const requestBody = await body();
-    const type = typeof requestBody.type === 'string' ? requestBody.type : '';
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
+    const requestBody = await parseBody(body, runRespondSchema);
 
-    if (type === 'choose') {
+    if (requestBody.type === 'choose') {
       return handleChoose(context, run, requestBody, json);
     }
 
-    if (type === 'approve') {
+    if (requestBody.type === 'approve') {
       return handleApprove(context, run, requestBody, json);
     }
 
-    if (type === 'cancel') {
+    if (requestBody.type === 'cancel') {
       context.runManager.cancel(run.id);
       return json(200, {
         run_id: run.id,
@@ -64,8 +97,32 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
       });
     }
 
-    throw new HttpError(400, 'BAD_REQUEST', 'type must be choose, approve, or cancel');
   });
+
+  router.get('/api/runs/:id', ({ context, json, params }) => {
+    const { id: runId } = parseParams(params, idParamsSchema);
+    const run = getRun(context, runId);
+    return json(200, { run: toRunSnapshot(run) });
+  });
+}
+
+function readLastEventId(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !/^\d+$/.test(raw)) return 0;
+  const seq = Number(raw);
+  return Number.isSafeInteger(seq) ? seq : 0;
+}
+
+function toRunSnapshot(run: RuntimeRun) {
+  return {
+    id: run.id,
+    session_id: run.session_id,
+    status: run.status,
+    seq: run.seq,
+    events: run.events.filter(isPublicAgentEvent),
+    ...(run.pending_ask ? { pending_ask: run.pending_ask } : {}),
+    ...(run.pending_approval ? { pending_approval: run.pending_approval } : {}),
+  };
 }
 
 function getRun(context: RoutesContext, id: string) {
@@ -77,14 +134,14 @@ function getRun(context: RoutesContext, id: string) {
 function handleChoose(
   context: RoutesContext,
   run: RuntimeRun,
-  body: Record<string, unknown>,
+  body: {
+    request_id: string;
+    option_id: string;
+  },
   json: (status: number, body: unknown) => void,
 ) {
-  const requestId = typeof body.request_id === 'string' ? body.request_id : '';
-  const optionId = typeof body.option_id === 'string' ? body.option_id : '';
-  if (!requestId || !optionId) {
-    throw new HttpError(400, 'BAD_REQUEST', 'request_id and option_id are required');
-  }
+  const requestId = body.request_id;
+  const optionId = body.option_id;
 
   const result = context.runManager.answer(run.id, requestId, optionId);
   if (result.status !== 200) {
@@ -105,21 +162,21 @@ function handleChoose(
 function handleApprove(
   context: RoutesContext,
   run: RuntimeRun,
-  body: Record<string, unknown>,
+  body: {
+    request_id: string;
+    decision: 'approved' | 'rejected';
+    scope?: 'once' | 'session' | 'persistent';
+    message?: string;
+  },
   json: (status: number, body: unknown) => void,
 ) {
-  const requestId = typeof body.request_id === 'string' ? body.request_id : '';
-  const decision = body.decision === 'approved' ? 'approved' : body.decision === 'rejected' ? 'rejected' : '';
-  const scope =
-    body.scope === 'once' || body.scope === 'session' || body.scope === 'persistent' ? body.scope : undefined;
-
-  if (!requestId || !decision) {
-    throw new HttpError(400, 'BAD_REQUEST', 'request_id and decision are required');
-  }
+  const requestId = body.request_id;
+  const decision = body.decision;
+  const scope = body.scope;
 
   const result = context.runManager.approve(run.id, requestId, decision, {
     scope,
-    message: typeof body.message === 'string' ? body.message : undefined,
+    message: body.message,
   });
   if (result.status !== 200) {
     throw new HttpError(result.status, result.status === 404 ? 'RUN_NOT_FOUND' : 'APPROVAL_NOT_PENDING', result.error);

@@ -54,7 +54,6 @@ test('run event reducer stores reasoning deltas and enters pending states', () =
     approval_id: 'approval_1',
     kind: 'tool' as const,
     reason: 'Write data',
-    risk: 'write' as const,
     action: { tool: 'write_file', input: {} },
     created_at: '2026-01-01T00:00:00.000Z',
   }
@@ -62,10 +61,63 @@ test('run event reducer stores reasoning deltas and enters pending states', () =
 
   assert.equal(afterReasoning.state.events.length, 1)
   assert.deepEqual(afterAsk.state.lifecycle, { status: 'awaiting-user', ask })
-  assert.equal(afterAsk.effects.ask, ask)
   assert.equal(afterAsk.state.events.length, 1)
   assert.deepEqual(afterApproval.state.lifecycle, { status: 'awaiting-approval', approval })
   assert.equal(afterApproval.state.events.length, 1)
+})
+
+test('run event reducer rebuilds completed interactions from replayed events', () => {
+  const state = createSessionRunState('run_1')
+  connectRun(state, 'run_1')
+  const ask = {
+    ask_id: 'ask_1',
+    call_id: 'call_1',
+    question: 'Continue?',
+    options: [{ id: 'yes', label: 'Yes' }],
+    created_at: '2026-01-01T00:00:00.000Z',
+  }
+  const approval = {
+    approval_id: 'approval_1',
+    kind: 'tool' as const,
+    reason: 'Run command',
+    action: { tool: 'execute', input: { command: 'npm test' } },
+    created_at: '2026-01-01T00:00:00.000Z',
+  }
+
+  const afterAsk = reduceRunEvent(state, event('ask_user.required', ask, 'event_ask_required'))
+  const afterAnswer = reduceRunEvent(afterAsk.state, event('ask_user.answered', {
+    ask_id: ask.ask_id,
+    call_id: ask.call_id,
+    selected: ask.options[0],
+  }, 'event_ask_answered'))
+  const afterApproval = reduceRunEvent(afterAnswer.state, event('approval.required', approval, 'event_approval_required'))
+  const afterResolution = reduceRunEvent(afterApproval.state, event('approval.resolved', {
+    approval_id: approval.approval_id,
+    decision: 'approved',
+    scope: 'once',
+  }, 'event_approval_resolved'))
+
+  assert.deepEqual(afterAnswer.state.lifecycle, { status: 'running' })
+  assert.deepEqual(afterResolution.state.lifecycle, { status: 'running' })
+})
+
+test('run event reducer does not resolve a newer interaction with an older completion event', () => {
+  const state = createSessionRunState('run_1')
+  const ask = {
+    ask_id: 'ask_new',
+    call_id: 'call_new',
+    question: 'New question?',
+    options: [{ id: 'yes', label: 'Yes' }],
+    created_at: '2026-01-01T00:00:00.000Z',
+  }
+  const afterAsk = reduceRunEvent(state, event('ask_user.required', ask, 'event_ask_new'))
+  const afterOldAnswer = reduceRunEvent(afterAsk.state, event('ask_user.answered', {
+    ask_id: 'ask_old',
+    call_id: 'call_old',
+    selected: { id: 'yes', label: 'Yes' },
+  }, 'event_ask_old_answered'))
+
+  assert.deepEqual(afterOldAnswer.state.lifecycle, { status: 'awaiting-user', ask })
 })
 
 test('run event reducer exposes completed messages and finishes terminal runs', () => {

@@ -2,13 +2,15 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
 export type ServerConfig = {
+  appRoot: string;
+  defaultWorkspaceRoot: string;
   envPaths: string[];
   mcpConfigPath: string;
   permissionsPath: string;
   port: number;
   settingsPath: string;
+  storePath: string;
   statePath: string;
-  workspace: string;
 };
 
 export function normalizeWindowsDrivePath(value: string) {
@@ -30,23 +32,30 @@ export function resolvePort(value: string | undefined) {
 }
 
 export function resolveServerConfig(): ServerConfig {
-  const workspace = resolvePath(process.env.MOKE_WORKSPACE, process.cwd(), process.cwd());
+  const appRoot = resolvePath(process.env.MOKE_APP_ROOT, process.cwd(), process.cwd());
+  const defaultWorkspaceRoot = resolvePath(
+    process.env.MOKE_DEFAULT_WORKSPACE || process.env.MOKE_WORKSPACE,
+    appRoot,
+    appRoot,
+  );
 
   return {
-    envPaths: resolveEnvPaths(workspace),
-    mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, workspace, join('.moke', 'mcp.json')),
-    permissionsPath: resolvePath(process.env.MOKE_PERMISSIONS_PATH, workspace, join('.moke', 'permissions.json')),
+    appRoot,
+    defaultWorkspaceRoot,
+    envPaths: resolveEnvPaths(appRoot),
+    mcpConfigPath: resolvePath(process.env.MOKE_MCP_CONFIG, appRoot, join('.moke', 'mcp.json')),
+    permissionsPath: resolvePath(process.env.MOKE_PERMISSIONS_PATH, appRoot, join('.moke', 'permissions.json')),
     port: resolvePort(process.env.PORT),
-    settingsPath: resolvePath(process.env.MOKE_SETTINGS_PATH, workspace, join('.moke', 'settings.json')),
-    statePath: resolvePath(process.env.MOKE_STATE_PATH, workspace, join('.moke', 'state.json')),
-    workspace,
+    settingsPath: resolvePath(process.env.MOKE_SETTINGS_PATH, appRoot, join('.moke', 'settings.json')),
+    storePath: resolvePath(process.env.MOKE_STORE_PATH, appRoot, join('.moke', 'store')),
+    statePath: resolvePath(process.env.MOKE_STATE_PATH, appRoot, join('.moke', 'state.json')),
   };
 }
 
-export function resolveEnvPaths(workspace: string) {
+export function resolveEnvPaths(appRoot: string) {
   return [
-    process.env.MOKE_ENV_PATH ? resolvePath(process.env.MOKE_ENV_PATH, workspace, '') : '',
-    join(workspace, '.env'),
+    process.env.MOKE_ENV_PATH ? resolvePath(process.env.MOKE_ENV_PATH, appRoot, '') : '',
+    join(appRoot, '.env'),
   ].filter(Boolean);
 }
 

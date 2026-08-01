@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
 
-import type { ReasoningEffort } from '../../protocol/src/index.js';
+import type { ReasoningEffort } from '@moke/protocol';
 
 export type ChatModelSettings = {
   apiKey: string;
