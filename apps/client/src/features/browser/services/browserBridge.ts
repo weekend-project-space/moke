@@ -1,6 +1,7 @@
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserResult } from '../api/browser'
 import { waitForBrowserLayoutFrame } from './browserLayout'
 import { createSerialTaskQueue } from './serialTaskQueue'
+import { apiFetch, apiUrl } from '../../../services/apiAccess'
 
 type BrowserBridgeRequest = {
   id: string
@@ -133,7 +134,7 @@ async function executeBrowserRequest(
 }
 
 async function respond(apiBase: string, id: string, body: Record<string, unknown>) {
-  await fetch(`${apiBase}/api/browser/respond`, {
+  await apiFetch(`${apiBase}/api/browser/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, ...body }),
@@ -143,7 +144,7 @@ async function respond(apiBase: string, id: string, body: Record<string, unknown
 export function connectBrowserBridge(options: BrowserBridgeOptions) {
   if (!isNativeBrowserAvailable()) return () => undefined
 
-  const source = new EventSource(`${options.apiBase}/api/browser/connect`)
+  const source = new EventSource(apiUrl(`${options.apiBase}/api/browser/connect`))
 
   const execution = createSerialTaskQueue()
 

@@ -38,7 +38,7 @@ async function main() {
     void shutdown('server error', 1);
   });
 
-  app.server.listen(app.port, () => {
+  app.server.listen(app.port, '127.0.0.1', () => {
     console.log(`Agent Server listening on http://127.0.0.1:${app.port}`);
   });
 }

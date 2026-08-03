@@ -266,8 +266,16 @@ onUnmounted(() => {
         >
           <span class="session-line">
             <small>
-              <Clock3 v-if="isScheduledSession(session)" class="session-origin-icon" :size="11" stroke-width="2" aria-hidden="true" />
               <span class="session-title-text">{{ sessionLabel(session) }}</span>
+              <span
+                v-if="isScheduledSession(session)"
+                class="session-origin-icon"
+                role="img"
+                :aria-label="uiText.sidebar.scheduledSessionOrigin"
+                :title="uiText.sidebar.scheduledSessionOrigin"
+              >
+                <Clock3 :size="12" stroke-width="2" aria-hidden="true" />
+              </span>
               <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
             </small>
             <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">

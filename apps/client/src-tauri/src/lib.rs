@@ -14,6 +14,7 @@ use url::Url;
 
 struct AgentServer {
     child: Mutex<Option<Child>>,
+    token: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -441,10 +442,12 @@ struct CapturedImage {
 
 impl AgentServer {
     fn start(app: &tauri::App) -> Self {
-        let child = start_agent_server(app).ok();
+        let token = generate_api_token();
+        let child = start_agent_server(app, &token).ok();
 
         Self {
             child: Mutex::new(child),
+            token,
         }
     }
 
@@ -517,7 +520,7 @@ fn ensure_user_env_file(app: &tauri::App, env_path: &Path) {
     }
 }
 
-fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
+fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String> {
     let data_dir = app_data_moke_dir(app);
     fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     let state_path = data_dir.join("state.json");
@@ -560,6 +563,7 @@ fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
         .args(args)
         .current_dir(current_dir)
         .env("PORT", "4010")
+        .env("MOKE_API_TOKEN", api_token)
         .env("MOKE_WORKSPACE", &workspace_dir)
         .env("MOKE_ENV_PATH", &env_path)
         .env("MOKE_STATE_PATH", &state_path)
@@ -584,6 +588,11 @@ fn start_agent_server(app: &tauri::App) -> Result<Child, String> {
         append_agent_server_log(app, &message);
         message
     })
+}
+
+fn generate_api_token() -> String {
+    let bytes: [u8; 32] = rand::random();
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn normalize_url(value: Option<&str>) -> Result<Url, String> {
@@ -3034,6 +3043,11 @@ fn open_workspace_with(root: String, opener_id: String) -> Result<(), String> {
     spawn_workspace_opener(&root, &opener_id)
 }
 
+#[tauri::command]
+fn agent_api_token(state: tauri::State<'_, AgentServer>) -> String {
+    state.token.clone()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -3078,6 +3092,7 @@ pub fn run() {
             close_page,
             list_workspace_openers,
             open_workspace_with,
+            agent_api_token,
         ])
         .setup(|app| {
             app.get_webview_window("main")

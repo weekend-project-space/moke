@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiUrl } from '../../../services/apiAccess'
 import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
 import type { Message, MessageImageAttachment } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
@@ -14,7 +15,7 @@ const props = defineProps<{
 
 function attachmentSrc(attachment: MessageImageAttachment) {
   if ('data_url' in attachment) return attachment.data_url
-  return `${props.apiBase}/api/attachments/${encodeURIComponent(attachment.sha256)}`
+  return apiUrl(`${props.apiBase}/api/attachments/${encodeURIComponent(attachment.sha256)}`)
 }
 
 const emit = defineEmits<{

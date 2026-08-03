@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -88,6 +88,23 @@ test('writeFile writes directly when parent is the backend root', async () => {
     assert.equal(readFileSync(target, 'utf8'), 'hello');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('workspace symlinks cannot escape the approved root', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-symlink-root-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'moke-symlink-outside-'));
+  try {
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(outside, 'secret.txt'), 'outside');
+    symlinkSync(outside, path.join(root, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+    const system = new LocalSystemBackend(root);
+
+    await assert.rejects(() => system.readFile('link/secret.txt'), /Path requires approval/);
+    await assert.rejects(() => system.writeFile('link/new.txt', 'outside'), /Path requires approval/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 

@@ -21,6 +21,7 @@ tauri-plugin-decorum = "1.1.1"
 url = "2"
 png = "0.17.16"
 base64 = "0.22"
+rand = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

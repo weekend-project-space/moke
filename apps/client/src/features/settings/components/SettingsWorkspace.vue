@@ -2,6 +2,7 @@
 import { ArrowLeft, FolderX, RotateCw, Save, SendHorizontal } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
+import { apiFetch } from '../../../services/apiAccess'
 import McpSettingsPanel from './McpSettingsPanel.vue'
 import ModelSettingsPanel from './ModelSettingsPanel.vue'
 import SettingsSidebar from './SettingsSidebar.vue'
@@ -60,7 +61,7 @@ async function loadPermissions() {
   loadingPermissions.value = true
   permissionError.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/permissions`)
+    const response = await apiFetch(`${props.apiBase}/api/settings/permissions`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
     permissions.value = data.workspace_roots || []
@@ -74,7 +75,7 @@ async function loadPermissions() {
 async function revokePermission(path: string) {
   permissionError.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/permissions/revoke`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/permissions/revoke`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),

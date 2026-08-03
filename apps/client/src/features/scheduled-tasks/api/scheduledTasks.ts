@@ -4,8 +4,9 @@ import type {
   ScheduledTaskStatus,
   UpdateScheduledTaskRequest,
 } from '@moke/protocol'
+import { apiFetch } from '../../../services/apiAccess'
 
-export function createScheduledTasksApi(apiBase: string, fetcher: typeof fetch = fetch) {
+export function createScheduledTasksApi(apiBase: string, fetcher: typeof fetch = apiFetch) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetcher(`${apiBase}${path}`, {
       ...init,

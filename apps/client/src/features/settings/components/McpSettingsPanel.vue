@@ -2,6 +2,7 @@
 import { RotateCw, Save } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
+import { apiFetch } from '../../../services/apiAccess'
 
 type McpServerSummary = {
   id: string
@@ -72,7 +73,7 @@ async function loadMcpSettings() {
   error.value = ''
   message.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/mcp`)
+    const response = await apiFetch(`${props.apiBase}/api/settings/mcp`)
     const data = await response.json() as unknown
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applyResult(data)
@@ -88,7 +89,7 @@ async function validateMcpSettings() {
   error.value = ''
   message.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/mcp/validate`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: rawConfig.value }),
@@ -109,7 +110,7 @@ async function saveMcpSettings() {
   error.value = ''
   message.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/mcp`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/mcp`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: rawConfig.value }),

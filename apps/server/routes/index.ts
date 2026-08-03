@@ -1,4 +1,4 @@
-import { createRouter } from '../http/router.js';
+import { createRouter, type RouterSecurityOptions } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { registerBrowserRoutes } from './browser.js';
 import { registerAttachmentRoutes } from './attachments.js';
@@ -11,8 +11,8 @@ import { registerMessagingRoutes } from './messaging.js';
 import { registerWeixinRoutes } from './weixin.js';
 import { registerScheduledTaskRoutes } from './scheduled-tasks.js';
 
-export function createRoutes(context: RoutesContext) {
-  const router = createRouter<RoutesContext>();
+export function createRoutes(context: RoutesContext, security?: RouterSecurityOptions) {
+  const router = createRouter<RoutesContext>(security);
 
   registerHealthRoutes(router);
   registerToolRoutes(router);

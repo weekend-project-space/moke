@@ -359,6 +359,7 @@ const sidebar = {
   pin: 'Pin',
   rename: 'Rename',
   running: 'Running',
+  scheduledSessionOrigin: 'Created by a scheduled task',
   scheduledTasks: 'Scheduled tasks',
   search: 'Search chats',
   settings: 'Settings',

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { lstat, mkdir, writeFile as writeLocalFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, writeFile as writeLocalFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -83,7 +83,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async ls(requestedPath = '.', access?: SystemAccessOptions): Promise<SystemLsResult> {
-    const target = this.toBackendPath(requestedPath, access);
+    const target = await this.toBackendPath(requestedPath, access);
     const result = await this.backend.ls(target);
     if (result.error) throw new Error(result.error);
 
@@ -94,7 +94,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async readFile(filePath: string, options?: SystemReadOptions, access?: SystemAccessOptions): Promise<SystemReadResult> {
-    const target = this.toBackendPath(filePath, access, 'file');
+    const target = await this.toBackendPath(filePath, access, 'file');
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? DEFAULT_READ_LIMIT;
     const result = await this.backend.read(target, offset, limit);
@@ -135,7 +135,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async readImage(filePath: string, access?: SystemAccessOptions) {
-    const target = this.toBackendPath(filePath, access, 'file');
+    const target = await this.toBackendPath(filePath, access, 'file');
     const result = await this.backend.readRaw(target);
     if (result.error) throw new Error(result.error);
     const content = result.data?.content;
@@ -157,7 +157,9 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   async grep(pattern: string, options?: SystemGrepOptions, access?: SystemAccessOptions): Promise<SystemGrepResult> {
     const mode = options?.mode ?? 'content';
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
-    const target = options?.path ? this.toBackendPath(options.path, access) : this.workspaceRoot(access);
+    const target = options?.path
+      ? await this.toBackendPath(options.path, access)
+      : await this.approvedPath(this.workspaceRoot(access), access);
     const result = await this.backend.grep(pattern, target, options?.glob ?? null);
     if (result.error) throw new Error(result.error);
 
@@ -168,7 +170,9 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async glob(pattern: string, options?: SystemGlobOptions, access?: SystemAccessOptions): Promise<SystemGlobResult> {
-    const target = options?.path ? this.toBackendPath(options.path, access) : this.workspaceRoot(access);
+    const target = options?.path
+      ? await this.toBackendPath(options.path, access)
+      : await this.approvedPath(this.workspaceRoot(access), access);
     const limit = options?.limit ?? DEFAULT_RESULT_LIMIT;
     const result = await this.backend.glob(pattern, target);
     if (result.error) throw new Error(result.error);
@@ -179,7 +183,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async writeFile(filePath: string, content: string, access?: SystemAccessOptions): Promise<SystemWriteResult> {
-    const target = this.toBackendPath(filePath, access, 'file');
+    const target = await this.toBackendPath(filePath, access, 'file');
     if (this.useLocalFsWrites) {
       await writeLocalTextFile(target, content);
       return {
@@ -203,7 +207,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     newString: string,
     options?: { replaceAll?: boolean }, access?: SystemAccessOptions,
   ): Promise<SystemEditResult> {
-    const target = this.toBackendPath(filePath, access, 'file');
+    const target = await this.toBackendPath(filePath, access, 'file');
     const result = await this.backend.edit(target, oldString, newString, options?.replaceAll ?? false);
     if (result.error) throw new Error(result.error);
 
@@ -215,7 +219,9 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async execute(command: string, args: string[] = [], options?: SystemExecuteOptions, access?: SystemAccessOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
-    const cwd = options?.cwd ? this.toHostPath(options.cwd, access) : this.workspaceRoot(access);
+    const cwd = options?.cwd
+      ? await this.toHostPath(options.cwd, access)
+      : await this.approvedPath(this.workspaceRoot(access), access);
     const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
     this.assertCommandPathsStayInApprovedRoots(commandText, cwd, access);
     if (this.useLocalFsWrites) {
@@ -264,14 +270,37 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     };
   }
 
-  private toBackendPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
+  private async toBackendPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
     return this.toHostPath(requestedPath, access, approvalScope);
   }
 
-  private toHostPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
+  private async toHostPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
     const fullPath = path.resolve(this.workspaceRoot(access), requestedPath);
     if (!this.isInsideApprovedRoot(fullPath, access)) throw this.createPathApprovalError(fullPath, approvalScope);
+    await this.assertRealPathInsideApprovedRoots(fullPath, access, approvalScope);
     return fullPath;
+  }
+
+  private async approvedPath(fullPath: string, access?: SystemAccessOptions) {
+    await this.assertRealPathInsideApprovedRoots(fullPath, access, 'directory');
+    return fullPath;
+  }
+
+  private async assertRealPathInsideApprovedRoots(
+    fullPath: string,
+    access: SystemAccessOptions | undefined,
+    approvalScope: 'file' | 'directory',
+  ) {
+    const roots = [
+      this.workspaceRoot(access),
+      ...this.globallyApprovedRoots,
+      ...(access?.approvedRoots || []),
+    ];
+    const realRoots = await Promise.all(roots.map((root) => resolveRealPath(root)));
+    const candidate = await resolveRealPath(fullPath);
+    if (!realRoots.some((root) => isInsideRoot(root, candidate))) {
+      throw this.createPathApprovalError(fullPath, approvalScope);
+    }
   }
 
   private isInsideApprovedRoot(fullPath: string, access?: SystemAccessOptions) {
@@ -407,6 +436,20 @@ function formatCommandText(command: string, args: string[], useLocalShell: boole
 
 function powerShellQuote(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+async function resolveRealPath(candidate: string): Promise<string> {
+  try {
+    return await realpath(candidate);
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    const parent = path.dirname(candidate);
+    if (code === 'ENOENT' && parent !== candidate) {
+      const realParent = await resolveRealPath(parent);
+      return path.join(realParent, path.basename(candidate));
+    }
+    throw error;
+  }
 }
 
 type LocalCommandResult = {

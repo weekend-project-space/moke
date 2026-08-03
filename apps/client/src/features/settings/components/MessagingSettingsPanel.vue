@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiFetch } from '../../../services/apiAccess'
 import {
   CircleAlert,
   Link2,
@@ -76,7 +77,7 @@ const loginStatusText = computed(() => login.value ? loginStatusLabel(login.valu
 const hasActiveLogin = computed(() => login.value && !isTerminalLogin(login.value.status))
 
 function requestJson<T>(path: string, init?: RequestInit) {
-  return fetch(`${props.apiBase}${path}`, init).then(async (response) => {
+  return apiFetch(`${props.apiBase}${path}`, init).then(async (response) => {
     const body = await response.json().catch(() => ({})) as { error?: { message?: string } }
     if (!response.ok) throw new Error(body.error?.message || `HTTP ${response.status}`)
     return body as T

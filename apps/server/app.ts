@@ -193,8 +193,10 @@ export async function createApp(): Promise<ServerApp> {
       messagingRuntime,
       weixinLoginService,
       scheduledTaskService,
-      defaultWorkspaceRoot,
-    }),
+       defaultWorkspaceRoot,
+     }, {
+       apiToken: process.env.MOKE_API_TOKEN,
+     }),
   );
 
   await messagingRuntime.start();

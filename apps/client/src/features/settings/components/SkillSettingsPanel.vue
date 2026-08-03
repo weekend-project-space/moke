@@ -2,6 +2,7 @@
 import { CircleCheck, Plus, RotateCw, Save, Trash2 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { uiText } from '../../../text/uiText'
+import { apiFetch } from '../../../services/apiAccess'
 
 type SkillSummary = {
   id: string
@@ -279,7 +280,7 @@ async function deleteSkill() {
 }
 
 async function requestJson(url: string, init?: RequestInit): Promise<Record<string, unknown>> {
-  const response = await fetch(url, init)
+  const response = await apiFetch(url, init)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const record = toRecord(data)

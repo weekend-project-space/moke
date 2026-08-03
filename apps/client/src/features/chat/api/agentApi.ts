@@ -8,6 +8,7 @@ import type {
   UpdateSessionEnvironmentInput,
 } from '@moke/agent-sdk'
 import type { ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import { apiFetch, getApiToken } from '../../../services/apiAccess'
 
 export type SendMessageRequest = {
   content: string
@@ -17,8 +18,8 @@ export type SendMessageRequest = {
 
 export { MokeApiError as AgentApiError }
 
-export function createAgentApi(apiBase: string, fetcher: typeof fetch = fetch) {
-  const client = new MokeClient({ baseUrl: apiBase, fetch: fetcher })
+export function createAgentApi(apiBase: string, fetcher: typeof fetch = apiFetch) {
+  const client = new MokeClient({ baseUrl: apiBase, fetch: fetcher, token: getApiToken() })
 
   return {
     async checkHealth() {

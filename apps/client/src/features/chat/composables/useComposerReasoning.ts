@@ -1,6 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { activeModelFromSettings, type ActiveModelInfo } from '../model/activeModel'
 import type { ReasoningEffort } from '../model/conversation'
+import { apiFetch } from '../../../services/apiAccess'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
 
@@ -51,7 +52,7 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
     if (options.serverStatus.value !== 'online') return
 
     try {
-      const response = await fetch(`${options.apiBase}/api/settings`)
+      const response = await apiFetch(`${options.apiBase}/api/settings`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data: unknown = await response.json()
       const settings = data !== null && typeof data === 'object' && !Array.isArray(data)

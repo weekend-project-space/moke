@@ -3,6 +3,7 @@ import { Plus, RotateCw, Save, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { uiText } from '../../../text/uiText'
+import { apiFetch } from '../../../services/apiAccess'
 
 type ModelProviderProfile = {
   id: string
@@ -95,7 +96,7 @@ function markSaved() {
 async function loadSettings() {
   modelError.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings`)
+    const response = await apiFetch(`${props.apiBase}/api/settings`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
     providers.value = Array.isArray(data.providers) && data.providers.length > 0 ? data.providers : [createProvider()]
@@ -117,7 +118,7 @@ async function saveModelProviders(nextActiveProviderId = activeProviderId.value)
     const nextProviders = providers.value.map((provider) =>
       provider.id === editingProvider.id ? { ...editingProvider } : provider,
     )
-    const response = await fetch(`${props.apiBase}/api/settings/model-providers`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/model-providers`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activeProviderId: nextActiveProviderId, providers: nextProviders }),
@@ -168,7 +169,7 @@ async function testModel() {
   modelTest.value = 'checking'
   modelTestMessage.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/model/test`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/model/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingProvider),
@@ -187,7 +188,7 @@ async function loadModelOptions() {
   loadingModels.value = true
   modelListMessage.value = ''
   try {
-    const response = await fetch(`${props.apiBase}/api/settings/model/list`, {
+    const response = await apiFetch(`${props.apiBase}/api/settings/model/list`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingProvider),
