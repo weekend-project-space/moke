@@ -1,12 +1,7 @@
 <svg width="512" height="512" viewBox="80 80 352 352" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="moke-logo-title moke-logo-desc">
   <title id="moke-logo-title">Moke logo</title>
-  <desc id="moke-logo-desc">An upright M joined at its center to a mirrored M below.</desc>
-  <defs>
-    <clipPath id="moke-top-left"><rect width="256" height="256"/></clipPath>
-    <clipPath id="moke-bottom-right"><rect x="256" y="256" width="256" height="256"/></clipPath>
-  </defs>
-  <path d="M136 256V148L256 256L376 148V256" stroke="#202124" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M136 256V364L256 256L376 364V256" stroke="#202124" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M136 256V148L256 256L376 148V256" clip-path="url(#moke-top-left)" stroke="#2563EB" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M136 256V364L256 256L376 364V256" clip-path="url(#moke-bottom-right)" stroke="#2563EB" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <desc id="moke-logo-desc">A white angular M joined to a horizontal stroke on a blue rounded background.</desc>
+  <rect x="80" y="80" width="352" height="352" rx="88" fill="#1D4ED8"/>
+  <path d="M128 340L204 132L256 324L308 132L384 340" stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M112 356H400" stroke="#FFFFFF" stroke-width="36" stroke-linecap="round"/>
 </svg>

@@ -10,7 +10,6 @@ const app = {
   sendFailed: 'Failed to send. Check that Moke is connected, then try again.',
   firstMessageSendFailed: 'Chat created, but the message was not sent. Your draft is ready to retry.',
   fileMenu: 'File',
-  exit: 'Exit',
   sessionCreateFailed: 'Could not create the chat. Check the workspace path and connection, then try again.',
   jumpToBottom: 'Jump to bottom',
   maximizeWindow: 'Maximize',

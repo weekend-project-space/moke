@@ -79,11 +79,6 @@ function handleFileMenuKeydown(event: KeyboardEvent) {
   items[nextIndex]?.focus()
 }
 
-async function requestExit() {
-  closeFileMenu()
-  await nativeAppWindow?.close()
-}
-
 function closeSettings() {
   if (settingsDirty.value && !window.confirm(uiText.skills.discardChanges)) return false
 
@@ -135,8 +130,6 @@ onUnmounted(() => {
       <div v-if="fileMenu" ref="fileMenuElement" class="app-menu-popover" role="menu" :aria-label="uiText.app.fileMenu" @keydown="handleFileMenuKeydown">
         <button type="button" role="menuitem" @click="newChatFromMenu">{{ uiText.app.newChat }}</button>
         <button type="button" role="menuitem" @click="openSettings">{{ uiText.app.settings }}</button>
-        <i aria-hidden="true"></i>
-        <button type="button" role="menuitem" @click="requestExit">{{ uiText.app.exit }}</button>
       </div>
     </div>
     <div class="app-titlebar-drag" data-tauri-drag-region></div>
