@@ -174,6 +174,10 @@ export const weixinLoginUpdateSchema = z.object({
   code: z.string().trim().regex(/^\d{1,12}$/),
 }).strict();
 
+export const feishuLoginStartSchema = z.object({
+  domain: z.enum(['feishu', 'lark']).optional().default('feishu'),
+}).strict();
+
 export const messagingConnectionCreateSchema = z.discriminatedUnion('platform', [
   z.object({
     platform: z.literal('dingtalk'),

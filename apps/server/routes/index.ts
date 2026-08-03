@@ -9,6 +9,7 @@ import { registerSessionRoutes } from './sessions.js';
 import { registerToolRoutes } from './tools.js';
 import { registerMessagingRoutes } from './messaging.js';
 import { registerWeixinRoutes } from './weixin.js';
+import { registerFeishuRoutes } from './feishu.js';
 import { registerScheduledTaskRoutes } from './scheduled-tasks.js';
 
 export function createRoutes(context: RoutesContext, security?: RouterSecurityOptions) {
@@ -23,6 +24,7 @@ export function createRoutes(context: RoutesContext, security?: RouterSecurityOp
   registerRunRoutes(router);
   registerMessagingRoutes(router);
   registerWeixinRoutes(router);
+  registerFeishuRoutes(router);
   registerScheduledTaskRoutes(router);
 
   return router.handler(context);

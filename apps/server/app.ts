@@ -27,6 +27,7 @@ import { SessionApplicationService } from './services/session-application-servic
 import { MessagingConnectionPool } from './services/messaging/connection-pool.js';
 import { MessagingRuntime } from './services/messaging/messaging-runtime.js';
 import { WeixinLoginService } from './services/messaging/weixin-login-service.js';
+import { FeishuLoginService } from './services/messaging/feishu-login-service.js';
 import { WeixinAdapter } from '@moke/messaging-weixin';
 import { DingTalkAdapter } from '@moke/messaging-dingtalk';
 import { FeishuAdapter } from '@moke/messaging-feishu';
@@ -177,6 +178,7 @@ export async function createApp(): Promise<ServerApp> {
     messagingRuntime.onRunEvent(event, run);
   });
   const weixinLoginService = new WeixinLoginService(messagingRuntime);
+  const feishuLoginService = new FeishuLoginService(messagingRuntime);
 
   const server = http.createServer(
     createRoutes({
@@ -192,6 +194,7 @@ export async function createApp(): Promise<ServerApp> {
       skillSettingsService,
       messagingRuntime,
       weixinLoginService,
+      feishuLoginService,
       scheduledTaskService,
        defaultWorkspaceRoot,
      }, {
@@ -209,6 +212,7 @@ export async function createApp(): Promise<ServerApp> {
       scheduledTaskService.stop();
       const httpClosed = closeHttpServer(server);
       removeMessagingObserver();
+      feishuLoginService.close();
       const messagingClosed = messagingRuntime.close();
       const runsStopped = runManager.shutdown();
       browserBridge.close();

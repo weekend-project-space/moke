@@ -43,6 +43,15 @@ type WeixinLogin = {
   error?: { code: string; message: string }
 }
 
+type FeishuLogin = {
+  id: string
+  status: 'waiting_scan' | 'expired' | 'denied' | 'confirmed' | 'failed' | 'cancelled'
+  qr_image?: string
+  expires_at: string
+  next_poll_after_ms: number
+  error?: { code: string; message: string }
+}
+
 const channelIcons: Record<MessagingConnection['platform'], string> = {
   weixin: weChatIcon,
   dingtalk: dingTalkIcon,
@@ -63,7 +72,10 @@ const savingDingTalk = ref(false)
 const feishuAppId = ref('')
 const feishuAppSecret = ref('')
 const feishuDomain = ref<'feishu' | 'lark'>('feishu')
+const feishuSetupMode = ref<'quick' | 'manual'>('quick')
 const savingFeishu = ref(false)
+const feishuLogin = ref<FeishuLogin | null>(null)
+const creatingFeishuLogin = ref(false)
 const login = ref<WeixinLogin | null>(null)
 const verifyCode = ref('')
 const loading = ref(false)
@@ -71,10 +83,14 @@ const creatingLogin = ref(false)
 const busyConnectionId = ref('')
 const error = ref('')
 let pollTimer: number | undefined
+let feishuPollTimer: number | undefined
 let loginRequest = 0
+let feishuLoginRequest = 0
 
 const loginStatusText = computed(() => login.value ? loginStatusLabel(login.value.status) : '')
 const hasActiveLogin = computed(() => login.value && !isTerminalLogin(login.value.status))
+const feishuLoginStatusText = computed(() => feishuLogin.value ? feishuLoginStatusLabel(feishuLogin.value.status) : '')
+const hasActiveFeishuLogin = computed(() => feishuLogin.value && !isTerminalFeishuLogin(feishuLogin.value.status))
 
 function requestJson<T>(path: string, init?: RequestInit) {
   return apiFetch(`${props.apiBase}${path}`, init).then(async (response) => {
@@ -152,6 +168,56 @@ async function saveFeishuConnection() {
     error.value = messageFrom(reason, uiText.messaging.addFeishuFailed)
   } finally {
     savingFeishu.value = false
+  }
+}
+
+async function beginFeishuLogin() {
+  const request = ++feishuLoginRequest
+  creatingFeishuLogin.value = true
+  feishuLogin.value = null
+  error.value = ''
+  try {
+    const data = await requestJson<{ login?: FeishuLogin }>('/api/messaging/feishu/logins', json('POST', {
+      domain: feishuDomain.value,
+    }))
+    if (!data.login) throw new Error(uiText.messaging.invalidLoginResponse)
+    if (request !== feishuLoginRequest || setupChannel.value !== 'feishu' || feishuSetupMode.value !== 'quick') {
+      if (!isTerminalFeishuLogin(data.login.status)) {
+        void requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(data.login.id)}`, { method: 'DELETE' }).catch(() => undefined)
+      }
+      return
+    }
+    feishuLogin.value = data.login
+    startFeishuPolling()
+  } catch (reason) {
+    if (request === feishuLoginRequest) error.value = messageFrom(reason, uiText.messaging.startFeishuAuthorizationFailed)
+  } finally {
+    if (request === feishuLoginRequest) creatingFeishuLogin.value = false
+  }
+}
+
+async function pollFeishuLogin() {
+  const current = feishuLogin.value
+  if (!current || isTerminalFeishuLogin(current.status)) {
+    stopFeishuPolling()
+    return
+  }
+  try {
+    const data = await requestJson<{ login?: FeishuLogin }>(`/api/messaging/feishu/logins/${encodeURIComponent(current.id)}`)
+    if (!data.login) throw new Error(uiText.messaging.invalidLoginResponse)
+    if (setupChannel.value !== 'feishu' || feishuSetupMode.value !== 'quick' || feishuLogin.value?.id !== current.id) return
+    feishuLogin.value = { ...data.login, qr_image: data.login.qr_image || current.qr_image }
+    if (isTerminalFeishuLogin(data.login.status)) {
+      stopFeishuPolling()
+      if (data.login.status === 'confirmed') {
+        await loadConnections()
+        setupChannel.value = null
+        feishuLogin.value = null
+      }
+    }
+  } catch (reason) {
+    stopFeishuPolling()
+    error.value = messageFrom(reason, uiText.messaging.checkFeishuAuthorizationFailed)
   }
 }
 
@@ -257,16 +323,39 @@ function editDingTalk(connection: MessagingConnection) {
 
 function openFeishuSetup() {
   setupChannel.value = 'feishu'
+  feishuSetupMode.value = 'quick'
   error.value = ''
+  void beginFeishuLogin()
+}
+
+async function setFeishuSetupMode(mode: 'quick' | 'manual') {
+  if (mode === feishuSetupMode.value) return
+  await cancelFeishuLogin()
+  feishuSetupMode.value = mode
+  error.value = ''
+  if (mode === 'quick') void beginFeishuLogin()
+}
+
+async function setFeishuDomain(domain: 'feishu' | 'lark') {
+  if (domain === feishuDomain.value) return
+  await cancelFeishuLogin()
+  feishuDomain.value = domain
+  error.value = ''
+  if (setupChannel.value === 'feishu' && feishuSetupMode.value === 'quick') void beginFeishuLogin()
 }
 
 async function closeSetup() {
   if (savingDingTalk.value || savingFeishu.value) return
   loginRequest += 1
+  feishuLoginRequest += 1
   creatingLogin.value = false
+  creatingFeishuLogin.value = false
   const current = login.value
   const shouldCancelLogin = setupChannel.value === 'weixin' && current && !isTerminalLogin(current.status)
+  const currentFeishuLogin = feishuLogin.value
+  const shouldCancelFeishuLogin = setupChannel.value === 'feishu' && currentFeishuLogin && !isTerminalFeishuLogin(currentFeishuLogin.status)
   stopPolling()
+  stopFeishuPolling()
   login.value = null
   loginConnectionId.value = undefined
   verifyCode.value = ''
@@ -278,12 +367,21 @@ async function closeSetup() {
   feishuAppId.value = ''
   feishuAppSecret.value = ''
   feishuDomain.value = 'feishu'
+  feishuSetupMode.value = 'quick'
+  feishuLogin.value = null
   error.value = ''
   setupChannel.value = null
 
   if (shouldCancelLogin) {
     try {
       await requestJson(`/api/messaging/weixin/logins/${encodeURIComponent(current.id)}`, { method: 'DELETE' })
+    } catch {
+      // The local dialog can close after the server has expired the authorization.
+    }
+  }
+  if (shouldCancelFeishuLogin) {
+    try {
+      await requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(currentFeishuLogin.id)}`, { method: 'DELETE' })
     } catch {
       // The local dialog can close after the server has expired the authorization.
     }
@@ -323,6 +421,31 @@ function startPolling() {
 function stopPolling() {
   if (pollTimer !== undefined) window.clearInterval(pollTimer)
   pollTimer = undefined
+}
+
+function startFeishuPolling() {
+  stopFeishuPolling()
+  feishuPollTimer = window.setInterval(() => { void pollFeishuLogin() }, 1500)
+  void pollFeishuLogin()
+}
+
+function stopFeishuPolling() {
+  if (feishuPollTimer !== undefined) window.clearInterval(feishuPollTimer)
+  feishuPollTimer = undefined
+}
+
+async function cancelFeishuLogin() {
+  feishuLoginRequest += 1
+  creatingFeishuLogin.value = false
+  const current = feishuLogin.value
+  stopFeishuPolling()
+  feishuLogin.value = null
+  if (!current || isTerminalFeishuLogin(current.status)) return
+  try {
+    await requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(current.id)}`, { method: 'DELETE' })
+  } catch {
+    // The authorization may have expired while the mode or region changed.
+  }
 }
 
 function json(method: 'POST' | 'PATCH', body: unknown): RequestInit {
@@ -376,6 +499,21 @@ function isTerminalLogin(status: WeixinLogin['status']) {
   return status === 'expired' || status === 'confirmed' || status === 'already_connected' || status === 'failed' || status === 'cancelled'
 }
 
+function feishuLoginStatusLabel(status: FeishuLogin['status']) {
+  return {
+    waiting_scan: feishuDomain.value === 'lark' ? uiText.messaging.scanWithLark : uiText.messaging.scanWithFeishu,
+    expired: uiText.messaging.qrExpired,
+    denied: uiText.messaging.authorizationDenied,
+    confirmed: uiText.messaging.authorizationSucceeded,
+    failed: uiText.messaging.authorizationFailed,
+    cancelled: uiText.messaging.authorizationCancelled,
+  }[status]
+}
+
+function isTerminalFeishuLogin(status: FeishuLogin['status']) {
+  return status === 'expired' || status === 'denied' || status === 'confirmed' || status === 'failed' || status === 'cancelled'
+}
+
 function connectionTime(connection: MessagingConnection) {
   const value = connection.last_inbound_at || connection.last_outbound_at || connection.last_connected_at
   if (!value) return uiText.messaging.noActivity
@@ -388,7 +526,11 @@ function messageFrom(reason: unknown, fallback: string) {
 }
 
 onMounted(() => { void loadConnections() })
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  stopPolling()
+  stopFeishuPolling()
+  void cancelFeishuLogin()
+})
 </script>
 
 <template>
@@ -571,24 +713,57 @@ onBeforeUnmount(stopPolling)
           </div>
         </form>
 
-        <form v-else class="messaging-credentials-form" @submit.prevent="saveFeishuConnection">
-          <div class="messaging-modal-fields">
-            <label>{{ uiText.messaging.appId }}<input v-model="feishuAppId" required maxlength="200" autocomplete="off" /></label>
-            <label>{{ uiText.messaging.appSecret }}<input v-model="feishuAppSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
-            <label>
-              {{ uiText.messaging.region }}
-              <select v-model="feishuDomain">
-                <option value="feishu">{{ uiText.messaging.feishuChina }}</option>
-                <option value="lark">{{ uiText.messaging.larkGlobal }}</option>
-              </select>
-            </label>
-            <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+        <template v-else>
+          <div class="messaging-setup-modes" role="tablist" :aria-label="uiText.messaging.setupMethod">
+            <button type="button" role="tab" :aria-selected="feishuSetupMode === 'quick'" :class="{ active: feishuSetupMode === 'quick' }" @click="setFeishuSetupMode('quick')">{{ uiText.messaging.quickSetup }}</button>
+            <button type="button" role="tab" :aria-selected="feishuSetupMode === 'manual'" :class="{ active: feishuSetupMode === 'manual' }" @click="setFeishuSetupMode('manual')">{{ uiText.messaging.manualSetup }}</button>
           </div>
-          <div class="messaging-modal-actions">
-            <button type="button" class="settings-secondary" :disabled="savingFeishu" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
-            <button type="submit" class="settings-primary" :disabled="savingFeishu || !feishuAppId.trim() || !feishuAppSecret.trim()">{{ uiText.messaging.saveAndConnect }}</button>
-          </div>
-        </form>
+
+          <template v-if="feishuSetupMode === 'quick'">
+            <div class="feishu-setup-body">
+              <div class="feishu-region-choice" role="radiogroup" :aria-label="uiText.messaging.region">
+                <button type="button" role="radio" :aria-checked="feishuDomain === 'feishu'" :class="{ active: feishuDomain === 'feishu' }" :disabled="creatingFeishuLogin" @click="setFeishuDomain('feishu')">{{ uiText.messaging.feishuChina }}</button>
+                <button type="button" role="radio" :aria-checked="feishuDomain === 'lark'" :class="{ active: feishuDomain === 'lark' }" :disabled="creatingFeishuLogin" @click="setFeishuDomain('lark')">{{ uiText.messaging.larkGlobal }}</button>
+              </div>
+
+              <div v-if="feishuLogin?.qr_image && hasActiveFeishuLogin" class="feishu-qr-frame">
+                <img :src="feishuLogin.qr_image" :alt="uiText.messaging.feishuQrCode" />
+              </div>
+              <div v-else class="feishu-setup-placeholder" :class="{ error: Boolean(error) || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied' }">
+                <CircleAlert v-if="error || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied'" :size="20" />
+                <LoaderCircle v-else :size="20" class="spinning" />
+              </div>
+
+              <div class="feishu-login-state" :class="{ error: Boolean(error) || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied' }">
+                <span>{{ error || feishuLogin?.error?.message || feishuLoginStatusText || uiText.messaging.preparingAuthorization }}</span>
+                <time v-if="feishuLogin && hasActiveFeishuLogin">{{ new Date(feishuLogin.expires_at).toLocaleTimeString() }}</time>
+              </div>
+            </div>
+            <div class="messaging-modal-actions">
+              <button v-if="error || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied'" type="button" class="settings-secondary" :disabled="creatingFeishuLogin" @click="beginFeishuLogin">{{ uiText.messaging.tryAgain }}</button>
+              <button type="button" class="settings-secondary" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
+            </div>
+          </template>
+
+          <form v-else class="messaging-credentials-form" @submit.prevent="saveFeishuConnection">
+            <div class="messaging-modal-fields">
+              <label>{{ uiText.messaging.appId }}<input v-model="feishuAppId" required maxlength="200" autocomplete="off" /></label>
+              <label>{{ uiText.messaging.appSecret }}<input v-model="feishuAppSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
+              <label>
+                {{ uiText.messaging.region }}
+                <select v-model="feishuDomain">
+                  <option value="feishu">{{ uiText.messaging.feishuChina }}</option>
+                  <option value="lark">{{ uiText.messaging.larkGlobal }}</option>
+                </select>
+              </label>
+              <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+            </div>
+            <div class="messaging-modal-actions">
+              <button type="button" class="settings-secondary" :disabled="savingFeishu" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
+              <button type="submit" class="settings-primary" :disabled="savingFeishu || !feishuAppId.trim() || !feishuAppSecret.trim()">{{ uiText.messaging.saveAndConnect }}</button>
+            </div>
+          </form>
+        </template>
       </section>
     </div>
   </Teleport>
@@ -674,6 +849,45 @@ onBeforeUnmount(stopPolling)
   display: grid;
 }
 
+.messaging-setup-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 12px 16px 0;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted-faint);
+}
+
+.messaging-setup-modes button,
+.feishu-region-choice button {
+  min-width: 0;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--font-size-meta);
+  background: transparent;
+  cursor: pointer;
+}
+
+.messaging-setup-modes button {
+  height: 30px;
+}
+
+.messaging-setup-modes button.active,
+.feishu-region-choice button.active {
+  color: var(--ink);
+  background: var(--tone-surface);
+  box-shadow: 0 0 0 1px var(--line-soft), 0 1px 2px rgb(31 35 40 / 8%);
+}
+
+.messaging-setup-modes button:focus-visible,
+.feishu-region-choice button:focus-visible {
+  outline: 2px solid var(--focus-control-border);
+  outline-offset: 1px;
+}
+
 .messaging-modal-fields {
   display: grid;
   gap: 12px;
@@ -734,8 +948,39 @@ onBeforeUnmount(stopPolling)
   padding: 16px;
 }
 
+.feishu-setup-body {
+  display: grid;
+  min-height: 304px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.feishu-region-choice {
+  display: grid;
+  width: 216px;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted-faint);
+}
+
+.feishu-region-choice button {
+  height: 28px;
+}
+
+.feishu-region-choice button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .weixin-qr-frame,
-.weixin-setup-placeholder {
+.weixin-setup-placeholder,
+.feishu-qr-frame,
+.feishu-setup-placeholder {
   display: grid;
   width: 216px;
   height: 216px;
@@ -751,12 +996,28 @@ onBeforeUnmount(stopPolling)
   object-fit: contain;
 }
 
+.feishu-qr-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .weixin-setup-placeholder {
   color: var(--ink-muted);
   background: var(--surface-muted-faint);
 }
 
 .weixin-setup-placeholder.error {
+  color: var(--text-error);
+}
+
+.feishu-setup-placeholder {
+  color: var(--ink-muted);
+  background: var(--surface-muted-faint);
+}
+
+.feishu-setup-placeholder.error {
   color: var(--text-error);
 }
 
@@ -775,7 +1036,30 @@ onBeforeUnmount(stopPolling)
   color: var(--text-error);
 }
 
+.feishu-login-state {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: var(--font-size-meta);
+  text-align: center;
+}
+
+.feishu-login-state.error {
+  color: var(--text-error);
+}
+
 .weixin-login-state time {
+  padding-left: 8px;
+  border-left: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+}
+
+.feishu-login-state time {
   padding-left: 8px;
   border-left: 1px solid var(--line-soft);
   color: var(--ink-muted);
@@ -803,7 +1087,8 @@ onBeforeUnmount(stopPolling)
 
   .messaging-modal-heading,
   .messaging-modal-fields,
-  .weixin-setup-body {
+  .weixin-setup-body,
+  .feishu-setup-body {
     padding-right: 14px;
     padding-left: 14px;
   }
@@ -811,6 +1096,11 @@ onBeforeUnmount(stopPolling)
   .messaging-modal-actions {
     padding-right: 14px;
     padding-left: 14px;
+  }
+
+  .messaging-setup-modes {
+    margin-right: 14px;
+    margin-left: 14px;
   }
 }
 </style>

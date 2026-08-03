@@ -8,6 +8,7 @@ import type { SessionRepository } from '../storage/session-store.js';
 import type { AttachmentStore } from '../storage/attachment-store.js';
 import type { MessagingRuntime } from '../services/messaging/messaging-runtime.js';
 import type { WeixinLoginService } from '../services/messaging/weixin-login-service.js';
+import type { FeishuLoginService } from '../services/messaging/feishu-login-service.js';
 import type { ScheduledTaskService } from '../services/scheduled-task-service.js';
 
 export type RoutesContext = {
@@ -23,6 +24,7 @@ export type RoutesContext = {
   skillSettingsService: SkillSettingsService;
   messagingRuntime: MessagingRuntime;
   weixinLoginService: WeixinLoginService;
+  feishuLoginService: FeishuLoginService;
   scheduledTaskService: ScheduledTaskService;
   defaultWorkspaceRoot: string;
 };
