@@ -7,7 +7,7 @@ import { uiText } from './text/uiText'
 
 type AppWorkspace = 'chat' | 'settings'
 type NativeAppWindow = {
-  close(): Promise<void>
+  destroy(): Promise<void>
   onCloseRequested(handler: (event: { preventDefault(): void }) => void | Promise<void>): Promise<() => void>
 }
 
@@ -22,7 +22,6 @@ const nativeAppWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
 })?.window?.getCurrentWindow()
 let unlistenCloseRequested: (() => void) | null = null
 let appDisposed = false
-let closeConfirmed = false
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
@@ -104,11 +103,10 @@ onMounted(async () => {
   window.addEventListener('keydown', handleAppKeydown)
   if (!nativeAppWindow) return
   const unlisten = await nativeAppWindow.onCloseRequested(async (event) => {
-    if (!settingsDirty.value || closeConfirmed) return
+    if (!settingsDirty.value) return
     event.preventDefault()
     if (!window.confirm(uiText.skills.discardChanges)) return
-    closeConfirmed = true
-    await nativeAppWindow.close()
+    await nativeAppWindow.destroy()
   })
   if (appDisposed) unlisten()
   else unlistenCloseRequested = unlisten
