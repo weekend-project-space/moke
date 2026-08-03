@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { LocalSystemBackend } from './local-system-backend.js';
 
-function createBackend(options: { executeDelayMs?: number } = {}) {
+function createBackend(options: { executeDelayMs?: number; rawContent?: Uint8Array } = {}) {
   const calls: string[] = [];
   const backend = {
     id: 'fake-backend',
@@ -18,7 +18,16 @@ function createBackend(options: { executeDelayMs?: number } = {}) {
       return {};
     },
     async readRaw() {
-      return {};
+      return options.rawContent
+        ? {
+            data: {
+              content: options.rawContent,
+              mimeType: 'application/octet-stream',
+              created_at: new Date(0).toISOString(),
+              modified_at: new Date(0).toISOString(),
+            },
+          }
+        : {};
     },
     async grep() {
       return {};
@@ -95,6 +104,28 @@ test('readFile requests approval for the exact external file', async () => {
       return true;
     },
   );
+});
+
+test('readImage detects image content and returns a data URL', async () => {
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend: createBackend({ rawContent: png }) });
+
+  const result = await system.readImage('image.bin');
+
+  assert.equal(result.path, 'image.bin');
+  assert.equal(result.mime_type, 'image/png');
+  assert.equal(result.size, png.byteLength);
+  assert.equal(result.data_url, `data:image/png;base64,${Buffer.from(png).toString('base64')}`);
+});
+
+test('readImage rejects unsupported binary content', async () => {
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, {
+    backend: createBackend({ rawContent: Uint8Array.from([0x00, 0x01, 0x02]) }),
+  });
+
+  await assert.rejects(() => system.readImage('image.bin'), /supported PNG, JPEG, WebP, or GIF/);
 });
 
 test('execute rejects absolute command paths outside workspace', async () => {

@@ -25,7 +25,13 @@ export type {
   WorkspacePathApprovalDecision,
   WorkspacePathApprovalRequest,
 } from './tool-context.js';
-export type { RuntimeTool, RuntimeToolOutput, RuntimeToolResult, ToolApprovalRequirement } from './tool-registry.js';
+export type {
+  RuntimeTool,
+  RuntimeToolImage,
+  RuntimeToolOutput,
+  RuntimeToolResult,
+  ToolApprovalRequirement,
+} from './tool-registry.js';
 export type {
   ExecutableSystemBackend,
   SystemContentBlock,

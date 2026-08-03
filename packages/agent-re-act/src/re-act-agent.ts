@@ -207,7 +207,7 @@ export class ReActAgent {
                     input: toToolCallArgs(call.args),
                   },
                 });
-          const { publicOutput, modelOutput, context: appendedContext } = normalizeRuntimeToolResult(rawOutput);
+          const { publicOutput, modelOutput, images, context: appendedContext } = normalizeRuntimeToolResult(rawOutput);
           throwIfAborted(context.abortSignal);
           hasObservation = true;
           const approvals = context.consumeApprovals?.(callId) || [];
@@ -234,6 +234,7 @@ export class ReActAgent {
             callId,
             name: call.name,
             output: modelOutput,
+            images,
           });
           modelAdapter.appendContext(modelMessages, appendedContext);
           for (const contextItem of appendedContext) {

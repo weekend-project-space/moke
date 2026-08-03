@@ -11,6 +11,7 @@ import { createGrepTool } from './grep.js';
 import { createLsTool } from './ls.js';
 import { createReadFileTool } from './read-file.js';
 import { createSearchTool } from './search.js';
+import { createViewImageTool } from './view-image.js';
 import { createWriteFileTool } from './write-file.js';
 
 export type AgentToolsSystemBackend = SystemBackend & Partial<WritableSystemBackend> & Partial<ExecutableSystemBackend>;
@@ -21,7 +22,8 @@ export function registerAgentTools(toolRegistry: ToolRegistry, system: AgentTool
     .register(createGlobTool(system))
     .register(createGrepTool(system))
     .register(createSearchTool(system))
-    .register(createReadFileTool(system));
+    .register(createReadFileTool(system))
+    .register(createViewImageTool(system));
 
   if (isWritableSystemBackend(system)) {
     toolRegistry.register(createWriteFileTool(system)).register(createEditFileTool(system));

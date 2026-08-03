@@ -104,6 +104,12 @@ export interface SystemBackend {
 
   ls(path?: string, access?: SystemAccessOptions): Promise<SystemLsResult>;
   readFile(path: string, options?: SystemReadOptions, access?: SystemAccessOptions): Promise<SystemReadResult>;
+  readImage(path: string, access?: SystemAccessOptions): Promise<{
+    path: string;
+    mime_type: string;
+    size: number;
+    data_url: string;
+  }>;
   grep(pattern: string, options?: SystemGrepOptions, access?: SystemAccessOptions): Promise<SystemGrepResult>;
   glob(pattern: string, options?: SystemGlobOptions, access?: SystemAccessOptions): Promise<SystemGlobResult>;
 }

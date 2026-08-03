@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Mutex};
@@ -330,6 +331,7 @@ struct BrowserSnapshotOptions {
 #[serde(rename_all = "camelCase")]
 struct BrowserScreenshotOptions {
     page_id: Option<u32>,
+    workspace_root: String,
     path: Option<String>,
     full_page: Option<bool>,
     uid: Option<String>,
@@ -1028,11 +1030,16 @@ const BROWSER_SCREENSHOT_METRICS_SCRIPT: &str = r#"
 "#;
 
 const BROWSER_ELEMENT_RECT_SCRIPT: &str = r#"
-(() => {
+(async () => {
   const uid = __MOKE_UID__;
   const el = document.querySelector(`[data-moke-uid="${String(uid).replace(/"/g, '\\"')}"]`);
   if (!el) throw new Error(`Element not found: ${uid}`);
-  el.scrollIntoView({ block: "center", inline: "nearest" });
+  const doc = document.documentElement;
+  const previousScrollBehavior = doc.style.scrollBehavior;
+  doc.style.scrollBehavior = "auto";
+  el.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  doc.style.scrollBehavior = previousScrollBehavior;
   const rect = el.getBoundingClientRect();
   return {
     x: rect.x,
@@ -1129,11 +1136,17 @@ fn scroll_script(x: f64, y: f64) -> String {
     format!(
         r#"
 new Promise((resolve) => {{
-  window.scrollTo({{ left: {x}, top: {y}, behavior: "instant" }});
-  requestAnimationFrame(() => requestAnimationFrame(() => resolve({{
-    scrollX: window.scrollX || window.pageXOffset || 0,
-    scrollY: window.scrollY || window.pageYOffset || 0
-  }})));
+  const doc = document.documentElement;
+  const previousScrollBehavior = doc.style.scrollBehavior;
+  doc.style.scrollBehavior = "auto";
+  window.scrollTo({{ left: {x}, top: {y}, behavior: "auto" }});
+  requestAnimationFrame(() => requestAnimationFrame(() => {{
+    doc.style.scrollBehavior = previousScrollBehavior;
+    resolve({{
+      scrollX: window.scrollX || window.pageXOffset || 0,
+      scrollY: window.scrollY || window.pageYOffset || 0
+    }});
+  }}));
 }})
 "#
     )
@@ -1414,23 +1427,69 @@ fn repo_dir() -> PathBuf {
         .to_path_buf()
 }
 
-fn screenshot_file_path(path: Option<String>) -> PathBuf {
+fn validate_screenshot_relative_path(path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(path);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            !matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err("Screenshot path must stay inside the current workspace".to_string());
+    }
+    if !path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+    {
+        return Err("Screenshot path must end in .png".to_string());
+    }
+    Ok(path.to_path_buf())
+}
+
+fn ensure_screenshot_path_in_workspace(workspace_root: &Path, path: &Path) -> Result<(), String> {
+    let canonical_root = fs::canonicalize(workspace_root)
+        .map_err(|error| format!("Could not resolve screenshot workspace: {error}"))?;
+    let mut ancestor = path.parent().unwrap_or(workspace_root);
+    while !ancestor.exists() {
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| "Screenshot path must stay inside the current workspace".to_string())?;
+    }
+    let canonical_ancestor = fs::canonicalize(ancestor)
+        .map_err(|error| format!("Could not resolve screenshot directory: {error}"))?;
+    if !canonical_ancestor.starts_with(&canonical_root) {
+        return Err("Screenshot path must stay inside the current workspace".to_string());
+    }
+    Ok(())
+}
+
+fn screenshot_file_path(workspace_root: &Path, path: Option<String>) -> Result<PathBuf, String> {
+    if !workspace_root.is_dir() {
+        return Err("Screenshot workspace is unavailable".to_string());
+    }
+
     if let Some(path) = path {
-        let path = PathBuf::from(path);
-        if path.is_absolute() {
-            return path;
+        let output_path = workspace_root.join(validate_screenshot_relative_path(&path)?);
+        ensure_screenshot_path_in_workspace(workspace_root, &output_path)?;
+        if output_path.exists() {
+            return Err("Screenshot output already exists".to_string());
         }
-        return repo_dir().join(path);
+        return Ok(output_path);
     }
 
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    repo_dir()
-        .join(".moke")
-        .join("screenshots")
-        .join(format!("browser-{millis}.png"))
+    let screenshot_dir = workspace_root.join(".moke").join("screenshots");
+    ensure_screenshot_path_in_workspace(workspace_root, &screenshot_dir.join("pending.png"))?;
+    Ok(unique_download_path(
+        &screenshot_dir,
+        Path::new(&format!("browser-{millis}.png")),
+    ))
 }
 
 fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
@@ -1438,7 +1497,13 @@ fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
-    fs::write(path, encode_png(image)?).map_err(|error| error.to_string())
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("Could not create screenshot: {error}"))?;
+    file.write_all(&encode_png(image)?)
+        .map_err(|error| format!("Could not write screenshot: {error}"))
 }
 
 fn sanitize_browser_favicon_url(value: &str) -> String {
@@ -1489,6 +1554,54 @@ fn encode_png(image: &CapturedImage) -> Result<Vec<u8>, String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(bytes)
+}
+
+fn decode_png(bytes: &[u8]) -> Result<CapturedImage, String> {
+    let mut decoder = png::Decoder::new(Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().map_err(|error| error.to_string())?;
+    let mut buffer = vec![0; reader.output_buffer_size()];
+    let info = reader
+        .next_frame(&mut buffer)
+        .map_err(|error| error.to_string())?;
+    let source = &buffer[..info.buffer_size()];
+    let pixel_count = (info.width as usize)
+        .checked_mul(info.height as usize)
+        .ok_or_else(|| "Browser screenshot dimensions are too large".to_string())?;
+    let mut rgba = Vec::with_capacity(
+        pixel_count
+            .checked_mul(4)
+            .ok_or_else(|| "Browser screenshot dimensions are too large".to_string())?,
+    );
+    match info.color_type {
+        png::ColorType::Rgba => rgba.extend_from_slice(source),
+        png::ColorType::Rgb => {
+            for pixel in source.chunks_exact(3) {
+                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+            }
+        }
+        png::ColorType::Grayscale => {
+            for value in source {
+                rgba.extend_from_slice(&[*value, *value, *value, 255]);
+            }
+        }
+        png::ColorType::GrayscaleAlpha => {
+            for pixel in source.chunks_exact(2) {
+                rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
+            }
+        }
+        png::ColorType::Indexed => {
+            return Err("Browser screenshot uses an unsupported PNG color format".to_string())
+        }
+    }
+    if rgba.len() != pixel_count * 4 {
+        return Err("Browser screenshot contains incomplete pixel data".to_string());
+    }
+    Ok(CapturedImage {
+        width: info.width,
+        height: info.height,
+        rgba,
+    })
 }
 
 fn crop_image(
@@ -1548,8 +1661,11 @@ fn stitch_vertical(
     })
 }
 
+#[cfg(not(windows))]
 fn capture_browser_viewport(
     app: &tauri::AppHandle,
+    _state: &BrowserState,
+    _page_id: u32,
     bounds: BrowserBounds,
 ) -> Result<CapturedImage, String> {
     let main_window = app
@@ -1595,6 +1711,18 @@ fn capture_browser_viewport(
     let width = (bounds.width * scale_x).round().max(1.0) as u32;
     let height = (bounds.height * scale_y).round().max(1.0) as u32;
     crop_image(&window_image, x, y, width, height)
+}
+
+#[cfg(windows)]
+fn capture_browser_viewport(
+    app: &tauri::AppHandle,
+    state: &BrowserState,
+    page_id: u32,
+    _bounds: BrowserBounds,
+) -> Result<CapturedImage, String> {
+    decode_png(&capture_webview_preview(&browser_webview(
+        app, state, page_id,
+    )?)?)
 }
 
 #[cfg(windows)]
@@ -2145,10 +2273,18 @@ async fn browser_take_screenshot(
     state: tauri::State<'_, BrowserState>,
     options: BrowserScreenshotOptions,
 ) -> Result<BrowserResult, String> {
-    let page_id = active_page_id(&state, options.page_id)?;
+    let BrowserScreenshotOptions {
+        page_id,
+        workspace_root,
+        path,
+        full_page,
+        uid,
+    } = options;
+    let page_id = active_page_id(&state, page_id)?;
     show_browser_page(&app, &state, page_id, None)?;
     let bounds = resolve_browser_bounds(&state, None)?;
-    let output_path = screenshot_file_path(options.path);
+    let workspace_root = PathBuf::from(workspace_root);
+    let output_path = screenshot_file_path(&workspace_root, path)?;
     let original_metrics = eval_browser_json(
         &app,
         &state,
@@ -2165,110 +2301,128 @@ async fn browser_take_screenshot(
         .and_then(|value| value.as_f64())
         .unwrap_or(0.0);
 
-    let (image, mode) = if let Some(uid) = options.uid {
-        let rect = eval_browser_json(
-            &app,
-            &state,
-            Some(page_id),
-            element_rect_script(&uid)?,
-            30000,
-        )?;
-        let viewport = capture_browser_viewport(&app, bounds)?;
-        let scale_x = viewport.width as f64 / bounds.width.max(1.0);
-        let scale_y = viewport.height as f64 / bounds.height.max(1.0);
-        let x = (rect
-            .get("x")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(0.0)
-            .max(0.0)
-            * scale_x)
-            .round() as u32;
-        let y = (rect
-            .get("y")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(0.0)
-            .max(0.0)
-            * scale_y)
-            .round() as u32;
-        let width = (rect
-            .get("width")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(0.0)
-            .max(1.0)
-            * scale_x)
-            .round() as u32;
-        let height = (rect
-            .get("height")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(0.0)
-            .max(1.0)
-            * scale_y)
-            .round() as u32;
-        (crop_image(&viewport, x, y, width, height)?, "element")
-    } else if options.full_page.unwrap_or(false) {
-        let viewport_height = original_metrics
-            .get("viewportHeight")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(bounds.height)
-            .max(1.0);
-        let scroll_height = original_metrics
-            .get("scrollHeight")
-            .and_then(|value| value.as_f64())
-            .unwrap_or(viewport_height)
-            .max(viewport_height);
-        let mut parts = Vec::new();
-        let mut y = 0.0;
-        while y < scroll_height {
-            let target_y = if y + viewport_height >= scroll_height {
-                (scroll_height - viewport_height).max(0.0)
-            } else {
-                y
-            };
-            let actual = eval_browser_json(
+    let capture_result = (|| -> Result<(CapturedImage, &'static str), String> {
+        if let Some(uid) = uid {
+            let rect = eval_browser_json(
                 &app,
                 &state,
                 Some(page_id),
-                scroll_script(original_x, target_y),
+                element_rect_script(&uid)?,
                 30000,
             )?;
-            let actual_y = actual
-                .get("scrollY")
+            let viewport = capture_browser_viewport(&app, &state, page_id, bounds)?;
+            let viewport_width = rect
+                .get("viewportWidth")
                 .and_then(|value| value.as_f64())
-                .unwrap_or(target_y);
-            let viewport = capture_browser_viewport(&app, bounds)?;
+                .unwrap_or(bounds.width)
+                .max(1.0);
+            let viewport_height = rect
+                .get("viewportHeight")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(bounds.height)
+                .max(1.0);
+            let scale_x = viewport.width as f64 / viewport_width;
             let scale_y = viewport.height as f64 / viewport_height;
-            let target_pixel_y = (actual_y * scale_y).round().max(0.0) as u32;
-            parts.push((viewport, target_pixel_y));
-            if target_y + viewport_height >= scroll_height {
-                break;
+            let x = (rect
+                .get("x")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0)
+                .max(0.0)
+                * scale_x)
+                .round() as u32;
+            let y = (rect
+                .get("y")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0)
+                .max(0.0)
+                * scale_y)
+                .round() as u32;
+            let width = (rect
+                .get("width")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0)
+                .max(1.0)
+                * scale_x)
+                .round() as u32;
+            let height = (rect
+                .get("height")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0)
+                .max(1.0)
+                * scale_y)
+                .round() as u32;
+            Ok((crop_image(&viewport, x, y, width, height)?, "element"))
+        } else if full_page.unwrap_or(false) {
+            let viewport_height = original_metrics
+                .get("viewportHeight")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(bounds.height)
+                .max(1.0);
+            let scroll_height = original_metrics
+                .get("scrollHeight")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(viewport_height)
+                .max(viewport_height);
+            let mut parts = Vec::new();
+            let mut y = 0.0;
+            while y < scroll_height {
+                let target_y = if y + viewport_height >= scroll_height {
+                    (scroll_height - viewport_height).max(0.0)
+                } else {
+                    y
+                };
+                let actual = eval_browser_json(
+                    &app,
+                    &state,
+                    Some(page_id),
+                    scroll_script(original_x, target_y),
+                    30000,
+                )?;
+                let actual_y = actual
+                    .get("scrollY")
+                    .and_then(|value| value.as_f64())
+                    .unwrap_or(target_y);
+                let viewport = capture_browser_viewport(&app, &state, page_id, bounds)?;
+                let scale_y = viewport.height as f64 / viewport_height;
+                let target_pixel_y = (actual_y * scale_y).round().max(0.0) as u32;
+                parts.push((viewport, target_pixel_y));
+                if target_y + viewport_height >= scroll_height {
+                    break;
+                }
+                y = target_y + viewport_height;
             }
-            y = target_y + viewport_height;
+            let first_width = parts
+                .first()
+                .map(|(image, _)| image.width)
+                .unwrap_or(bounds.width.max(1.0).round() as u32);
+            let first_height = parts
+                .first()
+                .map(|(image, _)| image.height)
+                .unwrap_or(bounds.height.max(1.0).round() as u32);
+            let scale_y = first_height as f64 / viewport_height;
+            let output_height = (scroll_height * scale_y).ceil().max(first_height as f64) as u32;
+            Ok((
+                stitch_vertical(parts, first_width, output_height)?,
+                "fullPage",
+            ))
+        } else {
+            Ok((
+                capture_browser_viewport(&app, &state, page_id, bounds)?,
+                "viewport",
+            ))
         }
-        let first_width = parts
-            .first()
-            .map(|(image, _)| image.width)
-            .unwrap_or(bounds.width.max(1.0).round() as u32);
-        let first_height = parts
-            .first()
-            .map(|(image, _)| image.height)
-            .unwrap_or(bounds.height.max(1.0).round() as u32);
-        let scale_y = first_height as f64 / viewport_height;
-        let output_height = (scroll_height * scale_y).ceil().max(first_height as f64) as u32;
-        (
-            stitch_vertical(parts, first_width, output_height)?,
-            "fullPage",
-        )
-    } else {
-        (capture_browser_viewport(&app, bounds)?, "viewport")
-    };
+    })();
 
-    let _ = eval_browser_json(
+    let restore_result = eval_browser_json(
         &app,
         &state,
         Some(page_id),
         scroll_script(original_x, original_y),
         30000,
     );
+    let (image, mode) = capture_result?;
+    restore_result
+        .map_err(|error| format!("Could not restore browser scroll position: {error}"))?;
     write_png(&output_path, &image)?;
     browser_result_with_value(
         &state,
@@ -2788,7 +2942,7 @@ async fn browser_capture_preview(
     #[cfg(not(windows))]
     let png = {
         let bounds = resolve_browser_bounds(&state, None)?;
-        encode_png(&capture_browser_viewport(&app, bounds)?)?
+        encode_png(&capture_browser_viewport(&app, &state, page_id, bounds)?)?
     };
     Ok(format!(
         "data:image/png;base64,{}",
@@ -3019,5 +3173,57 @@ mod tests {
                 "https://example.com/apple-touch-icon.png".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn screenshot_relative_paths_stay_in_the_workspace() {
+        assert_eq!(
+            validate_screenshot_relative_path("artifacts/page.PNG").unwrap(),
+            PathBuf::from("artifacts/page.PNG")
+        );
+        assert!(validate_screenshot_relative_path("../page.png").is_err());
+        assert!(validate_screenshot_relative_path("artifacts/page.jpg").is_err());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn screenshot_relative_paths_reject_absolute_windows_paths() {
+        assert!(validate_screenshot_relative_path("C:\\Temp\\page.png").is_err());
+    }
+
+    #[test]
+    fn screenshot_png_round_trips_rgba_pixels() {
+        let original = CapturedImage {
+            width: 2,
+            height: 1,
+            rgba: vec![10, 20, 30, 255, 40, 50, 60, 128],
+        };
+        let decoded = decode_png(&encode_png(&original).unwrap()).unwrap();
+
+        assert_eq!(decoded.width, original.width);
+        assert_eq!(decoded.height, original.height);
+        assert_eq!(decoded.rgba, original.rgba);
+    }
+
+    #[test]
+    fn screenshot_writer_does_not_overwrite_existing_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "moke-screenshot-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = directory.join("capture.png");
+        let image = CapturedImage {
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+        };
+
+        write_png(&path, &image).unwrap();
+        assert!(write_png(&path, &image).is_err());
+        fs::remove_dir_all(directory).unwrap();
     }
 }

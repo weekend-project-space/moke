@@ -43,6 +43,7 @@ type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 
 const DEFAULT_READ_LIMIT = 200;
 const DEFAULT_RESULT_LIMIT = 20;
 const DEFAULT_ROOT = '/';
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 export class LocalSystemBackend implements ExecutableSystemBackend {
   readonly rootDir: string;
@@ -130,6 +131,26 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
       total_lines: totalLines,
       truncated: totalLines === undefined ? lines.length >= limit : offset + lines.length < totalLines,
       content_blocks: [{ type: 'text', text: content }],
+    };
+  }
+
+  async readImage(filePath: string, access?: SystemAccessOptions) {
+    const target = this.toBackendPath(filePath, access, 'file');
+    const result = await this.backend.readRaw(target);
+    if (result.error) throw new Error(result.error);
+    const content = result.data?.content;
+    if (!(content instanceof Uint8Array)) throw new Error(`File is not a supported image: ${filePath}`);
+    if (content.byteLength > MAX_IMAGE_BYTES) {
+      throw new Error(`Image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024} MB limit: ${filePath}`);
+    }
+    const mimeType = detectImageMimeType(content);
+    if (!mimeType) throw new Error(`File is not a supported PNG, JPEG, WebP, or GIF image: ${filePath}`);
+
+    return {
+      path: this.fromBackendPath(target, access),
+      mime_type: mimeType,
+      size: content.byteLength,
+      data_url: `data:${mimeType};base64,${Buffer.from(content).toString('base64')}`,
     };
   }
 
@@ -343,6 +364,33 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
       text: match.text,
     }));
   }
+}
+
+function detectImageMimeType(content: Uint8Array) {
+  if (
+    content.length >= 8
+    && content[0] === 0x89
+    && content[1] === 0x50
+    && content[2] === 0x4e
+    && content[3] === 0x47
+    && content[4] === 0x0d
+    && content[5] === 0x0a
+    && content[6] === 0x1a
+    && content[7] === 0x0a
+  ) return 'image/png';
+  if (content.length >= 3 && content[0] === 0xff && content[1] === 0xd8 && content[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (content.length >= 6) {
+    const signature = Buffer.from(content.subarray(0, 6)).toString('ascii');
+    if (signature === 'GIF87a' || signature === 'GIF89a') return 'image/gif';
+  }
+  if (
+    content.length >= 12
+    && Buffer.from(content.subarray(0, 4)).toString('ascii') === 'RIFF'
+    && Buffer.from(content.subarray(8, 12)).toString('ascii') === 'WEBP'
+  ) return 'image/webp';
+  return undefined;
 }
 
 function shellQuote(value: string) {

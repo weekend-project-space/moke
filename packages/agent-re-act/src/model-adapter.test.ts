@@ -72,6 +72,41 @@ test('OpenAI-compatible adapter falls trusted context back to system messages', 
   assert.deepEqual(state.langchain?.slice(-2).map((message) => message.getType()), ['tool', 'system']);
 });
 
+test('Responses adapter appends tool images as model image input', () => {
+  const adapter = new ResponsesAdapter({ ...settings, type: 'openai-responses' }, []);
+  const state = adapter.createInitialState(initialInput);
+
+  adapter.appendToolResult(state, {
+    callId: 'call_1',
+    name: 'view_image',
+    output: { path: 'image.png' },
+    images: [{ data_url: 'data:image/png;base64,AA==' }],
+  });
+
+  assert.deepEqual(state.responses?.slice(-2), [
+    { type: 'function_call_output', call_id: 'call_1', output: '{"path":"image.png"}' },
+    { role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,AA==' }] },
+  ]);
+});
+
+test('OpenAI-compatible adapter appends tool images as a human image message', () => {
+  const adapter = new ChatCompletionsAdapter(settings, []);
+  const state = adapter.createInitialState(initialInput);
+
+  adapter.appendToolResult(state, {
+    callId: 'call_1',
+    name: 'view_image',
+    output: { path: 'image.png' },
+    images: [{ data_url: 'data:image/png;base64,AA==' }],
+  });
+
+  assert.deepEqual(state.langchain?.slice(-2).map((message) => message.getType()), ['tool', 'human']);
+  assert.deepEqual(state.langchain?.at(-1)?.content, [{
+    type: 'image_url',
+    image_url: { url: 'data:image/png;base64,AA==' },
+  }]);
+});
+
 test('provider token usage normalizes DeepSeek and OpenAI cache fields', () => {
   assert.deepEqual(normalizeTokenUsage({
     prompt_tokens: 120,

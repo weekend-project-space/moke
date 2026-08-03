@@ -42,7 +42,7 @@ const takeSnapshotSchema = z.object({
 
 const takeScreenshotSchema = z.object({
   pageId: z.number().int().positive().optional(),
-  path: z.string().min(1).optional(),
+  path: z.string().min(1).optional().describe('Workspace-relative output path ending in .png.'),
   fullPage: z.boolean().optional(),
   uid: z.string().min(1).optional(),
 });
@@ -194,11 +194,11 @@ export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typ
 export function createTakeScreenshotTool(browser: BrowserBackend): RuntimeTool<typeof takeScreenshotSchema> {
   return {
     name: 'take_screenshot',
-    description: 'Capture a PNG screenshot of the visible viewport of the active in-app browser page.',
+    description: 'Capture a PNG screenshot of the active in-app browser viewport, full page, or one snapshot element.',
     approval: 'none',
     schema: takeScreenshotSchema,
-    async handler(input) {
-      return browser.takeScreenshot(input);
+    async handler(input, context) {
+      return browser.takeScreenshot(input, context.workspace);
     },
   };
 }

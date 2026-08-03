@@ -9,7 +9,12 @@ export type RuntimeToolResult = {
   type: 'runtime_tool_result';
   publicOutput: Record<string, unknown>;
   modelOutput?: unknown;
+  images?: RuntimeToolImage[];
   context?: RuntimeContextItem[];
+};
+
+export type RuntimeToolImage = {
+  data_url: string;
 };
 
 export type RuntimeToolOutput = Record<string, unknown> | RuntimeToolResult;
@@ -39,12 +44,14 @@ export function createRuntimeToolResult(input: Omit<RuntimeToolResult, 'type'>):
 export function normalizeRuntimeToolResult(output: RuntimeToolOutput): {
   publicOutput: Record<string, unknown>;
   modelOutput: unknown;
+  images: RuntimeToolImage[];
   context: RuntimeContextItem[];
 } {
   if (isRuntimeToolResult(output)) {
     return {
       publicOutput: output.publicOutput,
       modelOutput: output.modelOutput ?? output.publicOutput,
+      images: output.images || [],
       context: output.context || [],
     };
   }
@@ -52,6 +59,7 @@ export function normalizeRuntimeToolResult(output: RuntimeToolOutput): {
   return {
     publicOutput: output,
     modelOutput: output,
+    images: [],
     context: [] as RuntimeContextItem[],
   };
 }
