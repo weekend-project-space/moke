@@ -34,6 +34,7 @@
 
 .topbar-right {
   justify-content: flex-end;
+  gap: 6px;
 }
 
 .sidebar-toggle,
@@ -66,10 +67,8 @@
   height: 30px;
   flex: 0 0 auto;
   align-items: stretch;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  background: var(--surface-control);
-  box-shadow: var(--shadow-control);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
 }
 
 .workspace-open-primary,
@@ -99,14 +98,18 @@
 }
 
 .workspace-open-primary {
-  width: 31px;
-  border-radius: calc(var(--radius-md) - 1px) 0 0 calc(var(--radius-md) - 1px);
+  width: 30px;
+  border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px);
 }
 
 .workspace-open-trigger {
-  width: 22px;
-  border-left: 1px solid var(--line-soft);
-  border-radius: 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0;
+  width: 24px;
+  border-left: 1px solid var(--line-faint);
+  border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
+}
+
+.topbar-right .trace-summary {
+  border-radius: var(--radius-sm);
 }
 
 .workspace-open-backdrop {

@@ -212,7 +212,7 @@ watch(() => props.workspaceRoot, () => {
           :title="openWorkspaceLabel"
           @click="openWorkspace()"
         >
-          <component :is="workspaceOpenerIcon(currentWorkspaceOpener?.id || 'explorer')" :size="16" stroke-width="2" />
+          <component :is="workspaceOpenerIcon(currentWorkspaceOpener?.id || 'explorer')" :size="16" stroke-width="1.9" />
         </button>
         <button
           ref="workspaceMenuTrigger"
@@ -225,7 +225,7 @@ watch(() => props.workspaceRoot, () => {
           :title="workspaceRoot || uiText.header.noWorkspace"
           @click="toggleWorkspaceMenu"
         >
-          <ChevronDown :size="14" stroke-width="2" />
+          <ChevronDown :size="13" stroke-width="1.9" />
         </button>
         <div v-if="workspaceMenuOpen" class="workspace-open-backdrop" @click="closeWorkspaceMenu()"></div>
         <div
@@ -260,7 +260,7 @@ watch(() => props.workspaceRoot, () => {
         :title="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
         @click="emit('toggleWorkspace')"
       >
-        <PanelRight :size="17" stroke-width="2.1" />
+        <PanelRight :size="16" stroke-width="1.9" />
       </button>
       <span v-if="serverStatus !== 'online'" class="server-pill" :class="serverStatus">
         <i aria-hidden="true"></i>
