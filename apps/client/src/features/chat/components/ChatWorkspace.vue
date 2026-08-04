@@ -24,10 +24,6 @@ import { formatSessionTime, formatTimelineTime } from '../presentation/timeForma
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
 
-const props = defineProps<{
-  active: boolean
-}>()
-
 defineOptions({ name: 'ChatWorkspace' })
 
 const emit = defineEmits<{
@@ -44,7 +40,7 @@ const runtimeNow = ref(Date.now())
 const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
 const route = useRoute()
 const router = useRouter()
-const workspaceActive = computed(() => props.active && (route.name === 'chat' || route.name === 'tasks'))
+const workspaceActive = computed(() => route.name === 'chat' || route.name === 'tasks')
 const scheduledTasksActive = computed(() => route.name === 'tasks')
 let runtimeTimer: number | undefined
 let chatRouteReady = false
@@ -176,7 +172,7 @@ const {
 const {
   archiveSelectedSession,
   forkMessage,
-  initialSessionFromHash,
+  initialSession,
   selectSession: navigateToSession,
   startNewSession: createNewSession,
 } = useSessionNavigation({
@@ -353,10 +349,8 @@ watch(() => [route.name, route.params.sessionId] as const, ([name, value]) => {
     if (value === sessionId.value) return
     if (sortedSessions.value.some((session) => session.id === value)) {
       void navigateToSession(value)
-    } else if (sortedSessions.value[0]) {
-      void navigateToSession(sortedSessions.value[0].id)
     } else {
-      void createNewSession()
+      void createNewSession(true)
     }
   } else if (sessionId.value) {
     void createNewSession()
@@ -383,11 +377,11 @@ onMounted(async () => {
       chatRouteReady = true
       return
     }
-    const initialSession = initialSessionFromHash()
-    if (initialSession) {
-      await selectSession(initialSession.id)
+    const routedSession = initialSession()
+    if (routedSession) {
+      await selectSession(routedSession.id)
     } else {
-      await startNewSession()
+      await createNewSession(Boolean(route.params.sessionId))
     }
   }
   chatRouteReady = true

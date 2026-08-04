@@ -153,7 +153,6 @@ onUnmounted(() => {
         :is="Component"
         v-if="isChatRoute(route)"
         ref="chatWorkspace"
-        :active="true"
         @open-settings="openSettings"
       />
     </KeepAlive>

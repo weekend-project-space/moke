@@ -2,29 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { ref } from 'vue'
 
+import type { SessionSummary } from '../model/conversation'
 import { useSessionNavigation } from './useSessionNavigation'
 
-function installWindow(hash = '#session=sess_old') {
-  const writtenUrls: string[] = []
-  const location = { pathname: '/chat', search: '', hash }
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      location,
-      history: {
-        replaceState: (_state: unknown, _title: string, url: string) => {
-          writtenUrls.push(url)
-          const hashIndex = url.indexOf('#')
-          location.hash = hashIndex >= 0 ? url.slice(hashIndex) : ''
-        },
-      },
-    },
-  })
-  return writtenUrls
-}
-
-test('new chat starts a local draft and clears the persisted session hash', async () => {
-  const writtenUrls = installWindow()
+test('new chat starts a local draft and writes the empty session route', async () => {
+  const writtenSessionIds: string[] = []
   const sessionId = ref('sess_old')
   let starts = 0
   const navigation = useSessionNavigation({
@@ -32,6 +14,7 @@ test('new chat starts a local draft and clears the persisted session hash', asyn
     clearQueuedMessages: () => undefined,
     closeTransientPanels: () => undefined,
     forkSession: async () => true,
+    readSessionId: () => sessionId.value,
     selectAgentSession: async () => true,
     sessionId,
     startAgentSession: () => {
@@ -40,44 +23,71 @@ test('new chat starts a local draft and clears the persisted session hash', asyn
       return true
     },
     sortedSessions: ref([]),
+    writeSessionId: (id) => { writtenSessionIds.push(id) },
   })
 
   assert.equal(await navigation.startNewSession(), true)
   assert.equal(starts, 1)
-  assert.deepEqual(writtenUrls, ['/chat'])
+  assert.deepEqual(writtenSessionIds, [''])
 })
 
-test('new chat clears the scheduled tasks route instead of preserving it as a parameter', async () => {
-  const writtenUrls = installWindow('#tasks')
-  const sessionId = ref('')
+test('failed persisted session selection does not change the route', async () => {
+  const writtenSessionIds: string[] = []
   const navigation = useSessionNavigation({
     archiveSession: async () => true,
     clearQueuedMessages: () => undefined,
     closeTransientPanels: () => undefined,
     forkSession: async () => true,
-    selectAgentSession: async () => true,
-    sessionId,
-    startAgentSession: () => true,
-    sortedSessions: ref([]),
-  })
-
-  assert.equal(await navigation.startNewSession(), true)
-  assert.deepEqual(writtenUrls, ['/chat'])
-})
-
-test('failed persisted session selection does not change the hash', async () => {
-  const writtenUrls = installWindow('')
-  const navigation = useSessionNavigation({
-    archiveSession: async () => true,
-    clearQueuedMessages: () => undefined,
-    closeTransientPanels: () => undefined,
-    forkSession: async () => true,
+    readSessionId: () => '',
     selectAgentSession: async () => false,
     sessionId: ref(''),
     startAgentSession: () => true,
     sortedSessions: ref([]),
+    writeSessionId: (id) => { writtenSessionIds.push(id) },
   })
 
   assert.equal(await navigation.selectSession('sess_missing'), false)
-  assert.deepEqual(writtenUrls, [])
+  assert.deepEqual(writtenSessionIds, [])
+})
+
+test('empty and missing session routes start without selecting the first session', () => {
+  const sortedSessions = ref<SessionSummary[]>([{
+    id: 'sess_first',
+    title: 'First session',
+    created_at: '2026-08-04T00:00:00.000Z',
+    updated_at: '2026-08-04T00:00:00.000Z',
+    archived: false,
+    pinned: false,
+    preview: '',
+    message_count: 0,
+  }])
+  const navigation = useSessionNavigation({
+    archiveSession: async () => true,
+    clearQueuedMessages: () => undefined,
+    closeTransientPanels: () => undefined,
+    forkSession: async () => true,
+    readSessionId: () => '',
+    selectAgentSession: async () => true,
+    sessionId: ref(''),
+    startAgentSession: () => true,
+    sortedSessions,
+    writeSessionId: () => undefined,
+  })
+
+  assert.equal(navigation.initialSession(), undefined)
+
+  const missingNavigation = useSessionNavigation({
+    archiveSession: async () => true,
+    clearQueuedMessages: () => undefined,
+    closeTransientPanels: () => undefined,
+    forkSession: async () => true,
+    readSessionId: () => 'sess_missing',
+    selectAgentSession: async () => true,
+    sessionId: ref(''),
+    startAgentSession: () => true,
+    sortedSessions,
+    writeSessionId: () => undefined,
+  })
+
+  assert.equal(missingNavigation.initialSession(), undefined)
 })
