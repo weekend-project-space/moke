@@ -52,12 +52,23 @@ const browser = {
 
 const chat = {
   continuePrompt: 'Based on the result above, continue and turn it into a clearer next step.',
-  emptyDescription: 'Give me a page, a question, or a direction.',
+  emptyDescription: 'Ask a question, open a page, or work with your files.',
   emptyTitle: 'Where should we go first?',
-  starters: [
-    'Open ruanyifeng.com and summarize the latest post',
-    'Read the current browser page and extract useful links',
-    'Search the web for recent news about local LLM browsers',
+  webStarters: [
+    { title: 'Research a topic', prompt: 'Research this topic across reliable sources and summarize the key findings with links' },
+    { title: 'Compare several sources', prompt: 'Compare these webpages and summarize the important differences and trade-offs' },
+    { title: 'Check the latest updates', prompt: 'Check the latest official information about this topic and note what has changed' },
+    { title: 'Summarize a webpage', prompt: 'Read this webpage and summarize its key points' },
+    { title: 'Extract useful links', prompt: 'Read this webpage and extract its most useful links' },
+    { title: 'Turn research into notes', prompt: 'Turn this research into concise notes with key facts and sources' },
+  ],
+  workspaceStarters: [
+    { title: 'Summarize these files', prompt: 'Summarize the key points, decisions, and action items in these files' },
+    { title: 'Draft a report', prompt: 'Draft a clear report from the relevant files in this folder' },
+    { title: 'Compare these documents', prompt: 'Compare the relevant documents and highlight important differences' },
+    { title: 'Extract key information', prompt: 'Extract the important names, dates, amounts, and other structured information' },
+    { title: 'Create action items', prompt: 'Turn these documents into action items with owners and deadlines when available' },
+    { title: 'Organize this folder', prompt: 'Review this folder and suggest a clear organization and filing plan' },
   ],
   thinking: 'Moke is thinking',
   thinkingLabel: 'Thinking',

@@ -68,11 +68,13 @@
   display: flex;
   min-height: 98px;
   flex-direction: column;
-  padding: 0;
-  border: 1px solid var(--border-control);
+  padding: 1px;
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius-composer);
-  background: var(--surface-solid);
-  box-shadow: var(--shadow-input);
+  background: var(--surface-chat-panel);
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 5%),
+    0 8px 24px rgb(15 23 42 / 6%);
   cursor: default;
   overflow: visible;
 }
@@ -166,7 +168,9 @@
 
 .composer-input-row:focus-within {
   border-color: var(--border-neutral-focus);
-  box-shadow: 0 0 0 3px var(--focus-neutral-ring);
+  box-shadow:
+    0 0 0 3px var(--focus-neutral-ring),
+    0 8px 24px rgb(15 23 42 / 8%);
 }
 
 .composer-panel.dragging .composer-input-row {
@@ -174,7 +178,7 @@
   background: color-mix(in srgb, var(--accent-faint) 45%, var(--surface-solid));
   box-shadow:
     0 0 0 3px var(--focus-control-ring),
-    var(--shadow-input);
+    0 8px 24px rgb(15 23 42 / 8%);
 }
 
 .composer-footer {

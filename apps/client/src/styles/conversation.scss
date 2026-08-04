@@ -195,31 +195,27 @@
 
 .suggestion-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
-  gap: 0;
+  gap: 2px 12px;
   margin-top: 8px;
-  padding: 2px 0;
-  border-top: 1px solid var(--line-subtle);
-  border-bottom: 1px solid var(--line-subtle);
+  padding: 0;
 
   button {
     display: flex;
     min-width: 0;
     align-items: center;
-    padding: 10px 8px;
+    min-height: 32px;
+    padding: 5px 6px;
     border: 0;
-    border-radius: 0;
-    color: var(--ink);
+    border-radius: var(--radius-sm);
+    color: var(--ink-soft);
     text-align: left;
     background: transparent;
     box-shadow: none;
     transition:
       color 0.14s ease,
       background 0.14s ease;
-
-    + button {
-      border-top: 1px solid var(--line-faint);
-    }
 
     &:hover {
       color: var(--ink);
@@ -231,7 +227,7 @@
     min-width: 0;
     overflow: hidden;
     font-size: var(--font-size-ui);
-    font-weight: 520;
+    font-weight: 430;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -250,6 +246,8 @@
   }
 
   .suggestion-grid {
+    grid-template-columns: 1fr;
+
     button {
       align-items: flex-start;
     }

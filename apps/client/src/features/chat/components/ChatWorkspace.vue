@@ -220,16 +220,16 @@ async function chooseDraftWorkspaceDirectory() {
   }
 }
 
-const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
-  title: prompt,
-  description: '',
-  prompt,
-}))
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
 const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
 const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
+const taskTemplates = computed<TaskTemplate[]>(() => (currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters).map((starter) => ({
+  title: starter.title,
+  description: '',
+  prompt: starter.prompt,
+})))
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
