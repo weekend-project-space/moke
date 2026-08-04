@@ -19,7 +19,7 @@ import { useComposerReasoning } from '../composables/useComposerReasoning'
 import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
-import { isNativeWorkspacePickerAvailable, pickWorkspaceDirectory } from '../services/workspacePicker'
+import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
@@ -124,8 +124,10 @@ const {
 } = useRecentWorkspaces()
 const {
   addAttachments,
+  addFiles,
   applySuggestion,
   attachments,
+  files,
   cancelQueuedMessage,
   cancelQueuedMessageAt,
   clearQueuedMessages,
@@ -139,6 +141,7 @@ const {
   queuedMessageLabel,
   queuedStopRequested,
   removeAttachment,
+  removeFile,
   sendOnEnter,
   sendQueuedMessageIfReady,
   stopAndSendQueuedMessage,
@@ -217,6 +220,25 @@ async function chooseDraftWorkspaceDirectory() {
     nativeWorkspacePicker.value = false
     await nextTick()
     composerBox.value?.openWorkspaceEditor()
+  }
+}
+
+async function chooseFiles() {
+  try {
+    const selected = await pickLocalFiles(currentWorkspaceRoot.value)
+    const imagePaths = selected.filter(isSupportedImagePath)
+    const filePaths = selected.filter((path) => !isSupportedImagePath(path))
+    addFiles(filePaths.map((path) => ({
+      name: path.split(/[\\/]/).pop() || path,
+      path,
+    })))
+    const images = await Promise.allSettled(imagePaths.map(readLocalImage))
+    const localImages = images.flatMap((result) => result.status === 'fulfilled'
+      ? [{ ...result.value, id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, kind: 'image' as const }]
+      : [])
+    composerBox.value?.addLocalImages(localImages, images.some((result) => result.status === 'rejected'))
+  } catch (error) {
+    console.error('Failed to choose files or images', error)
   }
 }
 
@@ -541,7 +563,7 @@ defineExpose({
           </div>
         </div>
         <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
-          :primary-is-stop="primaryIsStop" :attachments="attachments"
+          :primary-is-stop="primaryIsStop" :attachments="attachments" :files="files"
           :model-name="activeModel?.model || ''" :model-provider="activeModel?.providerName || ''"
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
@@ -554,8 +576,9 @@ defineExpose({
           @update:approval-mode="updateApprovalMode"
           @update:workspace-root="updateDraftWorkspace"
           @choose-workspace-directory="chooseDraftWorkspaceDirectory"
+          @choose-files="chooseFiles"
           @input="handleInput"
-          @add-attachments="addAttachments" @remove-attachment="removeAttachment"
+          @add-attachments="addAttachments" @remove-attachment="removeAttachment" @remove-file="removeFile"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />
       </div>
     </section>

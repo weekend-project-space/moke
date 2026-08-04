@@ -104,6 +104,40 @@
   }
 }
 
+.user-files {
+  display: flex;
+  max-width: min(520px, 72%);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.user-file {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 240px;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  background: var(--surface-panel);
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 @keyframes thinking-breathe {
   0%,
   100% {

@@ -130,6 +130,7 @@ class SessionsResource {
         role: 'user',
         content: input.content,
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+        ...(input.files?.length ? { files: input.files } : {}),
       },
       ...(input.env ? { env: input.env } : {}),
       options: {

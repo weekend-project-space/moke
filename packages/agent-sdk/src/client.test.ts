@@ -92,6 +92,7 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
 
   const run = await client.session('sess_1').send({
     content: 'hello',
+    files: [{ name: 'report.pdf', path: 'E:\\reports\\report.pdf' }],
     reasoningEffort: 'high',
     env: {
       approval_mode: 'ai_review',
@@ -103,7 +104,11 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
   assert.equal(calls[0]?.url, 'http://127.0.0.1:4010/api/sessions/sess_1/messages');
   assert.equal(new Headers(calls[0]?.init?.headers).get('Authorization'), 'Bearer secret');
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
-    message: { role: 'user', content: 'hello' },
+    message: {
+      role: 'user',
+      content: 'hello',
+      files: [{ name: 'report.pdf', path: 'E:\\reports\\report.pdf' }],
+    },
     env: {
       approval_mode: 'ai_review',
     },

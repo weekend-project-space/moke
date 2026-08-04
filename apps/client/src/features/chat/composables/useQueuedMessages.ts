@@ -1,9 +1,10 @@
 import { computed, ref } from 'vue'
-import type { ImageAttachment, ReasoningEffort } from '../model/conversation'
+import type { FileAttachmentInput, ImageAttachment, ReasoningEffort } from '../model/conversation'
 
 export type QueuedMessage = {
   content: string
   attachments: ImageAttachment[]
+  files?: FileAttachmentInput[]
   options?: {
     reasoningEffort?: ReasoningEffort
   }

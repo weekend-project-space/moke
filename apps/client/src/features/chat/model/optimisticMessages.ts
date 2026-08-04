@@ -1,8 +1,9 @@
-import type { ImageAttachment, Message, UserMessage } from './conversation'
+import type { FileAttachmentInput, ImageAttachment, Message, UserMessage } from './conversation'
 
 type OptimisticUserMessageInput = {
   content: string
   attachments?: ImageAttachment[]
+  files?: FileAttachmentInput[]
   createdAt?: string
 }
 
@@ -20,6 +21,13 @@ export function appendOptimisticUserMessage(
     content: input.content,
     created_at: input.createdAt || new Date().toISOString(),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+    ...(input.files?.length ? {
+      files: input.files.map((file, index) => ({
+        ...file,
+        id: 'file_local_' + index,
+        kind: 'file' as const,
+      })),
+    } : {}),
   }
   messages.push(message)
 

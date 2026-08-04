@@ -68,6 +68,19 @@ export type ImageAttachmentUpload = {
   data_url: string;
 };
 
+export type FileAttachment = {
+  id: string;
+  kind: 'file';
+  name: string;
+  path: string;
+  size?: number;
+};
+
+export type FileAttachmentInput = {
+  name: string;
+  path: string;
+};
+
 export type ResolvedImageAttachment = ImageAttachment & {
   data_url: string;
 };
@@ -80,6 +93,7 @@ export type UserMessage = {
   /** Internal context is retained for the model but not rendered in the conversation. */
   visibility?: 'public' | 'internal';
   attachments?: ImageAttachment[];
+  files?: FileAttachment[];
   source?: {
     kind: 'messaging';
     platform: string;
@@ -372,6 +386,7 @@ export type SendMessageRequest = {
     role?: 'user';
     content: string;
     attachments?: ImageAttachmentUpload[];
+    files?: FileAttachmentInput[];
   };
   env?: SendMessageEnvironmentInput;
   options?: {

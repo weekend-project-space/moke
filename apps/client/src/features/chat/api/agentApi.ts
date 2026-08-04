@@ -7,12 +7,13 @@ import type {
   SessionRunEventOptions,
   UpdateSessionEnvironmentInput,
 } from '@moke/agent-sdk'
-import type { ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { FileAttachmentInput, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { apiFetch, getApiToken } from '../../../services/apiAccess'
 
 export type SendMessageRequest = {
   content: string
   attachments: ImageAttachment[]
+  files?: FileAttachmentInput[]
   reasoningEffort?: ReasoningEffort
 }
 
@@ -68,6 +69,7 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = apiFetch
       return client.session(sessionId).send({
         content: input.content,
         attachments: input.attachments,
+        files: input.files,
         reasoningEffort: input.reasoningEffort,
       })
     },

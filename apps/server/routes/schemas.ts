@@ -51,6 +51,11 @@ const imageUploadSchema = z.object({
   data_url: nonEmptyText,
 }).strict();
 
+const fileReferenceSchema = z.object({
+  name: nonEmptyText.max(260),
+  path: nonEmptyText.max(4000),
+}).strict();
+
 const runOptionsSchema = z.object({
   stream: z.boolean().optional(),
   max_steps: z.number().int().positive().max(1000).optional(),
@@ -69,6 +74,7 @@ export const sendMessageSchema = z.object({
     role: z.literal('user').optional(),
     content: z.string().default(''),
     attachments: z.array(imageUploadSchema).max(4).optional(),
+    files: z.array(fileReferenceSchema).max(10).optional(),
   }).strict(),
   env: mutableSessionEnvironmentInputSchema.optional(),
   options: runOptionsSchema.optional().default({}),

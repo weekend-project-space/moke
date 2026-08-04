@@ -76,13 +76,14 @@ const chat = {
 
 const composer = {
   add: 'Add',
+  addFilesOrImages: 'Add files or images',
   addImage: 'Add image',
   applyWorkspace: 'Apply',
-  chooseImage: 'Choose image',
   chooseProject: 'Choose project',
   chooseOtherWorkspace: 'Choose another folder',
   clearQueued: 'Clear queued messages',
   currentModel: (model: string, provider: string) => provider ? `${provider} · ${model}` : model,
+  fileAttachment: 'File attachment',
   imageAttachment: 'Image attachment',
   imageReadFailed: 'Some images could not be read.',
   imageTooLarge: 'Images are limited to 4 MB each and 5 MB in total.',
@@ -94,6 +95,7 @@ const composer = {
   queuedMessages: 'Queued messages',
   recentWorkspaces: 'Recent',
   removeImage: 'Remove image',
+  removeFile: (name: string) => `Remove ${name}`,
   removeQueued: (index: number) => `Remove queued message ${index}`,
   removeQueuedTitle: (index: number) => `Remove message ${index}`,
   send: 'Send message',

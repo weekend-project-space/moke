@@ -93,6 +93,47 @@
   padding: 10px 12px 0;
 }
 
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.composer-file {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(240px, 100%);
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  background: var(--surface-solid);
+
+  > svg {
+    flex: 0 0 auto;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > button {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    color: var(--ink-muted);
+    background: transparent;
+  }
+}
+
 .composer-attachment-error {
   margin: 6px 2px 0;
   color: var(--danger);

@@ -39,6 +39,13 @@ struct BrowserState {
     last_bounds: Mutex<Option<BrowserBounds>>,
 }
 
+#[derive(Serialize)]
+struct LocalImage {
+    name: String,
+    mime_type: String,
+    data_url: String,
+}
+
 fn unique_download_path(download_dir: &Path, suggested: &Path) -> PathBuf {
     let file_name = suggested
         .file_name()
@@ -3048,6 +3055,47 @@ fn agent_api_token(state: tauri::State<'_, AgentServer>) -> String {
     state.token.clone()
 }
 
+#[tauri::command]
+fn read_local_image(path: String) -> Result<LocalImage, String> {
+    const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
+
+    let path = PathBuf::from(path);
+    let mime_type = match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "gif" => "image/gif",
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        _ => return Err("Unsupported image format".to_string()),
+    };
+    let metadata = fs::metadata(&path).map_err(|error| format!("Could not read image: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Selected image is not a file".to_string());
+    }
+    if metadata.len() > MAX_IMAGE_BYTES {
+        return Err("Image exceeds the 4 MB limit".to_string());
+    }
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Selected image has no file name".to_string())?
+        .to_string();
+    let bytes = fs::read(&path).map_err(|error| format!("Could not read image: {error}"))?;
+    Ok(LocalImage {
+        name,
+        mime_type: mime_type.to_string(),
+        data_url: format!(
+            "data:{mime_type};base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -3092,6 +3140,7 @@ pub fn run() {
             close_page,
             list_workspace_openers,
             open_workspace_with,
+            read_local_image,
             agent_api_token,
         ])
         .setup(|app| {

@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   AssistantMessage,
   ImageAttachmentUpload,
+  FileAttachmentInput,
   PendingApproval,
   PendingAsk,
   ReasoningEffort,
@@ -52,6 +53,7 @@ export type ForkSessionInput = {
 export type SendMessageInput = {
   content: string;
   attachments?: ImageAttachmentUpload[];
+  files?: FileAttachmentInput[];
   reasoningEffort?: ReasoningEffort;
   limits?: Partial<RuntimeLimits>;
   env?: SendMessageEnvironmentInput;

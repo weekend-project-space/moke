@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   AgentEvent,
   AgentEventPayloadMap,
+  FileAttachment,
   ImageAttachment,
   Message,
   PendingApproval,
@@ -66,6 +67,7 @@ export type RunOptions = {
 type RunMessageInput = {
   content: string;
   attachments?: ResolvedImageAttachment[];
+  files?: FileAttachment[];
 };
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
@@ -182,6 +184,8 @@ export class RunManager {
       selectRecentHistory(session.messages.slice(0, -1)),
       this.config.resolveImageAttachments,
     );
+    const sessionFiles = session.messages.flatMap((message) => message.role === 'user' ? (message.files || []) : []);
+    const attachedFiles = [...new Map([...sessionFiles, ...(input.files || [])].map((file) => [file.path, file])).values()];
 
     try {
       const contentManager = await this.config.createSkillContentManager?.(run.env.workspace.root);
@@ -196,7 +200,10 @@ export class RunManager {
         toolRegistry: this.config.toolRegistry,
         context: {
           workspace: run.env.workspace.root,
-          workspaceRoots: () => this.config.workspaceRoots?.(session.id) || [],
+          workspaceRoots: () => [
+            ...(this.config.workspaceRoots?.(session.id) || []),
+            ...attachedFiles.map((file) => file.path),
+          ],
           run,
           abortSignal: abortController.signal,
           contentManager,
@@ -206,6 +213,11 @@ export class RunManager {
               scope: 'run',
               content: `<session_environment>${JSON.stringify(run.env)}</session_environment>`,
             },
+            ...(attachedFiles.length ? [{
+              authority: 'trusted' as const,
+              scope: 'run' as const,
+              content: '<attached_files>\n' + attachedFileContext(attachedFiles) + '\n</attached_files>',
+            }] : []),
           ],
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
@@ -638,6 +650,14 @@ function isActiveRun(run: RuntimeRun) {
     && run.status !== 'failed'
     && run.status !== 'cancelled'
     && run.status !== 'timeout';
+}
+
+function attachedFileContext(files: FileAttachment[]) {
+  if (!files.length) return '';
+  return [
+    'The user attached these local files. Use the available file tools to inspect them when relevant:',
+    ...files.map((file) => '- ' + file.name + ': ' + file.path),
+  ].join('\n');
 }
 
 function snapshotEnvironment(
