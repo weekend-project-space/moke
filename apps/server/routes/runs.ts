@@ -90,10 +90,10 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     }
 
     if (requestBody.type === 'cancel') {
-      context.runManager.cancel(run.id);
+      const cancelledRun = context.runManager.cancel(run.id);
       return json(200, {
         run_id: run.id,
-        status: 'cancelled',
+        status: cancelledRun?.status || run.status,
       });
     }
 

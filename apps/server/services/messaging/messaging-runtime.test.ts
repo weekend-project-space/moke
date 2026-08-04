@@ -164,6 +164,59 @@ test('runtime excludes bindings without an available connection when resolving a
   }
 });
 
+test('runtime keeps inbound work queued until the session active run finishes', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+  try {
+    const binding = { id: 'bind_queued', platform: 'weixin', account_id: 'wxconn_1', session_id: 'sess_busy' };
+    const session = { id: 'sess_busy' };
+    const job = { id: 'in_queued', text: 'next', platform_message_id: 'msg_queued', state: 'queued' };
+    let active = true;
+    let claims = 0;
+    let accepted = 0;
+    const runtime = new MessagingRuntime(
+      {
+        getBinding: () => binding,
+        listBindings: () => [binding],
+        claimNextInboundJob: () => {
+          claims++;
+          job.state = 'running';
+          return job;
+        },
+        setInboundRun: () => true,
+      } as never,
+      { setEventHandler() {}, async close() {} } as never,
+      {
+        getSession: () => session,
+        acceptUserMessage(input: { options?: { beforeStart?: (run: { id: string }) => void } }) {
+          accepted++;
+          input.options?.beforeStart?.({ id: 'run_messaging' });
+          return { runId: 'run_messaging' };
+        },
+      } as never,
+      { getActiveRunForSession: () => active ? { id: 'run_local' } : undefined } as never,
+      {} as never,
+      directory,
+      () => [directory],
+    );
+
+    await (runtime as unknown as { drainBinding(id: string): Promise<void> }).drainBinding(binding.id);
+    assert.equal(claims, 0);
+    assert.equal(accepted, 0);
+
+    active = false;
+    runtime.onRunEvent({ type: 'agent.done', payload: { status: 'completed' } } as never, {
+      id: 'run_local', session_id: session.id, origin: { kind: 'local' },
+    } as never);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(claims, 1);
+    assert.equal(accepted, 1);
+    await runtime.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function createHarness(deliveryError?: Error) {
   const jobs: Array<Record<string, any>> = [];
   const delivered: Array<Record<string, unknown>> = [];

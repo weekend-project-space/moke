@@ -116,6 +116,9 @@ export class MessagingRuntime {
   }
 
   onRunEvent(event: AgentEvent, run: RuntimeRun) {
+    if (event.type === 'agent.done' || event.type === 'agent.error') {
+      this.resumeQueuedBindingsForSession(run.session_id);
+    }
     if (run.origin.kind !== 'messaging') return;
     const bindingId = run.origin.binding_id;
     if (event.type === 'agent.started') {
@@ -336,11 +339,12 @@ export class MessagingRuntime {
     this.drainingBindings.add(bindingId);
     let job: InboundJob | null = null;
     try {
+      const binding = this.store.getBinding(bindingId);
+      const session = binding && this.sessions.getSession(binding.session_id);
+      if (session && this.runManager.getActiveRunForSession(session.id)) return;
       job = this.store.claimNextInboundJob(bindingId);
       if (!job) return;
       const claimedJob = job;
-      const binding = this.store.getBinding(bindingId);
-      const session = binding && this.sessions.getSession(binding.session_id);
       if (!binding || !session) {
         this.store.failInboundJob(bindingId, job.id, 'Messaging binding session is missing');
         queueMicrotask(() => void this.drainBinding(bindingId));
@@ -388,6 +392,12 @@ export class MessagingRuntime {
     }
   }
 
+  private resumeQueuedBindingsForSession(sessionId: string) {
+    for (const binding of this.store.listBindings()) {
+      if (binding.session_id === sessionId) void this.drainBinding(binding.id);
+    }
+  }
+
   private async finishRun(event: Extract<AgentEvent, { type: 'agent.done' | 'agent.error' }>, run: RuntimeRun) {
     const bindingId = run.origin.kind === 'messaging' ? run.origin.binding_id : undefined;
     if (!bindingId) return;
@@ -398,7 +408,14 @@ export class MessagingRuntime {
     this.store.expireRunInteractions(run.id);
     this.enqueueRunOperation(run, { kind: 'activity', active: false }, `run:${run.id}:activity:stop`);
     const completed = event.type === 'agent.done' && event.payload.status === 'completed';
-    const text = completed ? this.finalText(bindingId) : event.type === 'agent.error' ? `Task failed: ${event.payload.message}` : 'The task was cancelled.';
+    const timedOut = event.type === 'agent.done' && event.payload.status === 'timeout';
+    const text = completed
+      ? this.finalText(bindingId)
+      : timedOut
+        ? 'The task timed out.'
+        : event.type === 'agent.error'
+          ? `Task failed: ${event.payload.message}`
+          : 'The task was cancelled.';
     this.store.enqueueOutboundJob({
       idempotencyKey: `run:${run.id}:result`,
       bindingId,
@@ -407,7 +424,7 @@ export class MessagingRuntime {
       coalesceKey: `run:${run.id}:status`,
       operation: {
         kind: 'result',
-        outcome: completed ? 'completed' : event.type === 'agent.error' ? 'failed' : 'cancelled',
+        outcome: completed ? 'completed' : timedOut || event.type === 'agent.error' ? 'failed' : 'cancelled',
         text,
         message_already_delivered: this.store.hasDeliveredText(bindingId, text, run.id),
       },

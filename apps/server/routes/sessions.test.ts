@@ -7,6 +7,20 @@ import type { Session } from '@moke/protocol';
 import { createRouter } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { registerSessionRoutes } from './sessions.js';
+import { sendMessageSchema } from './schemas.js';
+
+test('send API accepts run timeouts up to 72 hours', () => {
+  const request = {
+    message: { role: 'user', content: 'long task' },
+    options: { timeout_ms: 72 * 60 * 60 * 1_000 },
+  };
+
+  assert.equal(sendMessageSchema.safeParse(request).success, true);
+  assert.equal(sendMessageSchema.safeParse({
+    ...request,
+    options: { timeout_ms: 72 * 60 * 60 * 1_000 + 1 },
+  }).success, false);
+});
 
 test('session detail omits internal context messages from the public API', async () => {
   const session: Session = {
@@ -112,6 +126,37 @@ test('session environment and send APIs reject workspace changes', async () => {
       assert.equal(payload.error.code, 'IMMUTABLE_SESSION_WORKSPACE');
     }
     assert.equal(session.env?.workspace.root, 'E:\\work\\test\\moke');
+    assert.deepEqual(session.messages, []);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('send API rejects a second active run for the same session', async () => {
+  const session: Session = {
+    id: 'sess_active', title: 'Test', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
+  };
+  const router = createRouter<RoutesContext>();
+  registerSessionRoutes(router);
+  const server = http.createServer(router.handler({
+    sessionStore: { get: () => session },
+    runManager: {
+      getActiveRunForSession: () => ({ id: 'run_active' }),
+    },
+  } as unknown as RoutesContext));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/sessions/${session.id}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: { role: 'user', content: 'second message' } }),
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json() as { error: { code: string; message: string } };
+    assert.equal(payload.error.code, 'SESSION_RUN_ACTIVE');
+    assert.match(payload.error.message, /run_active/);
     assert.deepEqual(session.messages, []);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

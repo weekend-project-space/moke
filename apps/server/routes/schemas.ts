@@ -60,7 +60,7 @@ const runOptionsSchema = z.object({
   stream: z.boolean().optional(),
   max_steps: z.number().int().positive().max(1000).optional(),
   max_tool_calls: z.number().int().nonnegative().max(200).optional(),
-  timeout_ms: z.number().int().positive().max(3600000).optional(),
+  timeout_ms: z.number().int().positive().max(72 * 60 * 60 * 1_000).optional(),
   reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max', 'ultra']).optional(),
 }).strict();
 

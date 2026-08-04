@@ -71,8 +71,21 @@ type RunMessageInput = {
 };
 
 const MAX_RETAINED_TERMINAL_RUNS = 50;
+const DEFAULT_RUN_TIMEOUT_MS = 72 * 60 * 60 * 1_000;
 
 export { selectRecentHistory } from './history.js';
+
+export class SessionRunActiveError extends Error {
+  readonly code = 'SESSION_RUN_ACTIVE';
+
+  constructor(
+    readonly sessionId: string,
+    readonly runId: string,
+  ) {
+    super(`Session ${sessionId} already has an active run: ${runId}`);
+    this.name = 'SessionRunActiveError';
+  }
+}
 
 function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
   const message = event.payload.message;
@@ -124,8 +137,16 @@ export class RunManager {
 
   constructor(private readonly config: RunManagerConfig) { }
 
+  getActiveRunForSession(sessionId: string) {
+    return [...this.config.runs.values()].find(
+      (run) => run.session_id === sessionId && isActiveRun(run),
+    );
+  }
+
   createRun(session: Session, input: RunMessageInput, options: RunOptions = {}) {
     if (this.shuttingDown) throw new Error('Run manager is shutting down');
+    const activeRun = this.getActiveRunForSession(session.id);
+    if (activeRun) throw new SessionRunActiveError(session.id, activeRun.id);
     const env = snapshotEnvironment(session.env, this.defaultWorkspaceRoot());
     const run: RuntimeRun = {
       id: id('run'),
@@ -178,16 +199,21 @@ export class RunManager {
     const limits = {
       max_steps: options.max_steps || 999,
       max_tool_calls: options.max_tool_calls || 99,
-      timeout_ms: options.timeout_ms || 120000,
+      timeout_ms: normalizeRunTimeout(options.timeout_ms),
     };
-    const history = await resolveHistory(
-      selectRecentHistory(session.messages.slice(0, -1)),
-      this.config.resolveImageAttachments,
+    const timeout = setTimeout(
+      () => this.timeoutRun(run, eventBus, limits.timeout_ms),
+      limits.timeout_ms,
     );
-    const sessionFiles = session.messages.flatMap((message) => message.role === 'user' ? (message.files || []) : []);
-    const attachedFiles = [...new Map([...sessionFiles, ...(input.files || [])].map((file) => [file.path, file])).values()];
+    timeout.unref();
 
     try {
+      const history = await resolveHistory(
+        selectRecentHistory(session.messages.slice(0, -1)),
+        this.config.resolveImageAttachments,
+      );
+      const sessionFiles = session.messages.flatMap((message) => message.role === 'user' ? (message.files || []) : []);
+      const attachedFiles = [...new Map([...sessionFiles, ...(input.files || [])].map((file) => [file.path, file])).values()];
       const contentManager = await this.config.createSkillContentManager?.(run.env.workspace.root);
       const result = await this.config.agent.run({
         input: input.content,
@@ -272,6 +298,7 @@ export class RunManager {
         message,
       });
     } finally {
+      clearTimeout(timeout);
       this.abortControllers.delete(run.id);
       this.approvalRecords.delete(run.id);
       this.pruneTerminalRuns();
@@ -505,26 +532,13 @@ export class RunManager {
 
   cancel(runId: string, reason: 'user' | 'shutdown' = 'user') {
     const run = this.config.runs.get(runId);
-    if (!run) return null;
+    if (!run || !isActiveRun(run)) return run || null;
     run.abort = true;
     run.cancel_reason = reason;
     this.setStatus(run, 'cancelled');
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
-
-    if (run.pending_ask) {
-      const pending = this.pendingAsks.get(run.pending_ask.ask_id);
-      this.pendingAsks.delete(run.pending_ask.ask_id);
-      run.pending_ask = undefined;
-      pending?.reject(new Error('Run cancelled'));
-    }
-
-    if (run.pending_approval) {
-      const pending = this.pendingApprovals.get(run.pending_approval.approval_id);
-      this.pendingApprovals.delete(run.pending_approval.approval_id);
-      run.pending_approval = undefined;
-      pending?.reject(new Error('Run cancelled'));
-    }
+    this.rejectPendingInteractions(run, 'Run cancelled');
 
     const event = new EventBus(run).emit('agent.done', {
       status: 'cancelled',
@@ -538,6 +552,49 @@ export class RunManager {
     this.pruneTerminalRuns();
 
     return run;
+  }
+
+  private timeoutRun(run: RuntimeRun, eventBus: EventBus, timeoutMs: number) {
+    if (!isActiveRun(run)) return;
+
+    eventBus.emit('agent.message.done', {
+      message: {
+        id: id('msg'),
+        role: 'assistant',
+        content: `Run timed out after ${timeoutMs}ms`,
+        created_at: new Date().toISOString(),
+      },
+    });
+    run.abort = true;
+    this.setStatus(run, 'timeout');
+    this.abortControllers.get(run.id)?.abort(new Error('Run timed out'));
+    this.abortControllers.delete(run.id);
+    this.rejectPendingInteractions(run, 'Run timed out');
+    eventBus.emit('agent.done', {
+      status: 'timeout',
+      usage: {
+        steps: run.seq,
+        tool_calls: 0,
+        duration_ms: Date.now() - run.started_at,
+      },
+    });
+    this.pruneTerminalRuns();
+  }
+
+  private rejectPendingInteractions(run: RuntimeRun, message: string) {
+    if (run.pending_ask) {
+      const pending = this.pendingAsks.get(run.pending_ask.ask_id);
+      this.pendingAsks.delete(run.pending_ask.ask_id);
+      run.pending_ask = undefined;
+      pending?.reject(new Error(message));
+    }
+
+    if (run.pending_approval) {
+      const pending = this.pendingApprovals.get(run.pending_approval.approval_id);
+      this.pendingApprovals.delete(run.pending_approval.approval_id);
+      run.pending_approval = undefined;
+      pending?.reject(new Error(message));
+    }
   }
 
   addObserver(observer: (event: AgentEvent, run: RuntimeRun) => void) {
@@ -650,6 +707,11 @@ function isActiveRun(run: RuntimeRun) {
     && run.status !== 'failed'
     && run.status !== 'cancelled'
     && run.status !== 'timeout';
+}
+
+function normalizeRunTimeout(value: number | undefined) {
+  if (value === undefined) return DEFAULT_RUN_TIMEOUT_MS;
+  return Math.max(1, Math.min(Math.trunc(value), DEFAULT_RUN_TIMEOUT_MS));
 }
 
 function attachedFileContext(files: FileAttachment[]) {
