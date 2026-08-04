@@ -212,6 +212,7 @@
   background: transparent;
 }
 
+.composer-secondary-action:hover,
 .composer-secondary-action.active {
   color: var(--ink);
   background: var(--surface-panel-muted);
@@ -219,33 +220,34 @@
 
 .composer-workspace-context {
   width: var(--content-width);
-  margin-bottom: 0;
+  margin-bottom: 6px;
 
   .composer-select-control {
-    width: 100%;
+    width: auto;
   }
 }
 
 .composer button.composer-workspace-context-trigger {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  width: auto;
   min-width: 0;
-  height: 36px;
+  max-width: min(220px, 32vw);
+  height: 30px;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  gap: 5px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-pill);
   color: var(--ink-soft);
-  background: rgba(118, 118, 128, 0.08);
+  background: transparent;
   box-shadow: none;
 
   span {
     min-width: 0;
     overflow: hidden;
     font-size: var(--font-size-ui);
-    font-weight: 500;
+    font-weight: 430;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -256,9 +258,8 @@
 
   &:hover,
   &.active {
-    border-color: var(--line-soft);
     color: var(--ink);
-    background: rgba(118, 118, 128, 0.14);
+    background: var(--surface-panel-muted);
   }
 
   &:focus-visible {
