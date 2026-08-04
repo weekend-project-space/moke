@@ -1,6 +1,7 @@
 import { isNativeBrowserAvailable, type BrowserBounds } from '../api/browser'
 import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
 import { connectBrowserBridge } from '../services/browserBridge'
+import { initializeApiAccess } from '../../../services/apiAccess'
 
 type UseBrowserWorkspaceOptions = {
   apiBase: string
@@ -47,8 +48,15 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     }
   }
 
-  function initBrowserWorkspace() {
+  async function initBrowserWorkspace() {
     if (!isNativeBrowserAvailable()) return
+
+    try {
+      await initializeApiAccess()
+    } catch (error) {
+      console.error('Failed to initialize browser bridge authentication', error)
+      return
+    }
 
     disconnectBrowserBridge = connectBrowserBridge({
       apiBase: options.apiBase,
