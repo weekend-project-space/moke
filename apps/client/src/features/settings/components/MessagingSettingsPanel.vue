@@ -43,7 +43,9 @@ type WeixinLogin = {
   error?: { code: string; message: string }
 }
 
-type FeishuLogin = {
+type RegistrationPlatform = 'dingtalk' | 'feishu'
+
+type RegistrationLogin = {
   id: string
   status: 'waiting_scan' | 'expired' | 'denied' | 'confirmed' | 'failed' | 'cancelled'
   qr_image?: string
@@ -68,14 +70,16 @@ const dingtalkClientSecret = ref('')
 const dingtalkAllowedUsers = ref('')
 const dingtalkCardTemplateId = ref('')
 const editingDingTalkId = ref('')
+const dingtalkSetupMode = ref<'quick' | 'manual'>('quick')
 const savingDingTalk = ref(false)
 const feishuAppId = ref('')
 const feishuAppSecret = ref('')
 const feishuDomain = ref<'feishu' | 'lark'>('feishu')
 const feishuSetupMode = ref<'quick' | 'manual'>('quick')
 const savingFeishu = ref(false)
-const feishuLogin = ref<FeishuLogin | null>(null)
-const creatingFeishuLogin = ref(false)
+const registrationLogin = ref<RegistrationLogin | null>(null)
+const registrationLoginPlatform = ref<RegistrationPlatform | null>(null)
+const creatingRegistrationLogin = ref(false)
 const login = ref<WeixinLogin | null>(null)
 const verifyCode = ref('')
 const loading = ref(false)
@@ -83,14 +87,16 @@ const creatingLogin = ref(false)
 const busyConnectionId = ref('')
 const error = ref('')
 let pollTimer: number | undefined
-let feishuPollTimer: number | undefined
+let registrationPollTimer: number | undefined
 let loginRequest = 0
-let feishuLoginRequest = 0
+let registrationLoginRequest = 0
 
 const loginStatusText = computed(() => login.value ? loginStatusLabel(login.value.status) : '')
 const hasActiveLogin = computed(() => login.value && !isTerminalLogin(login.value.status))
-const feishuLoginStatusText = computed(() => feishuLogin.value ? feishuLoginStatusLabel(feishuLogin.value.status) : '')
-const hasActiveFeishuLogin = computed(() => feishuLogin.value && !isTerminalFeishuLogin(feishuLogin.value.status))
+const registrationLoginStatusText = computed(() => registrationLogin.value ? registrationLoginStatusLabel(registrationLogin.value.status) : '')
+const hasActiveRegistrationLogin = computed(() => registrationLogin.value && !isTerminalRegistrationLogin(registrationLogin.value.status))
+const currentRegistrationSetupMode = computed(() => setupChannel.value === 'dingtalk' ? dingtalkSetupMode.value : feishuSetupMode.value)
+const registrationLoginHasError = computed(() => Boolean(error.value) || ['failed', 'expired', 'denied'].includes(registrationLogin.value?.status ?? ''))
 
 function requestJson<T>(path: string, init?: RequestInit) {
   return apiFetch(`${props.apiBase}${path}`, init).then(async (response) => {
@@ -171,53 +177,56 @@ async function saveFeishuConnection() {
   }
 }
 
-async function beginFeishuLogin() {
-  const request = ++feishuLoginRequest
-  creatingFeishuLogin.value = true
-  feishuLogin.value = null
+async function beginRegistrationLogin(platform: RegistrationPlatform) {
+  const request = ++registrationLoginRequest
+  creatingRegistrationLogin.value = true
+  registrationLogin.value = null
+  registrationLoginPlatform.value = platform
   error.value = ''
   try {
-    const data = await requestJson<{ login?: FeishuLogin }>('/api/messaging/feishu/logins', json('POST', {
-      domain: feishuDomain.value,
-    }))
+    const data = await requestJson<{ login?: RegistrationLogin }>(`/api/messaging/${platform}/logins`, json('POST',
+      platform === 'feishu' ? { domain: feishuDomain.value } : {},
+    ))
     if (!data.login) throw new Error(uiText.messaging.invalidLoginResponse)
-    if (request !== feishuLoginRequest || setupChannel.value !== 'feishu' || feishuSetupMode.value !== 'quick') {
-      if (!isTerminalFeishuLogin(data.login.status)) {
-        void requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(data.login.id)}`, { method: 'DELETE' }).catch(() => undefined)
+    if (request !== registrationLoginRequest || setupChannel.value !== platform || currentRegistrationSetupMode.value !== 'quick') {
+      if (!isTerminalRegistrationLogin(data.login.status)) {
+        void requestJson(`/api/messaging/${platform}/logins/${encodeURIComponent(data.login.id)}`, { method: 'DELETE' }).catch(() => undefined)
       }
       return
     }
-    feishuLogin.value = data.login
-    startFeishuPolling()
+    registrationLogin.value = data.login
+    startRegistrationPolling()
   } catch (reason) {
-    if (request === feishuLoginRequest) error.value = messageFrom(reason, uiText.messaging.startFeishuAuthorizationFailed)
+    if (request === registrationLoginRequest) error.value = messageFrom(reason, registrationStartFailure(platform))
   } finally {
-    if (request === feishuLoginRequest) creatingFeishuLogin.value = false
+    if (request === registrationLoginRequest) creatingRegistrationLogin.value = false
   }
 }
 
-async function pollFeishuLogin() {
-  const current = feishuLogin.value
-  if (!current || isTerminalFeishuLogin(current.status)) {
-    stopFeishuPolling()
+async function pollRegistrationLogin() {
+  const current = registrationLogin.value
+  const platform = registrationLoginPlatform.value
+  if (!current || !platform || isTerminalRegistrationLogin(current.status)) {
+    stopRegistrationPolling()
     return
   }
   try {
-    const data = await requestJson<{ login?: FeishuLogin }>(`/api/messaging/feishu/logins/${encodeURIComponent(current.id)}`)
+    const data = await requestJson<{ login?: RegistrationLogin }>(`/api/messaging/${platform}/logins/${encodeURIComponent(current.id)}`)
     if (!data.login) throw new Error(uiText.messaging.invalidLoginResponse)
-    if (setupChannel.value !== 'feishu' || feishuSetupMode.value !== 'quick' || feishuLogin.value?.id !== current.id) return
-    feishuLogin.value = { ...data.login, qr_image: data.login.qr_image || current.qr_image }
-    if (isTerminalFeishuLogin(data.login.status)) {
-      stopFeishuPolling()
+    if (setupChannel.value !== platform || currentRegistrationSetupMode.value !== 'quick' || registrationLogin.value?.id !== current.id) return
+    registrationLogin.value = { ...data.login, qr_image: data.login.qr_image || current.qr_image }
+    if (isTerminalRegistrationLogin(data.login.status)) {
+      stopRegistrationPolling()
       if (data.login.status === 'confirmed') {
         await loadConnections()
         setupChannel.value = null
-        feishuLogin.value = null
+        registrationLogin.value = null
+        registrationLoginPlatform.value = null
       }
     }
   } catch (reason) {
-    stopFeishuPolling()
-    error.value = messageFrom(reason, uiText.messaging.checkFeishuAuthorizationFailed)
+    stopRegistrationPolling()
+    error.value = messageFrom(reason, registrationCheckFailure(platform))
   }
 }
 
@@ -310,7 +319,9 @@ function openWeixinSetup(connectionId?: string) {
 
 function openDingTalkSetup() {
   setupChannel.value = 'dingtalk'
+  dingtalkSetupMode.value = 'quick'
   error.value = ''
+  void beginRegistrationLogin('dingtalk')
 }
 
 function editDingTalk(connection: MessagingConnection) {
@@ -318,6 +329,7 @@ function editDingTalk(connection: MessagingConnection) {
   dingtalkAllowedUsers.value = connection.allowed_user_ids?.join(', ') || ''
   dingtalkCardTemplateId.value = connection.card_template_id || ''
   setupChannel.value = 'dingtalk'
+  dingtalkSetupMode.value = 'manual'
   error.value = ''
 }
 
@@ -325,37 +337,39 @@ function openFeishuSetup() {
   setupChannel.value = 'feishu'
   feishuSetupMode.value = 'quick'
   error.value = ''
-  void beginFeishuLogin()
+  void beginRegistrationLogin('feishu')
 }
 
-async function setFeishuSetupMode(mode: 'quick' | 'manual') {
-  if (mode === feishuSetupMode.value) return
-  await cancelFeishuLogin()
-  feishuSetupMode.value = mode
+async function setRegistrationSetupMode(platform: RegistrationPlatform, mode: 'quick' | 'manual') {
+  const setupMode = platform === 'dingtalk' ? dingtalkSetupMode : feishuSetupMode
+  if (mode === setupMode.value) return
+  await cancelRegistrationLogin()
+  setupMode.value = mode
   error.value = ''
-  if (mode === 'quick') void beginFeishuLogin()
+  if (mode === 'quick') void beginRegistrationLogin(platform)
 }
 
 async function setFeishuDomain(domain: 'feishu' | 'lark') {
   if (domain === feishuDomain.value) return
-  await cancelFeishuLogin()
+  await cancelRegistrationLogin()
   feishuDomain.value = domain
   error.value = ''
-  if (setupChannel.value === 'feishu' && feishuSetupMode.value === 'quick') void beginFeishuLogin()
+  if (setupChannel.value === 'feishu' && feishuSetupMode.value === 'quick') void beginRegistrationLogin('feishu')
 }
 
 async function closeSetup() {
   if (savingDingTalk.value || savingFeishu.value) return
   loginRequest += 1
-  feishuLoginRequest += 1
+  registrationLoginRequest += 1
   creatingLogin.value = false
-  creatingFeishuLogin.value = false
+  creatingRegistrationLogin.value = false
   const current = login.value
   const shouldCancelLogin = setupChannel.value === 'weixin' && current && !isTerminalLogin(current.status)
-  const currentFeishuLogin = feishuLogin.value
-  const shouldCancelFeishuLogin = setupChannel.value === 'feishu' && currentFeishuLogin && !isTerminalFeishuLogin(currentFeishuLogin.status)
+  const currentRegistrationLogin = registrationLogin.value
+  const currentRegistrationPlatform = registrationLoginPlatform.value
+  const shouldCancelRegistrationLogin = currentRegistrationLogin && currentRegistrationPlatform && !isTerminalRegistrationLogin(currentRegistrationLogin.status)
   stopPolling()
-  stopFeishuPolling()
+  stopRegistrationPolling()
   login.value = null
   loginConnectionId.value = undefined
   verifyCode.value = ''
@@ -364,11 +378,13 @@ async function closeSetup() {
   dingtalkAllowedUsers.value = ''
   dingtalkCardTemplateId.value = ''
   editingDingTalkId.value = ''
+  dingtalkSetupMode.value = 'quick'
   feishuAppId.value = ''
   feishuAppSecret.value = ''
   feishuDomain.value = 'feishu'
   feishuSetupMode.value = 'quick'
-  feishuLogin.value = null
+  registrationLogin.value = null
+  registrationLoginPlatform.value = null
   error.value = ''
   setupChannel.value = null
 
@@ -379,9 +395,9 @@ async function closeSetup() {
       // The local dialog can close after the server has expired the authorization.
     }
   }
-  if (shouldCancelFeishuLogin) {
+  if (shouldCancelRegistrationLogin) {
     try {
-      await requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(currentFeishuLogin.id)}`, { method: 'DELETE' })
+      await requestJson(`/api/messaging/${currentRegistrationPlatform}/logins/${encodeURIComponent(currentRegistrationLogin.id)}`, { method: 'DELETE' })
     } catch {
       // The local dialog can close after the server has expired the authorization.
     }
@@ -423,26 +439,28 @@ function stopPolling() {
   pollTimer = undefined
 }
 
-function startFeishuPolling() {
-  stopFeishuPolling()
-  feishuPollTimer = window.setInterval(() => { void pollFeishuLogin() }, 1500)
-  void pollFeishuLogin()
+function startRegistrationPolling() {
+  stopRegistrationPolling()
+  registrationPollTimer = window.setInterval(() => { void pollRegistrationLogin() }, 1500)
+  void pollRegistrationLogin()
 }
 
-function stopFeishuPolling() {
-  if (feishuPollTimer !== undefined) window.clearInterval(feishuPollTimer)
-  feishuPollTimer = undefined
+function stopRegistrationPolling() {
+  if (registrationPollTimer !== undefined) window.clearInterval(registrationPollTimer)
+  registrationPollTimer = undefined
 }
 
-async function cancelFeishuLogin() {
-  feishuLoginRequest += 1
-  creatingFeishuLogin.value = false
-  const current = feishuLogin.value
-  stopFeishuPolling()
-  feishuLogin.value = null
-  if (!current || isTerminalFeishuLogin(current.status)) return
+async function cancelRegistrationLogin() {
+  registrationLoginRequest += 1
+  creatingRegistrationLogin.value = false
+  const current = registrationLogin.value
+  const platform = registrationLoginPlatform.value
+  stopRegistrationPolling()
+  registrationLogin.value = null
+  registrationLoginPlatform.value = null
+  if (!current || !platform || isTerminalRegistrationLogin(current.status)) return
   try {
-    await requestJson(`/api/messaging/feishu/logins/${encodeURIComponent(current.id)}`, { method: 'DELETE' })
+    await requestJson(`/api/messaging/${platform}/logins/${encodeURIComponent(current.id)}`, { method: 'DELETE' })
   } catch {
     // The authorization may have expired while the mode or region changed.
   }
@@ -499,9 +517,11 @@ function isTerminalLogin(status: WeixinLogin['status']) {
   return status === 'expired' || status === 'confirmed' || status === 'already_connected' || status === 'failed' || status === 'cancelled'
 }
 
-function feishuLoginStatusLabel(status: FeishuLogin['status']) {
+function registrationLoginStatusLabel(status: RegistrationLogin['status']) {
   return {
-    waiting_scan: feishuDomain.value === 'lark' ? uiText.messaging.scanWithLark : uiText.messaging.scanWithFeishu,
+    waiting_scan: setupChannel.value === 'dingtalk'
+      ? uiText.messaging.scanWithDingTalk
+      : feishuDomain.value === 'lark' ? uiText.messaging.scanWithLark : uiText.messaging.scanWithFeishu,
     expired: uiText.messaging.qrExpired,
     denied: uiText.messaging.authorizationDenied,
     confirmed: uiText.messaging.authorizationSucceeded,
@@ -510,8 +530,16 @@ function feishuLoginStatusLabel(status: FeishuLogin['status']) {
   }[status]
 }
 
-function isTerminalFeishuLogin(status: FeishuLogin['status']) {
+function isTerminalRegistrationLogin(status: RegistrationLogin['status']) {
   return status === 'expired' || status === 'denied' || status === 'confirmed' || status === 'failed' || status === 'cancelled'
+}
+
+function registrationStartFailure(platform: RegistrationPlatform) {
+  return platform === 'dingtalk' ? uiText.messaging.startDingTalkAuthorizationFailed : uiText.messaging.startFeishuAuthorizationFailed
+}
+
+function registrationCheckFailure(platform: RegistrationPlatform) {
+  return platform === 'dingtalk' ? uiText.messaging.checkDingTalkAuthorizationFailed : uiText.messaging.checkFeishuAuthorizationFailed
 }
 
 function connectionTime(connection: MessagingConnection) {
@@ -528,8 +556,8 @@ function messageFrom(reason: unknown, fallback: string) {
 onMounted(() => { void loadConnections() })
 onBeforeUnmount(() => {
   stopPolling()
-  stopFeishuPolling()
-  void cancelFeishuLogin()
+  stopRegistrationPolling()
+  void cancelRegistrationLogin()
 })
 </script>
 
@@ -699,51 +727,51 @@ onBeforeUnmount(() => {
           </div>
         </template>
 
-        <form v-else-if="setupChannel === 'dingtalk'" class="messaging-credentials-form" @submit.prevent="saveDingTalkConnection">
-          <div class="messaging-modal-fields">
-            <label v-if="!editingDingTalkId">{{ uiText.messaging.clientId }}<input v-model="dingtalkClientId" required maxlength="200" autocomplete="off" /></label>
-            <label v-if="!editingDingTalkId">{{ uiText.messaging.clientSecret }}<input v-model="dingtalkClientSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
-            <label>{{ uiText.messaging.allowedUsers }}<input v-model="dingtalkAllowedUsers" maxlength="4000" :placeholder="uiText.messaging.allowedUsersPlaceholder" autocomplete="off" /></label>
-            <label>{{ uiText.messaging.cardTemplateId }}<input v-model="dingtalkCardTemplateId" maxlength="300" :placeholder="uiText.messaging.optional" autocomplete="off" /></label>
-            <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
-          </div>
-          <div class="messaging-modal-actions">
-            <button type="button" class="settings-secondary" :disabled="savingDingTalk" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
-            <button type="submit" class="settings-primary" :disabled="savingDingTalk || (!editingDingTalkId && (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()))">{{ editingDingTalkId ? uiText.messaging.saveChanges : uiText.messaging.saveAndConnect }}</button>
-          </div>
-        </form>
-
         <template v-else>
-          <div class="messaging-setup-modes" role="tablist" :aria-label="uiText.messaging.setupMethod">
-            <button type="button" role="tab" :aria-selected="feishuSetupMode === 'quick'" :class="{ active: feishuSetupMode === 'quick' }" @click="setFeishuSetupMode('quick')">{{ uiText.messaging.quickSetup }}</button>
-            <button type="button" role="tab" :aria-selected="feishuSetupMode === 'manual'" :class="{ active: feishuSetupMode === 'manual' }" @click="setFeishuSetupMode('manual')">{{ uiText.messaging.manualSetup }}</button>
+          <div v-if="!editingDingTalkId" class="messaging-setup-modes" role="tablist" :aria-label="uiText.messaging.setupMethod">
+            <button type="button" role="tab" :aria-selected="currentRegistrationSetupMode === 'quick'" :class="{ active: currentRegistrationSetupMode === 'quick' }" @click="setRegistrationSetupMode(setupChannel, 'quick')">{{ uiText.messaging.quickSetup }}</button>
+            <button type="button" role="tab" :aria-selected="currentRegistrationSetupMode === 'manual'" :class="{ active: currentRegistrationSetupMode === 'manual' }" @click="setRegistrationSetupMode(setupChannel, 'manual')">{{ uiText.messaging.manualSetup }}</button>
           </div>
 
-          <template v-if="feishuSetupMode === 'quick'">
-            <div class="feishu-setup-body">
-              <div class="feishu-region-choice" role="radiogroup" :aria-label="uiText.messaging.region">
-                <button type="button" role="radio" :aria-checked="feishuDomain === 'feishu'" :class="{ active: feishuDomain === 'feishu' }" :disabled="creatingFeishuLogin" @click="setFeishuDomain('feishu')">{{ uiText.messaging.feishuChina }}</button>
-                <button type="button" role="radio" :aria-checked="feishuDomain === 'lark'" :class="{ active: feishuDomain === 'lark' }" :disabled="creatingFeishuLogin" @click="setFeishuDomain('lark')">{{ uiText.messaging.larkGlobal }}</button>
+          <template v-if="currentRegistrationSetupMode === 'quick'">
+            <div class="registration-setup-body" :class="{ compact: setupChannel === 'dingtalk' }">
+              <div v-if="setupChannel === 'feishu'" class="feishu-region-choice" role="radiogroup" :aria-label="uiText.messaging.region">
+                <button type="button" role="radio" :aria-checked="feishuDomain === 'feishu'" :class="{ active: feishuDomain === 'feishu' }" :disabled="creatingRegistrationLogin" @click="setFeishuDomain('feishu')">{{ uiText.messaging.feishuChina }}</button>
+                <button type="button" role="radio" :aria-checked="feishuDomain === 'lark'" :class="{ active: feishuDomain === 'lark' }" :disabled="creatingRegistrationLogin" @click="setFeishuDomain('lark')">{{ uiText.messaging.larkGlobal }}</button>
               </div>
 
-              <div v-if="feishuLogin?.qr_image && hasActiveFeishuLogin" class="feishu-qr-frame">
-                <img :src="feishuLogin.qr_image" :alt="uiText.messaging.feishuQrCode" />
+              <div v-if="registrationLogin?.qr_image && hasActiveRegistrationLogin" class="registration-qr-frame">
+                <img :src="registrationLogin.qr_image" :alt="setupChannel === 'dingtalk' ? uiText.messaging.dingTalkQrCode : uiText.messaging.feishuQrCode" />
               </div>
-              <div v-else class="feishu-setup-placeholder" :class="{ error: Boolean(error) || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied' }">
-                <CircleAlert v-if="error || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied'" :size="20" />
+              <div v-else class="registration-setup-placeholder" :class="{ error: registrationLoginHasError }">
+                <CircleAlert v-if="registrationLoginHasError" :size="20" />
                 <LoaderCircle v-else :size="20" class="spinning" />
               </div>
 
-              <div class="feishu-login-state" :class="{ error: Boolean(error) || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied' }">
-                <span>{{ error || feishuLogin?.error?.message || feishuLoginStatusText || uiText.messaging.preparingAuthorization }}</span>
-                <time v-if="feishuLogin && hasActiveFeishuLogin">{{ new Date(feishuLogin.expires_at).toLocaleTimeString() }}</time>
+              <div class="registration-login-state" :class="{ error: registrationLoginHasError }">
+                <span>{{ error || registrationLogin?.error?.message || registrationLoginStatusText || uiText.messaging.preparingAuthorization }}</span>
+                <time v-if="registrationLogin && hasActiveRegistrationLogin">{{ new Date(registrationLogin.expires_at).toLocaleTimeString() }}</time>
               </div>
             </div>
             <div class="messaging-modal-actions">
-              <button v-if="error || feishuLogin?.status === 'failed' || feishuLogin?.status === 'expired' || feishuLogin?.status === 'denied'" type="button" class="settings-secondary" :disabled="creatingFeishuLogin" @click="beginFeishuLogin">{{ uiText.messaging.tryAgain }}</button>
+              <button v-if="registrationLoginHasError" type="button" class="settings-secondary" :disabled="creatingRegistrationLogin" @click="beginRegistrationLogin(setupChannel)">{{ uiText.messaging.tryAgain }}</button>
               <button type="button" class="settings-secondary" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
             </div>
           </template>
+
+          <form v-else-if="setupChannel === 'dingtalk'" class="messaging-credentials-form" @submit.prevent="saveDingTalkConnection">
+            <div class="messaging-modal-fields">
+              <label v-if="!editingDingTalkId">{{ uiText.messaging.clientId }}<input v-model="dingtalkClientId" required maxlength="200" autocomplete="off" /></label>
+              <label v-if="!editingDingTalkId">{{ uiText.messaging.clientSecret }}<input v-model="dingtalkClientSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
+              <label>{{ uiText.messaging.allowedUsers }}<input v-model="dingtalkAllowedUsers" maxlength="4000" :placeholder="uiText.messaging.allowedUsersPlaceholder" autocomplete="off" /></label>
+              <label>{{ uiText.messaging.cardTemplateId }}<input v-model="dingtalkCardTemplateId" maxlength="300" :placeholder="uiText.messaging.optional" autocomplete="off" /></label>
+              <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+            </div>
+            <div class="messaging-modal-actions">
+              <button type="button" class="settings-secondary" :disabled="savingDingTalk" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
+              <button type="submit" class="settings-primary" :disabled="savingDingTalk || (!editingDingTalkId && (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()))">{{ editingDingTalkId ? uiText.messaging.saveChanges : uiText.messaging.saveAndConnect }}</button>
+            </div>
+          </form>
 
           <form v-else class="messaging-credentials-form" @submit.prevent="saveFeishuConnection">
             <div class="messaging-modal-fields">
@@ -948,13 +976,18 @@ onBeforeUnmount(() => {
   padding: 16px;
 }
 
-.feishu-setup-body {
+.registration-setup-body {
   display: grid;
   min-height: 304px;
   place-items: center;
   align-content: center;
   gap: 10px;
   padding: 14px 16px 16px;
+}
+
+.registration-setup-body.compact {
+  min-height: 286px;
+  padding-top: 16px;
 }
 
 .feishu-region-choice {
@@ -979,8 +1012,8 @@ onBeforeUnmount(() => {
 
 .weixin-qr-frame,
 .weixin-setup-placeholder,
-.feishu-qr-frame,
-.feishu-setup-placeholder {
+.registration-qr-frame,
+.registration-setup-placeholder {
   display: grid;
   width: 216px;
   height: 216px;
@@ -996,7 +1029,7 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 
-.feishu-qr-frame img {
+.registration-qr-frame img {
   display: block;
   width: 100%;
   height: 100%;
@@ -1012,12 +1045,12 @@ onBeforeUnmount(() => {
   color: var(--text-error);
 }
 
-.feishu-setup-placeholder {
+.registration-setup-placeholder {
   color: var(--ink-muted);
   background: var(--surface-muted-faint);
 }
 
-.feishu-setup-placeholder.error {
+.registration-setup-placeholder.error {
   color: var(--text-error);
 }
 
@@ -1036,7 +1069,7 @@ onBeforeUnmount(() => {
   color: var(--text-error);
 }
 
-.feishu-login-state {
+.registration-login-state {
   display: flex;
   min-height: 20px;
   align-items: center;
@@ -1047,7 +1080,7 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.feishu-login-state.error {
+.registration-login-state.error {
   color: var(--text-error);
 }
 
@@ -1059,7 +1092,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-caption);
 }
 
-.feishu-login-state time {
+.registration-login-state time {
   padding-left: 8px;
   border-left: 1px solid var(--line-soft);
   color: var(--ink-muted);
@@ -1088,7 +1121,7 @@ onBeforeUnmount(() => {
   .messaging-modal-heading,
   .messaging-modal-fields,
   .weixin-setup-body,
-  .feishu-setup-body {
+  .registration-setup-body {
     padding-right: 14px;
     padding-left: 14px;
   }

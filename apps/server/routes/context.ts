@@ -9,6 +9,7 @@ import type { AttachmentStore } from '../storage/attachment-store.js';
 import type { MessagingRuntime } from '../services/messaging/messaging-runtime.js';
 import type { WeixinLoginService } from '../services/messaging/weixin-login-service.js';
 import type { FeishuLoginService } from '../services/messaging/feishu-login-service.js';
+import type { DingTalkLoginService } from '../services/messaging/dingtalk-login-service.js';
 import type { ScheduledTaskService } from '../services/scheduled-task-service.js';
 
 export type RoutesContext = {
@@ -25,6 +26,7 @@ export type RoutesContext = {
   messagingRuntime: MessagingRuntime;
   weixinLoginService: WeixinLoginService;
   feishuLoginService: FeishuLoginService;
+  dingtalkLoginService: DingTalkLoginService;
   scheduledTaskService: ScheduledTaskService;
   defaultWorkspaceRoot: string;
 };

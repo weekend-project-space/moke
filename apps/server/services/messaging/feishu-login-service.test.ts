@@ -43,7 +43,7 @@ test('persists confirmed app credentials without exposing them in the login snap
       };
     },
     async poll() {
-      return { status: 'confirmed', appId: 'cli_test', appSecret: 'app-secret' };
+      return { status: 'confirmed', credential: { appId: 'cli_test', appSecret: 'app-secret' } };
     },
   };
   const service = new FeishuLoginService({
@@ -87,7 +87,7 @@ test('cancellation during connection creation removes the late connection', asyn
       };
     },
     async poll() {
-      return { status: 'confirmed', appId: 'cli_test', appSecret: 'app-secret' };
+      return { status: 'confirmed', credential: { appId: 'cli_test', appSecret: 'app-secret' } };
     },
   };
   const service = new FeishuLoginService({
