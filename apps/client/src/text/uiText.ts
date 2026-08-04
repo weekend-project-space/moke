@@ -68,6 +68,7 @@ const composer = {
   addImage: 'Add image',
   applyWorkspace: 'Apply',
   chooseImage: 'Choose image',
+  chooseProject: 'Choose project',
   chooseOtherWorkspace: 'Choose another folder',
   clearQueued: 'Clear queued messages',
   currentModel: (model: string, provider: string) => provider ? `${provider} · ${model}` : model,

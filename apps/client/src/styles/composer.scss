@@ -217,55 +217,77 @@
   background: var(--surface-panel-muted);
 }
 
-.composer button.composer-workspace-action {
-  display: inline-flex;
-  width: auto;
+.composer-workspace-context {
+  width: var(--content-width);
+  margin-bottom: 0;
+
+  .composer-select-control {
+    width: 100%;
+  }
+}
+
+.composer button.composer-workspace-context-trigger {
+  display: flex;
+  width: 100%;
   min-width: 0;
-  max-width: min(180px, 24vw);
-  height: 30px;
+  height: 36px;
   align-items: center;
-  gap: 5px;
-  padding: 0 9px;
-  border-radius: var(--radius-pill);
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   color: var(--ink-soft);
-  background: transparent;
+  background: rgba(118, 118, 128, 0.08);
+  box-shadow: none;
 
   span {
     min-width: 0;
     overflow: hidden;
     font-size: var(--font-size-ui);
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  svg {
+    flex: 0 0 auto;
+  }
+
   &:hover,
   &.active {
+    border-color: var(--line-soft);
     color: var(--ink);
-    background: var(--surface-panel-muted);
+    background: rgba(118, 118, 128, 0.14);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-control-border);
+    outline-offset: 1px;
   }
 }
 
 .composer-option-list.composer-workspace-menu {
-  bottom: calc(100% + 6px);
+  bottom: 100%;
   left: 0;
-  width: 400px;
+  width: 280px;
   max-width: calc(100vw - 24px);
   transform: none;
-  padding: 0;
+  padding: 3px;
 }
 
 .composer-select-menu-header {
-  padding: 9px 14px 7px;
+  padding: 6px 10px 4px;
   color: var(--ink-muted);
   font-size: var(--font-size-caption);
   font-weight: 550;
 }
 
 .composer .composer-option-list.composer-workspace-menu > button {
-  height: 59px;
-  gap: 10px;
-  padding: 7px 14px;
-  border-radius: 0;
+  height: 34px;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
 }
 
 .composer-workspace-menu .composer-option-icon {
@@ -278,13 +300,11 @@
 }
 
 .composer-workspace-option-copy {
-  display: grid;
+  display: block;
   min-width: 0;
-  gap: 2px;
   text-align: left;
 
-  strong,
-  small {
+  strong {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -294,13 +314,7 @@
   strong {
     color: var(--ink);
     font-size: var(--font-size-ui);
-    font-weight: 560;
-  }
-
-  small {
-    color: var(--ink-muted);
-    font-size: var(--font-size-caption);
-    font-weight: 400;
+    font-weight: 430;
   }
 }
 
@@ -311,13 +325,18 @@
 .composer .composer-option-list .composer-workspace-other {
   display: flex;
   width: 100%;
-  height: 48px;
+  height: 34px;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 0 14px;
-  border-radius: 0;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
   color: var(--ink-soft);
   background: transparent;
+
+  span {
+    font-size: var(--font-size-ui);
+    white-space: nowrap;
+  }
 
   &:hover {
     color: var(--ink);
@@ -329,7 +348,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 7px;
-  padding: 9px;
+  padding: 7px;
 
   input {
     width: 100%;
@@ -852,20 +871,9 @@
 }
 
 @media (max-width: 700px) {
-  .composer button.composer-workspace-action {
-    width: 30px;
-    max-width: 30px;
-    padding: 0;
-  }
-
-  .composer button.composer-workspace-action span,
-  .composer button.composer-workspace-action svg:last-child {
-    display: none;
-  }
-
   .composer-option-list.composer-workspace-menu {
     right: auto;
-    left: -50px;
+    left: 0;
     width: calc(100vw - 24px);
   }
 }

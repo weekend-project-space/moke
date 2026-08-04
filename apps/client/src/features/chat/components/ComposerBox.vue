@@ -339,6 +339,59 @@ defineExpose({ focus, openWorkspaceEditor, resize })
 
 <template>
   <form ref="composerEl" class="composer" @submit.prevent="$emit('submit')">
+    <div v-if="props.workspaceRoot !== undefined" class="composer-workspace-context">
+      <ComposerSelectControl
+        :open="workspaceMenuOpen"
+        :options="workspaceOptions()"
+        :selected="props.workspaceRoot || ''"
+        menu-class="composer-workspace-menu"
+        @select="chooseWorkspace"
+        @update:open="updateWorkspaceMenu"
+      >
+        <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
+        <template #option-icon>
+          <FolderOpen :size="15" stroke-width="2.1" />
+        </template>
+        <template #option-label="{ option }">
+          <span class="composer-workspace-option-copy">
+            <strong>{{ workspaceName(option) }}</strong>
+          </span>
+        </template>
+        <template #option-selected>
+          <Check :size="14" stroke-width="2.3" />
+        </template>
+        <template #menu-footer>
+          <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
+            <input
+              id="composer-workspace-input"
+              v-model="workspaceDraft"
+              :aria-label="uiText.composer.workspace"
+              type="text"
+              @keydown.enter.prevent="applyWorkspace"
+            />
+            <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
+          </div>
+          <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
+            <FolderPlus :size="15" stroke-width="2.1" />
+            <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
+          </button>
+        </template>
+        <template #trigger="{ open, toggle }">
+          <button
+            class="composer-workspace-context-trigger"
+            type="button"
+            :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
+            :title="props.workspaceRoot || uiText.composer.workspace"
+            :class="{ active: open }"
+            @click="toggle"
+          >
+            <FolderOpen :size="15" stroke-width="1.9" />
+            <span>{{ props.workspaceRoot ? workspaceName(props.workspaceRoot) : uiText.composer.chooseProject }}</span>
+            <ChevronDown :size="13" stroke-width="2.2" />
+          </button>
+        </template>
+      </ComposerSelectControl>
+    </div>
     <div
       class="composer-panel input-mode"
       :class="{ dragging: isDraggingImage }"
@@ -397,59 +450,6 @@ defineExpose({ focus, openWorkspaceEditor, resize })
                 @click="toggle"
               >
                 <Plus :size="17" stroke-width="2.2" />
-              </button>
-            </template>
-          </ComposerSelectControl>
-          <ComposerSelectControl
-            v-if="props.workspaceRoot !== undefined"
-            :open="workspaceMenuOpen"
-            :options="workspaceOptions()"
-            :selected="props.workspaceRoot || ''"
-            menu-class="composer-workspace-menu"
-            @select="chooseWorkspace"
-            @update:open="updateWorkspaceMenu"
-          >
-            <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
-            <template #option-icon>
-              <FolderOpen :size="17" stroke-width="1.9" />
-            </template>
-            <template #option-label="{ option }">
-              <span class="composer-workspace-option-copy">
-                <strong>{{ workspaceName(option) }}</strong>
-                <small>{{ option }}</small>
-              </span>
-            </template>
-            <template #option-selected>
-              <Check :size="15" stroke-width="2.3" />
-            </template>
-            <template #menu-footer>
-              <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
-                <input
-                  id="composer-workspace-input"
-                  v-model="workspaceDraft"
-                  :aria-label="uiText.composer.workspace"
-                  type="text"
-                  @keydown.enter.prevent="applyWorkspace"
-                />
-                <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
-              </div>
-              <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
-                <FolderPlus :size="17" stroke-width="1.9" />
-                <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
-              </button>
-            </template>
-            <template #trigger="{ open, toggle }">
-              <button
-                class="composer-workspace-action"
-                type="button"
-                :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
-                :title="props.workspaceRoot || uiText.composer.workspace"
-                :class="{ active: open }"
-                @click="toggle"
-              >
-                <FolderOpen :size="14" stroke-width="2.1" />
-                <span>{{ props.workspaceRoot || uiText.composer.workspace }}</span>
-                <ChevronDown :size="13" stroke-width="2.2" />
               </button>
             </template>
           </ComposerSelectControl>
