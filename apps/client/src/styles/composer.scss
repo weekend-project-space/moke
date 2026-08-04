@@ -427,22 +427,14 @@
 }
 
 .composer button.composer-approval-action {
-  width: auto;
+  width: 30px;
   min-width: 0;
-  gap: 5px;
-  padding: 0 9px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
   border-radius: var(--radius-pill);
   color: var(--ink-soft);
   background: transparent;
-
-  span {
-    max-width: 92px;
-    overflow: hidden;
-    font-size: var(--font-size-ui);
-    font-weight: 430;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   &:hover,
   &.active {

@@ -480,9 +480,9 @@ defineExpose({ focus, openWorkspaceEditor, resize })
                 :class="{ active: open }"
                 @click="toggle"
               >
-                <ShieldCheck :size="14" stroke-width="2.1" />
-                <span>{{ approvalModeLabel(props.approvalMode) }}</span>
-                <ChevronDown :size="13" stroke-width="2.2" />
+                <Hand v-if="props.approvalMode === 'manual'" :size="14" stroke-width="2.1" />
+                <ShieldCheck v-else-if="props.approvalMode === 'ai_review'" :size="14" stroke-width="2.1" />
+                <ShieldAlert v-else :size="14" stroke-width="2.1" />
               </button>
             </template>
           </ComposerSelectControl>
