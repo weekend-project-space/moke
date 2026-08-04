@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Archive, CalendarClock, Clock3, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import type { SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 
@@ -15,6 +16,8 @@ const props = defineProps<{
   sessionLabel: (session: SessionSummary) => string
   sessionMeta: (session: SessionSummary) => string
 }>()
+
+const router = useRouter()
 
 const emit = defineEmits<{
   archiveSession: [id: string]
@@ -55,7 +58,7 @@ function clearSearch() {
 }
 
 function openScheduledTasks() {
-  window.location.hash = 'tasks'
+  void router.push({ name: 'tasks' })
 }
 
 function isScheduledSession(session: SessionSummary) {

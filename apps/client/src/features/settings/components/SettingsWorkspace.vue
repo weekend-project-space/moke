@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, FolderX, RotateCw, Save, SendHorizontal } from 'lucide-vue-next'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { apiFetch } from '../../../services/apiAccess'
 import McpSettingsPanel from './McpSettingsPanel.vue'
@@ -33,7 +34,12 @@ const emit = defineEmits<{
   openBrowserUrl: [request: { url: string; mode: BrowserLinkOpenMode }]
 }>()
 
-const activeSettingsTab = ref<SettingsTab>('model')
+const route = useRoute()
+const router = useRouter()
+const activeSettingsTab = computed(() => {
+  const tab = route.params.tab
+  return typeof tab === 'string' && settingsNavigationItems.some((item) => item.id === tab) ? tab as SettingsTab : 'model'
+})
 const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
 const skillSettingsDirty = ref(false)
 const browserSettings = reactive<BrowserPreferences>({ ...DEFAULT_BROWSER_PREFERENCES })
@@ -96,7 +102,11 @@ function openHomeUrl() {
 function selectSettingsTab(tab: SettingsTab) {
   if (tab === activeSettingsTab.value) return
   if (activeSettingsTab.value === 'skills' && skillSettingsDirty.value && !window.confirm(uiText.skills.discardChanges)) return
-  activeSettingsTab.value = tab
+  if (skillSettingsDirty.value) {
+    skillSettingsDirty.value = false
+    emit('dirtyChange', false)
+  }
+  void router.push({ name: 'settings', params: { tab } })
 }
 
 function closeSettings() {
@@ -107,6 +117,12 @@ function updateSkillSettingsDirty(dirty: boolean) {
   skillSettingsDirty.value = dirty
   emit('dirtyChange', dirty)
 }
+
+watch(activeSettingsTab, () => {
+  if (!skillSettingsDirty.value) return
+  skillSettingsDirty.value = false
+  emit('dirtyChange', false)
+})
 
 onMounted(() => {
   loadBrowserSettings()

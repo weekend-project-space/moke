@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { isNavigationFailure, RouterView, useRoute, useRouter } from 'vue-router'
 import { ChatWorkspace } from './features/chat'
 import type { BrowserLinkOpenMode } from './features/browser'
-import { SettingsWorkspace } from './features/settings'
+import { isChatRoute, router } from './router'
 import { uiText } from './text/uiText'
 
-type AppWorkspace = 'chat' | 'settings'
 type NativeAppWindow = {
   destroy(): Promise<void>
   onCloseRequested(handler: (event: { preventDefault(): void }) => void | Promise<void>): Promise<() => void>
 }
 
-const activeWorkspace = ref<AppWorkspace>('chat')
 const settingsDirty = ref(false)
 const chatWorkspace = ref<InstanceType<typeof ChatWorkspace> | null>(null)
 const fileMenu = ref(false)
 const fileMenuElement = ref<HTMLElement | null>(null)
 const fileMenuTrigger = ref<HTMLButtonElement | null>(null)
+const lastChatPath = ref('/chat')
 const nativeAppWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
   window?: { getCurrentWindow(): NativeAppWindow }
 })?.window?.getCurrentWindow()
@@ -25,17 +25,36 @@ let appDisposed = false
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+const route = useRoute()
+const routeNavigator = useRouter()
+
+router.beforeEach((to, from) => {
+  if (from.name === 'settings' && to.fullPath !== from.fullPath && settingsDirty.value) {
+    if (!window.confirm(uiText.skills.discardChanges)) return false
+    settingsDirty.value = false
+  }
+  return true
+})
+
+router.afterEach((to, from) => {
+  if (isChatRoute(to)) lastChatPath.value = to.fullPath
+  if (from.name === 'settings' && isChatRoute(to)) {
+    settingsDirty.value = false
+    void nextTick(() => chatWorkspace.value?.refreshSettings())
+  }
+})
 
 async function openSettings() {
   closeFileMenu()
-  activeWorkspace.value = 'settings'
+  if (isChatRoute(route)) lastChatPath.value = route.fullPath
+  await routeNavigator.push({ name: 'settings', params: { tab: 'model' } })
   await nextTick()
   document.querySelector<HTMLButtonElement>('.settings-navigation nav button')?.focus()
 }
 
 async function newChatFromMenu() {
   closeFileMenu()
-  if (activeWorkspace.value === 'settings' && !closeSettings()) return
+  if (route.name === 'settings' && !(await closeSettings())) return
   await nextTick()
   await chatWorkspace.value?.newSession()
 }
@@ -78,25 +97,21 @@ function handleFileMenuKeydown(event: KeyboardEvent) {
   items[nextIndex]?.focus()
 }
 
-function closeSettings() {
-  if (settingsDirty.value && !window.confirm(uiText.skills.discardChanges)) return false
-
-  activeWorkspace.value = 'chat'
-  settingsDirty.value = false
-  void nextTick(() => chatWorkspace.value?.refreshSettings())
-  return true
+async function closeSettings() {
+  const failure = await routeNavigator.push(lastChatPath.value)
+  return !isNavigationFailure(failure)
 }
 
 async function openBrowserFromSettings(request: { url: string; mode: BrowserLinkOpenMode }) {
-  if (!closeSettings()) return
+  if (!(await closeSettings())) return
   await nextTick()
   await chatWorkspace.value?.openBrowser(request.url, request.mode)
 }
 
 function handleAppKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || activeWorkspace.value !== 'settings') return
+  if (event.key !== 'Escape' || route.name !== 'settings') return
   event.preventDefault()
-  closeSettings()
+  void closeSettings()
 }
 
 onMounted(async () => {
@@ -132,17 +147,23 @@ onUnmounted(() => {
     </div>
     <div class="app-titlebar-drag" data-tauri-drag-region></div>
   </header>
-  <ChatWorkspace
-    v-show="activeWorkspace === 'chat'"
-    ref="chatWorkspace"
-    :active="activeWorkspace === 'chat'"
-    @open-settings="openSettings"
-  />
-  <SettingsWorkspace
-    v-if="activeWorkspace === 'settings'"
-    :api-base="apiBase"
-    @close="closeSettings"
-    @dirty-change="settingsDirty = $event"
-    @open-browser-url="openBrowserFromSettings"
-  />
+  <RouterView v-slot="{ Component }">
+    <KeepAlive :include="['ChatWorkspace']">
+      <component
+        :is="Component"
+        v-if="isChatRoute(route)"
+        ref="chatWorkspace"
+        :active="true"
+        @open-settings="openSettings"
+      />
+    </KeepAlive>
+    <component
+      :is="Component"
+      v-if="!isChatRoute(route)"
+      :api-base="apiBase"
+      @close="closeSettings"
+      @dirty-change="settingsDirty = $event"
+      @open-browser-url="openBrowserFromSettings"
+    />
+  </RouterView>
 </template>
