@@ -39,6 +39,13 @@ struct BrowserState {
     last_bounds: Mutex<Option<BrowserBounds>>,
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum BrowserDataKind {
+    Cache,
+    Cookies,
+}
+
 #[derive(Serialize)]
 struct LocalImage {
     name: String,
@@ -88,6 +95,92 @@ fn browser_download_payload(url: &Url, path: Option<&Path>, status: &str) -> ser
             .unwrap_or_else(|| "download".to_string()),
         "status": status,
     })
+}
+
+#[cfg(windows)]
+fn clear_browser_data_with_webview(
+    webview: &tauri::Webview,
+    kind: BrowserDataKind,
+) -> Result<(), String> {
+    use webview2_com::{
+        ClearBrowsingDataCompletedHandler,
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_13, ICoreWebView2Profile2,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_DOM_STORAGE,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_FILE_SYSTEMS,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_INDEXED_DB,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS,
+            COREWEBVIEW2_BROWSING_DATA_KINDS_WEB_SQL,
+        },
+    };
+    use windows::core::Interface;
+
+    let (sender, receiver) = mpsc::channel::<Result<(), String>>();
+    let start_sender = sender.clone();
+    webview
+        .with_webview(move |platform_webview| {
+            let started = (|| -> Result<(), String> {
+                unsafe {
+                    let core_webview = platform_webview
+                        .controller()
+                        .CoreWebView2()
+                        .map_err(|error| error.to_string())?;
+                    let profile = core_webview
+                        .cast::<ICoreWebView2_13>()
+                        .map_err(|error| error.to_string())?
+                        .Profile()
+                        .map_err(|error| error.to_string())?
+                        .cast::<ICoreWebView2Profile2>()
+                        .map_err(|error| error.to_string())?;
+                    let data_kinds = match kind {
+                        BrowserDataKind::Cache => {
+                            COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS
+                        }
+                        BrowserDataKind::Cookies => {
+                            COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_DOM_STORAGE
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_FILE_SYSTEMS
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_INDEXED_DB
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS
+                                | COREWEBVIEW2_BROWSING_DATA_KINDS_WEB_SQL
+                        }
+                    };
+                    let completed_sender = sender.clone();
+                    let handler = ClearBrowsingDataCompletedHandler::create(Box::new(move |result| {
+                        let outcome = result.map_err(|error| error.to_string());
+                        let _ = completed_sender.send(outcome);
+                        Ok(())
+                    }));
+                    profile
+                        .ClearBrowsingData(data_kinds, &handler)
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            })();
+            if let Err(error) = started {
+                let _ = start_sender.send(Err(error));
+            }
+        })
+        .map_err(|error| error.to_string())?;
+
+    receiver
+        .recv_timeout(Duration::from_secs(10))
+        .map_err(|_| "Clearing browser data timed out".to_string())?
+}
+
+#[cfg(not(windows))]
+fn clear_browser_data_with_webview(
+    _webview: &tauri::Webview,
+    _kind: BrowserDataKind,
+) -> Result<(), String> {
+    Err("Clearing browser data separately is not supported on this platform".to_string())
 }
 
 #[derive(Clone, Serialize)]
@@ -2113,6 +2206,26 @@ async fn browser_state(state: tauri::State<'_, BrowserState>) -> Result<BrowserR
 }
 
 #[tauri::command]
+async fn browser_clear_data(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BrowserState>,
+    kind: BrowserDataKind,
+) -> Result<(), String> {
+    let webview = {
+        let pages = state
+            .pages
+            .lock()
+            .map_err(|_| "Browser state is unavailable".to_string())?;
+        pages
+            .iter()
+            .find_map(|page| app.get_webview(&page.label))
+            .or_else(|| app.get_webview("main"))
+            .ok_or_else(|| "Browser webview is not available".to_string())?
+    };
+    clear_browser_data_with_webview(&webview, kind)
+}
+
+#[tauri::command]
 async fn browser_refresh_state(
     app: tauri::AppHandle,
     state: tauri::State<'_, BrowserState>,
@@ -3109,6 +3222,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             browser_state,
+            browser_clear_data,
             browser_refresh_state,
             browser_open,
             browser_navigate,

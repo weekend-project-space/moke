@@ -2,7 +2,6 @@
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { isNavigationFailure, RouterView, useRoute, useRouter } from 'vue-router'
 import { ChatWorkspace } from './features/chat'
-import type { BrowserLinkOpenMode } from './features/browser'
 import { isChatRoute, router } from './router'
 import { uiText } from './text/uiText'
 
@@ -102,12 +101,6 @@ async function closeSettings() {
   return !isNavigationFailure(failure)
 }
 
-async function openBrowserFromSettings(request: { url: string; mode: BrowserLinkOpenMode }) {
-  if (!(await closeSettings())) return
-  await nextTick()
-  await chatWorkspace.value?.openBrowser(request.url, request.mode)
-}
-
 function handleAppKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape' || route.name !== 'settings') return
   event.preventDefault()
@@ -162,7 +155,6 @@ onUnmounted(() => {
       :api-base="apiBase"
       @close="closeSettings"
       @dirty-change="settingsDirty = $event"
-      @open-browser-url="openBrowserFromSettings"
     />
   </RouterView>
 </template>

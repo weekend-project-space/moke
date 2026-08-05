@@ -3,8 +3,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Download, FolderOpen,
 import { computed, nextTick, onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useBrowserController } from '../composables/useBrowserController'
 import { formatBrowserAddressHost } from '../model/address'
-import type { BrowserLinkOpenMode } from '../model/preferences'
-import { browserApi, type BrowserDownloadChange, type BrowserPage } from '../api/browser'
+import { browserApi, type BrowserDownloadChange, type BrowserLinkOpenMode, type BrowserPage } from '../api/browser'
 import type { BrowserTabCloseScope } from '../model/tabClose'
 import { uiText } from '../../../text/uiText'
 

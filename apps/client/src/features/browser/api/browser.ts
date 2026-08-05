@@ -69,6 +69,9 @@ export type BrowserBounds = {
   height: number
 }
 
+export type BrowserLinkOpenMode = 'current' | 'new-tab'
+export type BrowserDataKind = 'cache' | 'cookies'
+
 type TauriGlobal = {
   core?: {
     invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
@@ -212,5 +215,9 @@ export const browserApi = {
 
   close(pageId: number) {
     return tauriInvoke<BrowserResult>('browser_close', { pageId })
+  },
+
+  clearBrowsingData(kind: BrowserDataKind) {
+    return tauriInvoke<void>('browser_clear_data', { kind })
   },
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, FolderX, RotateCw, Save, SendHorizontal } from 'lucide-vue-next'
+import { AlertTriangle, ArrowLeft, Cookie, Database, FolderX, RotateCw, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
@@ -13,9 +13,9 @@ import {
   DEFAULT_BROWSER_PREFERENCES,
   loadBrowserPreferences,
   saveBrowserPreferences as persistBrowserPreferences,
-  type BrowserLinkOpenMode,
   type BrowserPreferences,
 } from '../../browser'
+import { browserApi, isNativeBrowserAvailable, type BrowserDataKind } from '../../browser/api/browser'
 import { uiText } from '../../../text/uiText'
 import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
 
@@ -31,7 +31,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   dirtyChange: [dirty: boolean]
-  openBrowserUrl: [request: { url: string; mode: BrowserLinkOpenMode }]
 }>()
 
 const route = useRoute()
@@ -43,24 +42,19 @@ const activeSettingsTab = computed(() => {
 const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
 const skillSettingsDirty = ref(false)
 const browserSettings = reactive<BrowserPreferences>({ ...DEFAULT_BROWSER_PREFERENCES })
+const browserDataAvailable = isNativeBrowserAvailable()
+const clearingBrowserData = ref<BrowserDataKind | null>(null)
+const browserDataStatus = ref<{ tone: 'success' | 'error'; text: string } | null>(null)
+const browserDataConfirmationOpen = ref(false)
 const permissions = ref<WorkspaceRootPermission[]>([])
 const loadingPermissions = ref(false)
 const permissionError = ref('')
-const saved = ref(false)
 function loadBrowserSettings() {
   Object.assign(browserSettings, loadBrowserPreferences())
 }
 
-function saveBrowserSettings() {
+function updateBrowserSearchEngine() {
   persistBrowserPreferences(browserSettings)
-  markSaved()
-}
-
-function markSaved() {
-  saved.value = true
-  window.setTimeout(() => {
-    saved.value = false
-  }, 1500)
 }
 
 async function loadPermissions() {
@@ -94,9 +88,43 @@ async function revokePermission(path: string) {
   }
 }
 
-function openHomeUrl() {
-  const url = browserSettings.browserHomeUrl.trim()
-  if (url) emit('openBrowserUrl', { url, mode: browserSettings.linkOpenMode })
+function requestBrowserDataClear(kind: BrowserDataKind) {
+  if (!browserDataAvailable || clearingBrowserData.value) return
+  if (kind === 'cookies') {
+    browserDataConfirmationOpen.value = true
+    return
+  }
+
+  void clearBrowserData(kind)
+}
+
+function cancelBrowserDataClear() {
+  if (clearingBrowserData.value) return
+  browserDataConfirmationOpen.value = false
+}
+
+async function confirmBrowserDataClear() {
+  if (clearingBrowserData.value) return
+  browserDataConfirmationOpen.value = false
+  await clearBrowserData('cookies')
+}
+
+async function clearBrowserData(kind: BrowserDataKind) {
+  if (!browserDataAvailable || clearingBrowserData.value) return
+
+  clearingBrowserData.value = kind
+  browserDataStatus.value = null
+  try {
+    await browserApi.clearBrowsingData(kind)
+    browserDataStatus.value = {
+      tone: 'success',
+      text: kind === 'cache' ? uiText.settings.cacheCleared : uiText.settings.cookiesCleared,
+    }
+  } catch {
+    browserDataStatus.value = { tone: 'error', text: uiText.settings.clearBrowserDataFailed }
+  } finally {
+    clearingBrowserData.value = null
+  }
 }
 
 function selectSettingsTab(tab: SettingsTab) {
@@ -189,39 +217,112 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else-if="activeSettingsTab === 'browser'" class="settings-section">
-      <label class="settings-row">
-        <span>{{ uiText.settings.defaultHome }}</span>
-        <input v-model="browserSettings.browserHomeUrl" type="url" spellcheck="false" />
-      </label>
-      <label class="settings-row">
-        <span>{{ uiText.settings.homeOpenMode }}</span>
-        <select v-model="browserSettings.linkOpenMode">
-          <option value="current">{{ uiText.settings.currentTab }}</option>
-          <option value="new-tab">{{ uiText.settings.newTab }}</option>
-        </select>
-      </label>
-      <label class="settings-row">
-        <span>{{ uiText.settings.searchEngine }}</span>
-        <select v-model="browserSettings.searchEngine">
-          <option value="bing">{{ uiText.settings.searchEngineBing }}</option>
-          <option value="google">{{ uiText.settings.searchEngineGoogle }}</option>
-          <option value="baidu">{{ uiText.settings.searchEngineBaidu }}</option>
-        </select>
-      </label>
-      <div class="settings-actions">
-        <button type="button" class="settings-secondary" @click="openHomeUrl">
-          <SendHorizontal :size="14" />
-          {{ uiText.settings.openHome }}
-        </button>
-        <button type="button" class="settings-primary" @click="saveBrowserSettings">
-          <Save :size="14" />
-          {{ saved ? uiText.settings.saved : uiText.settings.save }}
-        </button>
+    <div v-else-if="activeSettingsTab === 'browser'" class="settings-section browser-settings">
+      <div class="browser-settings-group">
+        <header class="browser-settings-group-heading">
+          <h3>{{ uiText.settings.browserSearch }}</h3>
+        </header>
+        <label class="settings-row browser-search-row">
+          <span>{{ uiText.settings.searchEngine }}</span>
+          <select v-model="browserSettings.searchEngine" @change="updateBrowserSearchEngine">
+            <option value="bing">{{ uiText.settings.searchEngineBing }}</option>
+            <option value="google">{{ uiText.settings.searchEngineGoogle }}</option>
+            <option value="baidu">{{ uiText.settings.searchEngineBaidu }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="browser-settings-group">
+        <header class="browser-settings-group-heading">
+          <h3>{{ uiText.settings.browserData }}</h3>
+        </header>
+        <div class="browser-data-action">
+          <div class="browser-data-copy">
+            <span class="browser-data-icon" aria-hidden="true">
+              <Database :size="16" />
+            </span>
+            <div>
+              <strong>{{ uiText.settings.browserCache }}</strong>
+              <small>{{ uiText.settings.clearCacheDescription }}</small>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="settings-secondary browser-clear-button"
+            :disabled="!browserDataAvailable || clearingBrowserData !== null"
+            :title="browserDataAvailable ? uiText.settings.clearCache : uiText.settings.desktopOnly"
+            @click="requestBrowserDataClear('cache')"
+          >
+            <Trash2 :size="14" />
+            {{ clearingBrowserData === 'cache' ? uiText.settings.clearing : uiText.settings.clearCache }}
+          </button>
+        </div>
+        <div class="browser-data-action browser-data-action-last">
+          <div class="browser-data-copy">
+            <span class="browser-data-icon" aria-hidden="true">
+              <Cookie :size="16" />
+            </span>
+            <div>
+              <strong>{{ uiText.settings.browserCookies }}</strong>
+              <small>{{ uiText.settings.clearCookiesDescription }}</small>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="settings-secondary browser-clear-button"
+            :disabled="!browserDataAvailable || clearingBrowserData !== null"
+            :title="browserDataAvailable ? uiText.settings.clearCookies : uiText.settings.desktopOnly"
+            @click="requestBrowserDataClear('cookies')"
+          >
+            <Trash2 :size="14" />
+            {{ clearingBrowserData === 'cookies' ? uiText.settings.clearing : uiText.settings.clearCookies }}
+          </button>
+        </div>
+        <div v-if="browserDataStatus" class="settings-note" :class="browserDataStatus.tone" role="status" aria-live="polite">
+          {{ browserDataStatus.text }}
+        </div>
+        <div v-else-if="!browserDataAvailable" class="settings-note">
+          {{ uiText.settings.desktopOnly }}
+        </div>
       </div>
     </div>
           </div>
         </div>
       </section>
   </WorkspaceLayout>
+
+  <Teleport to="body">
+    <div
+      v-if="browserDataConfirmationOpen"
+      class="browser-data-confirm-backdrop"
+      tabindex="-1"
+      @click.self="cancelBrowserDataClear"
+      @keydown.esc="cancelBrowserDataClear"
+    >
+      <section
+        class="browser-data-confirm-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="browser-data-confirm-title"
+        aria-describedby="browser-data-confirm-description"
+      >
+        <div class="browser-data-confirm-heading">
+          <span class="browser-data-confirm-icon" aria-hidden="true">
+            <AlertTriangle :size="18" />
+          </span>
+          <h2 id="browser-data-confirm-title">{{ uiText.settings.confirmClearCookiesTitle }}</h2>
+        </div>
+        <p id="browser-data-confirm-description">{{ uiText.settings.confirmClearCookies }}</p>
+        <div class="browser-data-confirm-actions">
+          <button type="button" class="settings-secondary" autofocus @click="cancelBrowserDataClear">
+            {{ uiText.settings.cancel }}
+          </button>
+          <button type="button" class="browser-confirm-danger" @click="confirmBrowserDataClear">
+            <Trash2 :size="14" />
+            {{ uiText.settings.confirmClearCookiesAction }}
+          </button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 </template>

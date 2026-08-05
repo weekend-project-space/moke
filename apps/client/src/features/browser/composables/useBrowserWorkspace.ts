@@ -1,5 +1,4 @@
-import { isNativeBrowserAvailable, type BrowserBounds } from '../api/browser'
-import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
+import { isNativeBrowserAvailable, type BrowserBounds, type BrowserLinkOpenMode } from '../api/browser'
 import { connectBrowserBridge } from '../services/browserBridge'
 import { initializeApiAccess } from '../../../services/apiAccess'
 
@@ -26,7 +25,7 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     }
   }
 
-  async function openLinkInBrowser(rawUrl: string, mode = loadBrowserPreferences().linkOpenMode) {
+  async function openLinkInBrowser(rawUrl: string, mode: BrowserLinkOpenMode = 'current') {
     const url = normalizeHttpUrl(rawUrl)
     if (!url) return
 

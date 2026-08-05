@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { browserApi, isNativeBrowserAvailable, type BrowserBounds, type BrowserPage } from '../api/browser'
-import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
+import { loadBrowserPreferences } from '../model/preferences'
+import type { BrowserLinkOpenMode } from '../api/browser'
 import { resolveBrowserAddress } from '../model/address'
 import { pageIdsToClose, type BrowserTabCloseScope } from '../model/tabClose'
 import { waitForBrowserLayoutFrame } from '../services/browserLayout'

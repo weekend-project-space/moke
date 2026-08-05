@@ -3,23 +3,28 @@ import test from 'node:test'
 
 import { normalizeBrowserPreferences } from './preferences.js'
 
-test('normalizeBrowserPreferences keeps supported browser link modes', () => {
-  assert.deepEqual(normalizeBrowserPreferences({ linkOpenMode: 'new-tab' }), {
-    browserHomeUrl: 'https://www.baidu.com/',
-    linkOpenMode: 'new-tab',
-    searchEngine: 'bing',
+test('normalizeBrowserPreferences keeps supported search engines', () => {
+  assert.deepEqual(normalizeBrowserPreferences({ searchEngine: 'google' }), {
+    searchEngine: 'google',
   })
 })
 
 test('normalizeBrowserPreferences falls back for invalid persisted options', () => {
-  assert.deepEqual(normalizeBrowserPreferences({ linkOpenMode: 'invalid' as never, searchEngine: 'invalid' as never }), {
-    browserHomeUrl: 'https://www.baidu.com/',
-    linkOpenMode: 'current',
+  assert.deepEqual(normalizeBrowserPreferences({ searchEngine: 'invalid' as never }), {
     searchEngine: 'bing',
   })
 })
 
-test('normalizeBrowserPreferences keeps supported search engines', () => {
+test('normalizeBrowserPreferences drops removed home settings', () => {
+  assert.deepEqual(normalizeBrowserPreferences({
+    browserHomeUrl: 'https://example.com',
+    linkOpenMode: 'new-tab',
+  } as never), {
+    searchEngine: 'bing',
+  })
+})
+
+test('normalizeBrowserPreferences keeps supported alternate search engines', () => {
   assert.equal(normalizeBrowserPreferences({ searchEngine: 'google' }).searchEngine, 'google')
   assert.equal(normalizeBrowserPreferences({ searchEngine: 'baidu' }).searchEngine, 'baidu')
 })
