@@ -672,7 +672,8 @@ function approvalDetail(approval: PendingApproval) {
     ].filter(Boolean).join(' | ');
     return `${approval.reason}\n\nTool: ${approval.action.tool}\nTarget: ${destination}${content ? `\nContent: ${content}` : ''}`;
   }
-  return `${approval.reason}\n\nTool: ${approval.action.tool}`;
+  const workspace = approval.action.input.__moke_workspace;
+  return `${approval.reason}\n\nTool: ${approval.action.tool}${typeof workspace === 'string' ? `\nWorkspace: ${workspace}` : ''}`;
 }
 
 function retryDelay(attempt: number) {

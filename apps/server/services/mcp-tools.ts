@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { z } from 'zod';
 
 import { ToolExecutionError, type ToolRegistry } from '@moke/agent-runtime';
-import { McpManager, loadMcpConfig, type McpTool } from '@moke/mcp-client';
+import { McpWorkspacePool, loadMcpConfig, type McpTool } from '@moke/mcp-client';
 
 function describeMcpTool(tool: McpTool) {
   const schema = JSON.stringify(tool.inputSchema);
@@ -88,7 +88,7 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
 
   try {
     const config = await loadMcpConfig(mcpConfigPath);
-    const mcpManager = new McpManager(config, { workspace });
+    const mcpManager = new McpWorkspacePool(config, { workspace });
     const results = await mcpManager.connectAll();
 
     for (const result of results) {
@@ -109,14 +109,20 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
         approval: mcpTool.readOnly ? 'none' : 'required',
         input_schema: mcpTool.inputSchema,
         schema: jsonSchemaToZod(mcpTool.inputSchema),
-        async handler(input) {
+        async prepare(input, context) {
           const toolInput = input && typeof input === 'object' ? input : {};
-          try {
-            const result = await mcpManager.callTool(mcpTool.name, toolInput as Record<string, unknown>);
-            return truncateMcpOutput(normalizeMcpResult(result), mcpTool.maxOutputChars);
-          } catch (error) {
-            throw new ToolExecutionError(`MCP tool failed: ${mcpTool.name}`, normalizeMcpError(error, mcpTool));
-          }
+          const preparedWorkspace = context.workspace;
+          return {
+            approvalInput: {
+              ...(toolInput as Record<string, unknown>),
+              __moke_workspace: preparedWorkspace,
+            },
+            execute: () => callMcpTool(mcpManager, mcpTool, toolInput as Record<string, unknown>, preparedWorkspace),
+          };
+        },
+        async handler(input, context) {
+          const toolInput = input && typeof input === 'object' ? input : {};
+          return callMcpTool(mcpManager, mcpTool, toolInput as Record<string, unknown>, context.workspace);
         },
       });
     }
@@ -126,5 +132,19 @@ export async function registerMcpTools(toolRegistry: ToolRegistry, mcpConfigPath
   } catch (error) {
     console.warn(`Failed to load MCP config from ${mcpConfigPath}:`, error);
     return undefined;
+  }
+}
+
+async function callMcpTool(
+  manager: McpWorkspacePool,
+  tool: McpTool,
+  input: Record<string, unknown>,
+  workspace?: string,
+) {
+  try {
+    const result = await manager.callTool(tool.name, input, workspace);
+    return truncateMcpOutput(normalizeMcpResult(result), tool.maxOutputChars);
+  } catch (error) {
+    throw new ToolExecutionError(`MCP tool failed: ${tool.name}`, normalizeMcpError(error, tool));
   }
 }

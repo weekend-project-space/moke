@@ -104,11 +104,14 @@ function normalizeMcpConfig(input: z.infer<typeof mcpConfigInputSchema>): McpCon
 
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
+  private readonly workspace: string;
 
   constructor(
     private readonly config: McpConfig,
-    private readonly options: { workspace?: string } = {},
-  ) {}
+    options: { workspace?: string } = {},
+  ) {
+    this.workspace = resolve(options.workspace || process.cwd());
+  }
 
   async connectAll() {
     const results: Array<{ serverId: string; status: 'connected' | 'skipped' | 'failed'; error?: string }> = [];
@@ -142,6 +145,7 @@ export class McpManager {
       command: config.command,
       args: config.args,
       env: config.env,
+      cwd: this.workspace,
     });
     const client = new Client({
       name: 'moke',
@@ -153,7 +157,7 @@ export class McpManager {
         },
       },
     });
-    const roots = createRoots(config, this.options.workspace);
+    const roots = createRoots(config, this.workspace);
 
     client.setRequestHandler(ListRootsRequestSchema, async () => ({
       roots,
@@ -232,6 +236,75 @@ export class McpManager {
     }
 
     throw new Error(`MCP tool not found: ${namespacedName}`);
+  }
+}
+
+/** Keeps one MCP process set per workspace so roots and cwd cannot leak across sessions. */
+export class McpWorkspacePool {
+  private readonly managers = new Map<string, McpManager>();
+  private readonly pending = new Map<string, Promise<McpManager>>();
+  private readonly results = new Map<string, Array<{ serverId: string; status: 'connected' | 'skipped' | 'failed'; error?: string }>>();
+  private readonly defaultWorkspace: string;
+  private closed = false;
+
+  constructor(
+    private readonly config: McpConfig,
+    options: { workspace?: string } = {},
+  ) {
+    this.defaultWorkspace = resolve(options.workspace || process.cwd());
+  }
+
+  async connectAll() {
+    await this.connectWorkspace(this.defaultWorkspace);
+    return this.results.get(this.defaultWorkspace) || [];
+  }
+
+  listTools() {
+    return this.managers.get(this.defaultWorkspace)?.listTools() || [];
+  }
+
+  listRoots(workspace = this.defaultWorkspace) {
+    return this.managers.get(resolve(workspace))?.listRoots() || [];
+  }
+
+  async callTool(namespacedName: string, input: Record<string, unknown> = {}, workspace = this.defaultWorkspace) {
+    const manager = await this.connectWorkspace(workspace);
+    return manager.callTool(namespacedName, input);
+  }
+
+  async close() {
+    this.closed = true;
+    await Promise.allSettled([...this.pending.values()]);
+    await Promise.allSettled([...this.managers.values()].map((manager) => manager.close()));
+    this.managers.clear();
+    this.pending.clear();
+    this.results.clear();
+  }
+
+  private async connectWorkspace(workspace: string) {
+    if (this.closed) throw new Error('MCP workspace pool is closed');
+    const normalizedWorkspace = resolve(workspace);
+    const existing = this.managers.get(normalizedWorkspace);
+    if (existing) return existing;
+
+    const pending = this.pending.get(normalizedWorkspace);
+    if (pending) return pending;
+
+    const connection = this.createWorkspaceManager(normalizedWorkspace);
+    this.pending.set(normalizedWorkspace, connection);
+    try {
+      const manager = await connection;
+      this.managers.set(normalizedWorkspace, manager);
+      return manager;
+    } finally {
+      this.pending.delete(normalizedWorkspace);
+    }
+  }
+
+  private async createWorkspaceManager(workspace: string) {
+    const manager = new McpManager(this.config, { workspace });
+    this.results.set(workspace, await manager.connectAll());
+    return manager;
   }
 }
 

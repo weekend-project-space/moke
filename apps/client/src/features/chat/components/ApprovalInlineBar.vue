@@ -22,6 +22,7 @@ const text = {
   externalPathReason: uiText.approval.externalPathReason,
   messageContent: uiText.approval.messageContent,
   messageWillSend: uiText.approval.messageWillSend,
+  mcpTool: uiText.approval.mcpTool,
   permanent: uiText.approval.permanent,
   readFile: uiText.approval.readFile,
   reject: uiText.approval.reject,
@@ -42,6 +43,7 @@ function toolLabel(tool: string) {
     write_file: text.writeFile,
   }
 
+  if (tool.startsWith('mcp__')) return text.mcpTool
   return labels[tool] || tool || text.unknownTool
 }
 
@@ -79,6 +81,8 @@ function targetText(approval: PendingApproval) {
   }
 
   const command = approval.action?.input?.command
+  const workspace = approval.action?.input?.__moke_workspace
+  if (typeof workspace === 'string') return workspace
   return typeof command === 'string' ? command : approval.reason
 }
 

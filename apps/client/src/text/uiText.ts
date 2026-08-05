@@ -458,6 +458,7 @@ const approval = {
   commandWillRun: 'will run:',
   messageContent: 'Content:',
   messageWillSend: 'will send to:',
+  mcpTool: 'MCP tool',
   editContent: 'Edit content',
   externalPathReason: 'Reason: the requested path is outside the current workspace',
   permanent: 'Always allow',
