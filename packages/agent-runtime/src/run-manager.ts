@@ -42,6 +42,7 @@ type RunManagerConfig = {
   /** @deprecated Use defaultWorkspaceRoot. */
   workspace?: string;
   createSkillContentManager?: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
+  resolveToolRegistry?: (workspace: string) => ToolRegistry | Promise<ToolRegistry>;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
   workspaceRoots?: (sessionId: string) => string[];
   resolveImageAttachments?: (
@@ -215,6 +216,8 @@ export class RunManager {
       const sessionFiles = session.messages.flatMap((message) => message.role === 'user' ? (message.files || []) : []);
       const attachedFiles = [...new Map([...sessionFiles, ...(input.files || [])].map((file) => [file.path, file])).values()];
       const contentManager = await this.config.createSkillContentManager?.(run.env.workspace.root);
+      const toolRegistry = await this.config.resolveToolRegistry?.(run.env.workspace.root)
+        || this.config.toolRegistry;
       const result = await this.config.agent.run({
         input: input.content,
         attachments: input.attachments,
@@ -223,7 +226,7 @@ export class RunManager {
           reasoningEffort: options.reasoningEffort,
         },
         eventBus,
-        toolRegistry: this.config.toolRegistry,
+        toolRegistry,
         context: {
           workspace: run.env.workspace.root,
           workspaceRoots: () => [

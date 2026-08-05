@@ -94,6 +94,13 @@ export class ToolRegistry {
     return this;
   }
 
+  withTools(tools: RuntimeTool[]) {
+    const scoped = new ToolRegistry();
+    for (const tool of this.tools.values()) scoped.register(tool);
+    for (const tool of tools) scoped.register(tool);
+    return scoped;
+  }
+
   list() {
     return [...this.tools.values()].map(({ handler, prepare, ...tool }) => tool);
   }

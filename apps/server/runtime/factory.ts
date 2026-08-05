@@ -46,6 +46,7 @@ export function createToolRegistry(input: {
 export function createRunManager(input: {
   runs: Map<string, RuntimeRun>;
   toolRegistry: ToolRegistry;
+  resolveToolRegistry?: (workspace: string) => ToolRegistry | Promise<ToolRegistry>;
   createSkillContentManager: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
   defaultWorkspaceRoot: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
@@ -60,6 +61,7 @@ export function createRunManager(input: {
     runs: input.runs,
     agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
     toolRegistry: input.toolRegistry,
+    resolveToolRegistry: input.resolveToolRegistry,
     defaultWorkspaceRoot: input.defaultWorkspaceRoot,
     createSkillContentManager: input.createSkillContentManager,
     approveWorkspaceRoot: input.approveWorkspaceRoot,

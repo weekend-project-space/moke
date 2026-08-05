@@ -14,7 +14,7 @@ import { createToolRegistry, createRunManager } from './runtime/factory.js';
 import { createRoutes } from './routes/index.js';
 import { BrowserBridge } from './services/browser-bridge.js';
 import { McpSettingsService } from './services/mcp-settings-service.js';
-import { registerMcpTools } from './services/mcp-tools.js';
+import { createMcpToolRuntime } from './services/mcp-tools.js';
 import { PermissionsService } from './services/permissions-service.js';
 import { SettingsService } from './services/settings-service.js';
 import { SkillSettingsService } from './services/skill-settings-service.js';
@@ -78,7 +78,6 @@ export async function createApp(): Promise<ServerApp> {
 
   const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
-  const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const skillSettingsService = new SkillSettingsService(defaultWorkspaceRoot);
   const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
@@ -92,6 +91,7 @@ export async function createApp(): Promise<ServerApp> {
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
+  const mcpSettingsService = new McpSettingsService(mcpConfigPath, permissionsService);
   const approvedMessagingRoots = new Set([defaultWorkspaceRoot]);
   const sessionWorkspaceRoots = new Map<string, Set<string>>();
   for (const permission of permissionsService.listWorkspaceRoots()) {
@@ -104,10 +104,17 @@ export async function createApp(): Promise<ServerApp> {
   messagingStore.initialize();
   scheduledTaskStore.initialize();
 
-  const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, defaultWorkspaceRoot);
+  const mcpRuntime = await createMcpToolRuntime(
+    mcpConfigPath,
+    defaultWorkspaceRoot,
+    (serverId, fingerprint) => permissionsService.isMcpServerTrusted(serverId, fingerprint),
+  );
   const runManager = createRunManager({
     runs,
     toolRegistry,
+    resolveToolRegistry: mcpRuntime
+      ? async (workspace) => toolRegistry.withTools(await mcpRuntime.getTools(workspace))
+      : undefined,
     createSkillContentManager,
     defaultWorkspaceRoot,
     approveWorkspaceRoot: (root, scope, sessionId) => {
@@ -220,7 +227,7 @@ export async function createApp(): Promise<ServerApp> {
       const messagingClosed = messagingRuntime.close();
       const runsStopped = runManager.shutdown();
       browserBridge.close();
-      await mcpManager?.close();
+      await mcpRuntime?.close();
       await messagingClosed;
       await runsStopped;
       await httpClosed;

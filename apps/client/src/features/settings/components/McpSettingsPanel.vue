@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RotateCw, Save } from 'lucide-vue-next'
+import { RotateCw, Save, ShieldCheck, ShieldOff } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
 import { apiFetch } from '../../../services/apiAccess'
@@ -10,6 +10,7 @@ type McpServerSummary = {
   command: string
   args: string[]
   timeout_ms: number
+  trusted: boolean
 }
 
 const props = defineProps<{
@@ -18,15 +19,18 @@ const props = defineProps<{
 
 const configPath = ref('')
 const rawConfig = ref('')
+const savedRawConfig = ref('')
 const servers = ref<McpServerSummary[]>([])
 const valid = ref(false)
 const exists = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const validating = ref(false)
+const trustUpdatingServerId = ref('')
 const message = ref('')
 const error = ref('')
 const restartRequired = ref(false)
+const hasUnsavedConfig = computed(() => rawConfig.value !== savedRawConfig.value)
 
 const statusText = computed(() => {
   if (error.value) return error.value
@@ -54,6 +58,11 @@ function isServerSummary(value: unknown): value is McpServerSummary {
     && Array.isArray(server.args)
     && server.args.every((item) => typeof item === 'string')
     && typeof server.timeout_ms === 'number'
+    && typeof server.trusted === 'boolean'
+}
+
+function serverCommand(server: McpServerSummary) {
+  return [server.command, ...server.args.map((argument) => JSON.stringify(argument))].join(' ')
 }
 
 function applyResult(data: unknown) {
@@ -77,6 +86,7 @@ async function loadMcpSettings() {
     const data = await response.json() as unknown
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applyResult(data)
+    savedRawConfig.value = rawConfig.value
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.loadFailed
   } finally {
@@ -119,11 +129,31 @@ async function saveMcpSettings() {
     if (!response.ok) throw new Error(readApiError(data, response.status))
     const result = applyResult(data)
     if (!result.valid) return
+    savedRawConfig.value = rawConfig.value
     message.value = uiText.mcp.savedRestart
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.saveFailed
   } finally {
     saving.value = false
+  }
+}
+
+async function setServerTrust(server: McpServerSummary) {
+  trustUpdatingServerId.value = server.id
+  error.value = ''
+  message.value = ''
+  try {
+    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/${encodeURIComponent(server.id)}/trust`, {
+      method: server.trusted ? 'DELETE' : 'POST',
+    })
+    const data = await response.json() as unknown
+    if (!response.ok) throw new Error(readApiError(data, response.status))
+    applyResult(data)
+    message.value = server.trusted ? uiText.mcp.trustRevoked : uiText.mcp.trustGranted
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : uiText.mcp.trustFailed
+  } finally {
+    trustUpdatingServerId.value = ''
   }
 }
 
@@ -172,8 +202,24 @@ onMounted(() => {
       <div v-if="servers.length > 0" class="mcp-server-list">
         <div v-for="server in servers" :key="server.id" class="mcp-server-row">
           <strong>{{ server.id }}</strong>
-          <span>{{ server.enabled ? uiText.mcp.enabled : uiText.mcp.disabled }}</span>
-          <code>{{ server.command }} {{ server.args.join(' ') }}</code>
+          <span>
+            {{ server.enabled ? uiText.mcp.enabled : uiText.mcp.disabled }} /
+            {{ server.trusted ? uiText.mcp.trusted : uiText.mcp.untrusted }}
+          </span>
+          <code>{{ serverCommand(server) }}</code>
+          <button
+            type="button"
+            class="mcp-trust-button"
+            :title="hasUnsavedConfig
+              ? uiText.mcp.saveBeforeTrust
+              : server.trusted ? uiText.mcp.revokeTrust : `${uiText.mcp.trust}: ${serverCommand(server)}`"
+            :disabled="hasUnsavedConfig || trustUpdatingServerId === server.id"
+            @click="setServerTrust(server)"
+          >
+            <ShieldOff v-if="server.trusted" :size="13" />
+            <ShieldCheck v-else :size="13" />
+            {{ server.trusted ? uiText.mcp.revokeTrust : uiText.mcp.trust }}
+          </button>
         </div>
       </div>
 

@@ -5,7 +5,9 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 
 import {
+  loadMcpServerTrusts,
   loadWorkspaceRootPermissions,
+  saveMcpServerTrusts,
   saveWorkspaceRootPermissions,
   upsertWorkspaceRootPermission,
   type WorkspaceRootPermission,
@@ -54,6 +56,31 @@ test('saveWorkspaceRootPermissions writes stable JSON shape', () => {
     const parsed = JSON.parse(readFileSync(permissionsPath, 'utf8'));
     assert.deepEqual(Object.keys(parsed), ['workspace_roots']);
     assert.equal(parsed.workspace_roots[0].path, resolve(dir, 'notes'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('workspace roots and MCP server trusts preserve each other', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'moke-permissions-'));
+  try {
+    const permissionsPath = join(dir, 'permissions.json');
+    saveMcpServerTrusts(permissionsPath, [{
+      server_id: 'local',
+      fingerprint: 'abc123',
+      trusted_at: '2026-08-05T00:00:00.000Z',
+    }]);
+    saveWorkspaceRootPermissions(permissionsPath, [{
+      path: resolve(dir, 'notes'),
+      added_at: '2026-08-05T00:00:01.000Z',
+    }]);
+
+    assert.deepEqual(loadMcpServerTrusts(permissionsPath), [{
+      server_id: 'local',
+      fingerprint: 'abc123',
+      trusted_at: '2026-08-05T00:00:00.000Z',
+    }]);
+    assert.equal(loadWorkspaceRootPermissions(permissionsPath)[0]?.path, resolve(dir, 'notes'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { parseMcpConfigText, type McpConfig } from '@moke/mcp-client';
+import { createMcpServerFingerprint, parseMcpConfigText, type McpConfig } from '@moke/mcp-client';
+import type { PermissionsService } from './permissions-service.js';
 
 const DEFAULT_MCP_CONFIG = `{
   "mcpServers": {}
@@ -19,27 +20,29 @@ type McpSettingsResult = {
     command: string;
     args: string[];
     timeout_ms: number;
+    trusted: boolean;
   }>;
   error?: string;
   restart_required: boolean;
 };
 
-function summarizeConfig(config: McpConfig): McpSettingsResult['servers'] {
+function summarizeConfig(config: McpConfig, permissionsService: PermissionsService): McpSettingsResult['servers'] {
   return config.servers.map((server) => ({
     id: server.id,
     enabled: server.enabled,
     command: server.command,
     args: server.args,
     timeout_ms: server.timeout_ms,
+    trusted: permissionsService.isMcpServerTrusted(server.id, createMcpServerFingerprint(server)),
   }));
 }
 
-function validateRaw(raw: string) {
+function validateRaw(raw: string, permissionsService: PermissionsService) {
   try {
     const config = parseMcpConfigText(raw);
     return {
       valid: true,
-      servers: summarizeConfig(config),
+      servers: summarizeConfig(config, permissionsService),
     };
   } catch (error) {
     return {
@@ -51,18 +54,23 @@ function validateRaw(raw: string) {
 }
 
 export class McpSettingsService {
-  constructor(private readonly mcpConfigPath: string) {}
+  private restartRequired = false;
+
+  constructor(
+    private readonly mcpConfigPath: string,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   get(): McpSettingsResult {
     const exists = existsSync(this.mcpConfigPath);
     const raw = exists ? readFileSync(this.mcpConfigPath, 'utf8') : DEFAULT_MCP_CONFIG;
-    const validation = validateRaw(raw);
+    const validation = validateRaw(raw, this.permissionsService);
 
     return {
       path: this.mcpConfigPath,
       exists,
       raw,
-      restart_required: false,
+      restart_required: this.restartRequired,
       ...validation,
     };
   }
@@ -75,8 +83,8 @@ export class McpSettingsService {
     return {
       path: this.mcpConfigPath,
       raw,
-      restart_required: false,
-      ...validateRaw(raw),
+      restart_required: this.restartRequired,
+      ...validateRaw(raw, this.permissionsService),
     };
   }
 
@@ -84,19 +92,20 @@ export class McpSettingsService {
     const raw = typeof input === 'object' && input !== null && typeof (input as { raw?: unknown }).raw === 'string'
       ? (input as { raw: string }).raw
       : '';
-    const validation = validateRaw(raw);
+    const validation = validateRaw(raw, this.permissionsService);
     if (!validation.valid) {
       return {
         path: this.mcpConfigPath,
         exists: existsSync(this.mcpConfigPath),
         raw,
-        restart_required: false,
+        restart_required: this.restartRequired,
         ...validation,
       };
     }
 
     mkdirSync(dirname(this.mcpConfigPath), { recursive: true });
     writeFileSync(this.mcpConfigPath, raw.endsWith('\n') ? raw : `${raw}\n`);
+    this.restartRequired = true;
 
     return {
       path: this.mcpConfigPath,
@@ -105,5 +114,23 @@ export class McpSettingsService {
       restart_required: true,
       ...validation,
     };
+  }
+
+  trust(serverId: string) {
+    const server = this.currentConfig().servers.find((candidate) => candidate.id === serverId);
+    if (!server) return false;
+    this.permissionsService.trustMcpServer(server.id, createMcpServerFingerprint(server));
+    return true;
+  }
+
+  revokeTrust(serverId: string) {
+    return this.permissionsService.revokeMcpServerTrust(serverId);
+  }
+
+  private currentConfig() {
+    const raw = existsSync(this.mcpConfigPath)
+      ? readFileSync(this.mcpConfigPath, 'utf8')
+      : DEFAULT_MCP_CONFIG;
+    return parseMcpConfigText(raw);
   }
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod';
 
 import type { ImageAttachment, Message, RunLifecycleEvent, Session, ToolApprovalRecord } from '@moke/protocol';
 import type { Agent } from './agent.js';
@@ -510,16 +511,30 @@ test('RunManager freezes the session environment and uses its workspace for the 
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let skillWorkspace = '';
   let agentWorkspace = '';
+  let registryWorkspace = '';
+  let agentTools: string[] = [];
+  const baseRegistry = new ToolRegistry();
   const manager = new RunManager({
     runs: new Map(),
     agent: {
       async run(input) {
         agentWorkspace = input.context.workspace;
+        agentTools = input.toolRegistry.list().map((tool) => tool.name);
         return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
-    toolRegistry: new ToolRegistry(),
+    toolRegistry: baseRegistry,
     defaultWorkspaceRoot: 'E:\\work\\default',
+    resolveToolRegistry: async (workspace) => {
+      registryWorkspace = workspace;
+      return baseRegistry.withTools([{
+        name: 'workspace_tool',
+        description: 'Workspace tool',
+        approval: 'none',
+        schema: z.object({}),
+        async handler() { return { ok: true }; },
+      }]);
+    },
     createSkillContentManager: async (workspace) => {
       skillWorkspace = workspace;
       await gate;
@@ -541,6 +556,8 @@ test('RunManager freezes the session environment and uses its workspace for the 
   assert.equal(run.approval_mode, 'ai_review');
   assert.equal(skillWorkspace, 'E:\\work\\project-a');
   assert.equal(agentWorkspace, 'E:\\work\\project-a');
+  assert.equal(registryWorkspace, 'E:\\work\\project-a');
+  assert.deepEqual(agentTools, ['workspace_tool']);
 });
 
 test('RunManager auto-approves tool decisions and records the reviewer', async () => {

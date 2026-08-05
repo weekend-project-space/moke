@@ -178,3 +178,23 @@ test('ToolRegistry defaults an undeclared approval policy to required', async ()
   );
   assert.equal(executed, false);
 });
+
+test('ToolRegistry creates a scoped snapshot without mutating the base registry', () => {
+  const base = new ToolRegistry().register({
+    name: 'base_tool',
+    description: 'Base tool',
+    approval: 'none',
+    schema: z.object({}),
+    async handler() { return { ok: true }; },
+  });
+  const scoped = base.withTools([{
+    name: 'workspace_tool',
+    description: 'Workspace tool',
+    approval: 'none',
+    schema: z.object({}),
+    async handler() { return { ok: true }; },
+  }]);
+
+  assert.deepEqual(base.list().map((tool) => tool.name), ['base_tool']);
+  assert.deepEqual(scoped.list().map((tool) => tool.name), ['base_tool', 'workspace_tool']);
+});

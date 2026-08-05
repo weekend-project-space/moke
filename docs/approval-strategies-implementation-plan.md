@@ -545,7 +545,7 @@ approval: 'required'
 - [x] 按第 4 节给所有本地、Skill、浏览器和消息工具补齐声明。
 - [x] 给所有测试 fixture 中的 RuntimeTool 补齐声明。
 - [x] 更新 `/api/tools` 响应，使其包含只读 `approval` 元数据。
-- [x] 更新 agent API 文档中已经过期的 risk/MCP 描述。
+- [x] 更新 agent API 文档中已经过期的工具审批/MCP 描述。
 
 ### Phase 2：统一审批门
 

@@ -83,6 +83,22 @@ export function registerSettingRoutes(router: Router<RoutesContext>) {
     json(200, context.mcpSettingsService.save(await parseBody(body, mcpSettingsSchema))),
   );
 
+  router.post('/api/settings/mcp/:id/trust', ({ context, json, params }) => {
+    const { id } = parseParams(params, idParamsSchema);
+    if (!context.mcpSettingsService.trust(id)) {
+      throw new HttpError(404, 'MCP_SERVER_NOT_FOUND', 'MCP server not found');
+    }
+    return json(200, context.mcpSettingsService.get());
+  });
+
+  router.delete('/api/settings/mcp/:id/trust', ({ context, json, params }) => {
+    const { id } = parseParams(params, idParamsSchema);
+    if (!context.mcpSettingsService.revokeTrust(id)) {
+      throw new HttpError(404, 'MCP_SERVER_TRUST_NOT_FOUND', 'MCP server trust not found');
+    }
+    return json(200, context.mcpSettingsService.get());
+  });
+
   router.get('/api/settings/permissions', ({ context, json }) =>
     json(200, {
       workspace_roots: context.permissionsService.listWorkspaceRoots(),

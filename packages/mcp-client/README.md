@@ -7,7 +7,7 @@ Current scope:
 - stdio transport only
 - tools only
 - roots/list support
-- no resources, prompts, sampling, remote OAuth, or server-management UI
+- no resources, prompts, sampling, or remote OAuth
 
 Example `.moke/mcp.json`:
 
@@ -31,7 +31,7 @@ mcp__<server_id>__<tool_name>
 
 The server reads `.moke/mcp.json` by default. Set `MOKE_MCP_CONFIG` to point at a different file.
 
-Moke registers MCP tools into the normal runtime `ToolRegistry`, so the ReAct loop sees them the same way it sees local tools. MCP tool input schemas are converted from common JSON Schema fields to Zod for runtime validation.
+Moke starts trusted MCP servers lazily for the current Session workspace. Each Run receives a scoped `ToolRegistry` snapshot built from that workspace's discovered tools, so tool catalogs, process working directories, and roots do not leak across workspaces. MCP tool input schemas are converted from common JSON Schema fields to Zod for runtime validation.
 
 Supported config fields:
 
@@ -65,7 +65,9 @@ Example roots override:
 }
 ```
 
-MCP tools expose `approval: "required"` in `/api/tools` by default. Only original tool names explicitly listed in a server's `read_only_tools` use `approval: "none"`; disabled tools are never registered.
+MCP tools use `approval: "required"` by default. Only original tool names explicitly listed in a server's `read_only_tools` use `approval: "none"`; disabled tools are never exposed to the Agent.
+
+Local stdio servers must be explicitly trusted in MCP settings before Moke executes their configured command. Trust is bound to a SHA-256 fingerprint of the normalized server configuration. Changing executable configuration, roots, environment, or tool policy invalidates the previous trust; toggling `enabled` does not.
 
 The recommended config shape follows the common `mcpServers` object style. Moke still accepts the older internal `servers` array format for compatibility.
 
