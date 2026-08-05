@@ -14,11 +14,10 @@ import { createFinalMessage, stripThinkBlocks } from './messages.js';
 import { resolveChatModelSettings, type ChatModelSettings } from './llm-client.js';
 import { createModelAdapter } from './model-adapter.js';
 
-function normalizeLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
+function normalizeLoopLimits(limits: AgentRunInput['limits']): AgentRunInput['limits'] {
   return {
     max_steps: Math.max(1, Math.min(Math.trunc(limits.max_steps || 1), 1000)),
     max_tool_calls: Math.max(0, Math.min(Math.trunc(limits.max_tool_calls ?? 0), 200)),
-    timeout_ms: Math.max(1000, Math.min(Math.trunc(limits.timeout_ms || 15000), 3600000)),
   };
 }
 
@@ -93,7 +92,7 @@ export class ReActAgent {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');
     }
 
-    const limits = normalizeLimits(rawLimits);
+    const limits = normalizeLoopLimits(rawLimits);
     const timeoutMs = normalizeTimeoutMs(modelSettings.timeoutMs);
     const runtimeTools: AgentToolSpec[] = [askUserTool, ...toolRegistry.list()];
     const toolSpecs = new Map(runtimeTools.map((runtimeTool) => [runtimeTool.name, runtimeTool]));

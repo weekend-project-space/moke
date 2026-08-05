@@ -199,11 +199,11 @@ export class RunManager {
     const limits = {
       max_steps: options.max_steps || 999,
       max_tool_calls: options.max_tool_calls || 99,
-      timeout_ms: normalizeRunTimeout(options.timeout_ms),
     };
+    const runTimeoutMs = normalizeRunTimeout(options.timeout_ms);
     const timeout = setTimeout(
-      () => this.timeoutRun(run, eventBus, limits.timeout_ms),
-      limits.timeout_ms,
+      () => this.timeoutRun(run, eventBus, runTimeoutMs),
+      runTimeoutMs,
     );
     timeout.unref();
 
