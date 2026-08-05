@@ -34,6 +34,11 @@ export type RuntimeTool<
   /** Defaults to required when omitted so new tools fail closed. */
   approval?: ToolApprovalRequirement;
   schema: TInput;
+  /** Resolves the final operation without side effects before approval. */
+  prepare?: (input: z.infer<TInput>, context: ToolContext) => Promise<{
+    approvalInput: Record<string, unknown>;
+    execute: (context: ToolContext) => Promise<TOutput>;
+  }>;
   handler: (input: z.infer<TInput>, context: ToolContext) => Promise<TOutput>;
 };
 
@@ -90,7 +95,7 @@ export class ToolRegistry {
   }
 
   list() {
-    return [...this.tools.values()].map(({ handler, ...tool }) => tool);
+    return [...this.tools.values()].map(({ handler, prepare, ...tool }) => tool);
   }
 
   get(name: string) {
@@ -120,33 +125,46 @@ export class ToolRegistry {
       },
     };
 
-    if (tool.approval !== 'none') {
-      if (!context.approveTool) {
-        throw approvalError(
-          'TOOL_APPROVAL_UNAVAILABLE',
-          `Tool approval is unavailable for ${name}`,
-          name,
-        );
-      }
-
-      const decision = await context.approveTool({
-        tool: name,
-        input: normalizedInput,
-        source: tool.source,
-        callId: context.currentToolCall?.callId,
-        reason: `Approval required to execute ${name}`,
-      });
-      if (!decision.approved) {
-        throw approvalError(
-          'TOOL_APPROVAL_REJECTED',
-          decision.message || `Tool execution rejected: ${name}`,
-          name,
-        );
-      }
+    if (tool.approval !== 'none' && !context.approveTool) {
+      throw approvalError(
+        'TOOL_APPROVAL_UNAVAILABLE',
+        `Tool approval is unavailable for ${name}`,
+        name,
+      );
     }
 
+    let rawInputApproved = false;
+    const invoke = async (attemptContext: ToolContext) => {
+      const prepared = tool.prepare
+        ? await tool.prepare(parsedInput, attemptContext)
+        : undefined;
+      const approvalInput = prepared?.approvalInput || normalizedInput;
+
+      if (tool.approval !== 'none' && (prepared || !rawInputApproved)) {
+        const decision = await context.approveTool!({
+          tool: name,
+          input: approvalInput,
+          source: tool.source,
+          callId: context.currentToolCall?.callId,
+          reason: `Approval required to execute ${name}`,
+        });
+        if (!decision.approved) {
+          throw approvalError(
+            'TOOL_APPROVAL_REJECTED',
+            decision.message || `Tool execution rejected: ${name}`,
+            name,
+          );
+        }
+        if (!prepared) rawInputApproved = true;
+      }
+
+      return prepared
+        ? prepared.execute(attemptContext)
+        : tool.handler(parsedInput, attemptContext);
+    };
+
     try {
-      return await tool.handler(parsedInput, nextContext);
+      return await invoke(nextContext);
     } catch (error) {
       if (!isPathRequiresApprovalError(error) || !context.approveWorkspacePath) throw error;
 
@@ -181,7 +199,7 @@ export class ToolRegistry {
               ],
             }
           : nextContext;
-        return await tool.handler(parsedInput, retryContext);
+        return await invoke(retryContext);
       } finally {
         decision.cleanup?.();
       }

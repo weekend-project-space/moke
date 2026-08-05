@@ -26,6 +26,7 @@ import {
   MessagingStore,
   type InboundJob,
   type InteractionRecord,
+  type MessagingBinding,
   type PublicMessagingConnection,
   type PublicWeixinConnection,
   type StoredOutboundOperation,
@@ -221,12 +222,17 @@ export class MessagingRuntime {
     const platformBindings = this.store.listBindings({ platform: input.platform })
       .filter((binding) => availableConnectionIds.has(binding.account_id));
     const sessionBindings = platformBindings.filter((binding) => binding.session_id === input.sessionId);
-    if (sessionBindings.length === 1) return { status: 'resolved' as const, bindingId: sessionBindings[0]!.id };
+    if (sessionBindings.length === 1) return { status: 'resolved' as const, target: toResolvedTarget(sessionBindings[0]!) };
     if (sessionBindings.length > 1) return { status: 'ambiguous' as const, count: sessionBindings.length };
 
-    if (platformBindings.length === 1) return { status: 'resolved' as const, bindingId: platformBindings[0]!.id };
+    if (platformBindings.length === 1) return { status: 'resolved' as const, target: toResolvedTarget(platformBindings[0]!) };
     if (platformBindings.length > 1) return { status: 'ambiguous' as const, count: platformBindings.length };
     return { status: 'not_found' as const };
+  }
+
+  getTarget(bindingId: string) {
+    const binding = this.store.getBinding(bindingId);
+    return binding ? toResolvedTarget(binding) : undefined;
   }
 
   async validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess) {
@@ -627,6 +633,16 @@ function conversationTitle(platform: MessagingInboundEvent['platform']) {
   return platform === 'weixin' ? 'WeChat contact' : platform === 'dingtalk' ? 'DingTalk conversation' : 'Feishu conversation';
 }
 
+function toResolvedTarget(binding: MessagingBinding) {
+  return {
+    bindingId: binding.id,
+    platform: binding.platform,
+    connectionId: binding.account_id,
+    conversationId: binding.conversation_id,
+    conversationType: binding.conversation_type,
+  };
+}
+
 function approvalChoices() {
   return [
     { id: 'approve_once', label: 'Allow once', value: { decision: 'approved', scope: 'once' } },
@@ -636,6 +652,26 @@ function approvalChoices() {
 }
 
 function approvalDetail(approval: PendingApproval) {
+  if (approval.action.tool === 'send_message') {
+    const input = approval.action.input;
+    const conversation = input.conversation && typeof input.conversation === 'object'
+      ? input.conversation as Record<string, unknown>
+      : {};
+    const destination = [
+      input.platform,
+      input.connection_id && `connection ${input.connection_id}`,
+      conversation.type && conversation.id && `${conversation.type} ${conversation.id}`,
+      input.binding_id && `binding ${input.binding_id}`,
+    ].filter(Boolean).join(' | ');
+    const content = [
+      typeof input.text === 'string' && input.text
+        ? `Text: ${input.text.length > 240 ? `${input.text.slice(0, 237)}...` : input.text}`
+        : '',
+      Array.isArray(input.images) && input.images.length ? `Images: ${input.images.length}` : '',
+      Array.isArray(input.files) && input.files.length ? `Files: ${input.files.length}` : '',
+    ].filter(Boolean).join(' | ');
+    return `${approval.reason}\n\nTool: ${approval.action.tool}\nTarget: ${destination}${content ? `\nContent: ${content}` : ''}`;
+  }
   return `${approval.reason}\n\nTool: ${approval.action.tool}`;
 }
 

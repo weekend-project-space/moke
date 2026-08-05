@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { PathRequiresApprovalError, ToolExecutionError, type RuntimeRun } from '@moke/agent-runtime';
+import { PathRequiresApprovalError, ToolExecutionError, ToolRegistry, type RuntimeRun } from '@moke/agent-runtime';
 import type { MessagingToolBackend } from './messaging-tool-backend.js';
 import { createSendMessageTool } from './send-message.js';
 
@@ -9,6 +9,10 @@ test('send_message replies to the current external conversation', async () => {
   let bindingId = '';
   let resolved = false;
   const tool = createSendMessageTool(createBackend({
+    getTarget(bindingId) {
+      assert.equal(bindingId, 'bind_current');
+      return resolvedTarget('bind_current', 'feishu');
+    },
     resolveTarget() {
       resolved = true;
       return { status: 'not_found' };
@@ -30,7 +34,7 @@ test('send_message resolves a platform target for a local run', async () => {
   const tool = createSendMessageTool(createBackend({
     resolveTarget(input) {
       assert.deepEqual(input, { platform: 'feishu', sessionId: 'sess_local' });
-      return { status: 'resolved', bindingId: 'bind_feishu' };
+      return { status: 'resolved', target: resolvedTarget('bind_feishu', 'feishu') };
     },
     async send(input) {
       bindingId = input.binding_id;
@@ -72,6 +76,7 @@ test('send_message validates media with the current workspace access', async () 
   let validatedWorkspace = '';
   let sentWorkspace = '';
   const tool = createSendMessageTool(createBackend({
+    getTarget: () => resolvedTarget('bind_current', 'feishu'),
     async validateMediaPaths(_contents, access) {
       validatedWorkspace = access.workspaceRoot;
     },
@@ -89,6 +94,7 @@ test('send_message validates media with the current workspace access', async () 
 
 test('send_message preserves media path approval errors for ToolRegistry retry', async () => {
   const tool = createSendMessageTool(createBackend({
+    getTarget: () => resolvedTarget('bind_current', 'feishu'),
     async validateMediaPaths() {
       throw new PathRequiresApprovalError({
         path: 'C:\\Temp\\image.png',
@@ -103,12 +109,94 @@ test('send_message preserves media path approval errors for ToolRegistry retry',
   );
 });
 
+test('send_message approval contains the final target and execution does not resolve it again', async () => {
+  let resolutions = 0;
+  let sentBinding = '';
+  const registry = new ToolRegistry().register(createSendMessageTool(createBackend({
+    resolveTarget() {
+      resolutions += 1;
+      return { status: 'resolved', target: resolvedTarget('bind_final', 'feishu') };
+    },
+    async send(input) {
+      sentBinding = input.binding_id;
+      return deliveryResult();
+    },
+  })));
+
+  await registry.execute('send_message', { platform: 'feishu', text: ' hello ' }, {
+    ...toolContext(localRun()),
+    approveTool: async (request) => {
+      assert.deepEqual(request.input, {
+        platform: 'feishu',
+        connection_id: 'conn_feishu',
+        binding_id: 'bind_final',
+        conversation: { id: 'conversation_feishu', type: 'direct' },
+        text: 'hello',
+      });
+      return { approved: true, scope: 'once' };
+    },
+  });
+
+  assert.equal(resolutions, 1);
+  assert.equal(sentBinding, 'bind_final');
+});
+
+test('send_message resolves target errors before requesting approval', async () => {
+  let approvals = 0;
+  const registry = new ToolRegistry().register(createSendMessageTool(createBackend({
+    resolveTarget: () => ({ status: 'ambiguous', count: 2 }),
+  })));
+
+  await assert.rejects(
+    () => registry.execute('send_message', { platform: 'feishu', text: 'hello' }, {
+      ...toolContext(localRun()),
+      approveTool: async () => {
+        approvals += 1;
+        return { approved: true, scope: 'once' };
+      },
+    }),
+    toolErrorCode('MESSAGING_TARGET_AMBIGUOUS'),
+  );
+  assert.equal(approvals, 0);
+});
+
+test('send_message does not send a prepared operation when approval is rejected', async () => {
+  let sends = 0;
+  const registry = new ToolRegistry().register(createSendMessageTool(createBackend({
+    resolveTarget: () => ({ status: 'resolved', target: resolvedTarget('bind_final', 'feishu') }),
+    async send() {
+      sends += 1;
+      return deliveryResult();
+    },
+  })));
+
+  await assert.rejects(
+    () => registry.execute('send_message', { platform: 'feishu', text: 'hello' }, {
+      ...toolContext(localRun()),
+      approveTool: async () => ({ approved: false }),
+    }),
+    toolErrorCode('TOOL_APPROVAL_REJECTED'),
+  );
+  assert.equal(sends, 0);
+});
+
 function createBackend(overrides: Partial<MessagingToolBackend> = {}): MessagingToolBackend {
   return {
+    getTarget: () => undefined,
     resolveTarget: () => ({ status: 'not_found' }),
     async validateMediaPaths() {},
     async send() { return deliveryResult(); },
     ...overrides,
+  };
+}
+
+function resolvedTarget(bindingId: string, platform: 'weixin' | 'dingtalk' | 'feishu') {
+  return {
+    bindingId,
+    platform,
+    connectionId: `conn_${platform}`,
+    conversationId: `conversation_${platform}`,
+    conversationType: 'direct' as const,
   };
 }
 

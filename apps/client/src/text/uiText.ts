@@ -451,10 +451,13 @@ const tool = {
 
 const approval = {
   allowExternalPath: 'Allow access to an external folder?',
+  allowMessage: 'Allow sending this message?',
   allowOnce: 'Allow once',
   allowSession: 'Allow for this chat',
   allowTool: 'Allow complex command?',
   commandWillRun: 'will run:',
+  messageContent: 'Content:',
+  messageWillSend: 'will send to:',
   editContent: 'Edit content',
   externalPathReason: 'Reason: the requested path is outside the current workspace',
   permanent: 'Always allow',
@@ -462,6 +465,7 @@ const approval = {
   reject: 'Reject',
   requestAccess: 'requests access to:',
   runCommand: 'Run command',
+  sendMessage: 'Send message',
   unknownTool: 'Action requiring approval',
   writeFile: 'Write file',
 } as const

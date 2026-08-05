@@ -99,8 +99,8 @@ test('runtime resolves a session binding before a platform-wide binding', async 
       connectedConnection('fsconn_other', 'feishu'),
     );
     harness.bindings.push(
-      { id: 'bind_session', account_id: 'fsconn_session', platform: 'feishu', session_id: 'sess_local' },
-      { id: 'bind_other', account_id: 'fsconn_other', platform: 'feishu', session_id: 'sess_other' },
+      binding('bind_session', 'fsconn_session', 'feishu', 'sess_local'),
+      binding('bind_other', 'fsconn_other', 'feishu', 'sess_other'),
     );
     const runtime = new MessagingRuntime(
       harness.store as never,
@@ -114,7 +114,13 @@ test('runtime resolves a session binding before a platform-wide binding', async 
 
     assert.deepEqual(runtime.resolveTarget({ platform: 'feishu', sessionId: 'sess_local' }), {
       status: 'resolved',
-      bindingId: 'bind_session',
+      target: {
+        bindingId: 'bind_session',
+        platform: 'feishu',
+        connectionId: 'fsconn_session',
+        conversationId: 'conversation_bind_session',
+        conversationType: 'direct',
+      },
     });
     assert.deepEqual(runtime.resolveTarget({ platform: 'feishu', sessionId: 'sess_missing' }), {
       status: 'ambiguous',
@@ -138,11 +144,11 @@ test('runtime excludes bindings without an available connection when resolving a
       connectedConnection('fsconn_wrong_platform', 'feishu'),
     );
     harness.bindings.push(
-      { id: 'bind_orphan', account_id: 'wxconn_missing', platform: 'weixin', session_id: 'sess_local' },
-      { id: 'bind_disabled', account_id: 'wxconn_disabled', platform: 'weixin', session_id: 'sess_other' },
-      { id: 'bind_stopped', account_id: 'wxconn_stopped', platform: 'weixin', session_id: 'sess_other' },
-      { id: 'bind_wrong_platform', account_id: 'fsconn_wrong_platform', platform: 'weixin', session_id: 'sess_other' },
-      { id: 'bind_active', account_id: 'wxconn_active', platform: 'weixin', session_id: 'sess_other' },
+      binding('bind_orphan', 'wxconn_missing', 'weixin', 'sess_local'),
+      binding('bind_disabled', 'wxconn_disabled', 'weixin', 'sess_other'),
+      binding('bind_stopped', 'wxconn_stopped', 'weixin', 'sess_other'),
+      binding('bind_wrong_platform', 'fsconn_wrong_platform', 'weixin', 'sess_other'),
+      binding('bind_active', 'wxconn_active', 'weixin', 'sess_other'),
     );
     const runtime = new MessagingRuntime(
       harness.store as never,
@@ -156,7 +162,13 @@ test('runtime excludes bindings without an available connection when resolving a
 
     assert.deepEqual(runtime.resolveTarget({ platform: 'weixin', sessionId: 'sess_local' }), {
       status: 'resolved',
-      bindingId: 'bind_active',
+      target: {
+        bindingId: 'bind_active',
+        platform: 'weixin',
+        connectionId: 'wxconn_active',
+        conversationId: 'conversation_bind_active',
+        conversationType: 'direct',
+      },
     });
     await runtime.close();
   } finally {
@@ -302,4 +314,15 @@ function createHarness(deliveryError?: Error) {
 
 function connectedConnection(id: string, platform: 'weixin' | 'dingtalk' | 'feishu') {
   return { id, platform, enabled: true, state: 'connected' };
+}
+
+function binding(id: string, accountId: string, platform: 'weixin' | 'dingtalk' | 'feishu', sessionId: string) {
+  return {
+    id,
+    account_id: accountId,
+    platform,
+    session_id: sessionId,
+    conversation_id: `conversation_${id}`,
+    conversation_type: 'direct',
+  };
 }
