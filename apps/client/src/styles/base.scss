@@ -22,7 +22,7 @@ button {
 
 button:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid var(--control-focus-ring);
+  outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 

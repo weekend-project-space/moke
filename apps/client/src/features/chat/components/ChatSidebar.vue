@@ -200,11 +200,11 @@ onUnmounted(() => {
 <template>
   <aside class="sidebar" @click="closeContextMenu()" @contextmenu.prevent>
     <nav class="sidebar-primary-actions" aria-label="Workspace">
-      <button type="button" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
+      <button type="button" class="sidebar-navigation-item" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
         <SquarePen :size="15" stroke-width="2.1" />
         <span>{{ uiText.sidebar.newChat }}</span>
       </button>
-      <button type="button" :class="{ active: scheduledTasksActive }" @click.stop="openScheduledTasks">
+      <button type="button" class="sidebar-navigation-item" :class="{ active: scheduledTasksActive }" @click.stop="openScheduledTasks">
         <CalendarClock :size="15" stroke-width="2.1" />
         <span>{{ uiText.sidebar.scheduledTasks }}</span>
       </button>
@@ -256,7 +256,8 @@ onUnmounted(() => {
       >
         <button
           v-if="editingSessionId !== session.id"
-          class="session-main"
+          class="session-main sidebar-navigation-item"
+          :class="{ active: session.id === activeSessionId }"
           type="button"
           :disabled="disabled"
           @click="emit('selectSession', session.id)"
@@ -330,7 +331,7 @@ onUnmounted(() => {
 
     <footer class="sidebar-footer">
       <button
-        class="sidebar-settings"
+        class="sidebar-settings sidebar-navigation-item"
         type="button"
         :class="{ active: settingsActive }"
         :aria-label="uiText.sidebar.settings"

@@ -6,7 +6,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   --content-width: min(728px, calc(100% - 48px));
-  background: var(--surface-chat-panel);
+  background: var(--color-bg-content);
 }
 
 .topbar {
@@ -17,7 +17,7 @@
   column-gap: 12px;
   min-height: 48px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .topbar-side {
@@ -47,16 +47,16 @@
   justify-content: center;
   padding: 0;
   border: 0;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   background: transparent;
 
   &:hover {
-    color: var(--ink);
-    background: var(--surface-control-hover);
+    color: var(--color-text-primary);
+    background: var(--color-secondary-hover);
   }
 
   &:active {
-    background: var(--surface-control-active);
+    background: var(--color-secondary-active);
   }
 }
 
@@ -66,7 +66,7 @@
   height: 30px;
   flex: 0 0 auto;
   align-items: stretch;
-  border: 1px solid var(--line-faint);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
 }
 
@@ -78,16 +78,16 @@
   justify-content: center;
   padding: 0;
   border: 0;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   background: transparent;
 
   &:hover:not(:disabled) {
-    color: var(--ink);
-    background: var(--surface-control-hover);
+    color: var(--color-text-primary);
+    background: var(--color-secondary-hover);
   }
 
   &:active:not(:disabled) {
-    background: var(--surface-control-active);
+    background: var(--color-secondary-active);
   }
 
   &:disabled {
@@ -103,7 +103,7 @@
 
 .workspace-open-trigger {
   width: 24px;
-  border-left: 1px solid var(--line-faint);
+  border-left: 1px solid var(--color-border-subtle);
   border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
 }
 
@@ -126,9 +126,9 @@
   display: grid;
   width: 220px;
   padding: 5px;
-  border: 1px solid var(--line-medium);
+  border: 1px solid var(--color-border-divider);
   border-radius: var(--radius-md);
-  background: var(--surface-popover);
+  background: var(--color-bg-popover);
   box-shadow: var(--shadow-menu);
 
   button {
@@ -141,13 +141,13 @@
     padding: 0 8px;
     border: 0;
     border-radius: var(--radius-sm);
-    color: var(--ink);
+    color: var(--color-text-primary);
     background: transparent;
     text-align: left;
 
     &:hover,
     &:focus-visible {
-      background: var(--surface-control-hover);
+      background: var(--color-secondary-hover);
     }
 
     &:disabled {
@@ -156,11 +156,11 @@
     }
 
     > svg:first-child {
-      color: var(--ink-soft);
+      color: var(--color-text-secondary);
     }
 
     > svg:last-child:not(:first-child) {
-      color: var(--accent);
+      color: var(--color-primary);
     }
 
     span {
@@ -175,12 +175,12 @@
   p {
     margin: 0;
     padding: 9px 8px;
-    color: var(--ink-muted);
+    color: var(--color-text-muted);
     font-size: var(--font-size-meta);
     line-height: 1.35;
 
     &.error {
-      color: var(--text-error);
+      color: var(--color-danger-text);
     }
   }
 }
@@ -194,7 +194,7 @@
   margin: 0;
   overflow: hidden;
   max-width: 100%;
-  color: var(--ink);
+  color: var(--color-text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-ui);
@@ -206,7 +206,7 @@
   margin: 1px 0 0;
   overflow: hidden;
   max-width: 100%;
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-caption);
@@ -225,7 +225,7 @@
   border-radius: 999px;
   background: transparent;
   box-shadow: none;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-caption-plus);
   font-weight: 600;
   white-space: nowrap;
@@ -235,9 +235,9 @@
   display: flex;
   gap: 8px;
   padding: 6px 8px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   font-size: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--color-border-default);
 }
 
 .server-pill {
@@ -254,15 +254,15 @@
 }
 
 .server-pill.online {
-  color: var(--success);
+  color: var(--color-success);
 }
 
 .server-pill.offline {
-  color: var(--danger);
+  color: var(--color-danger);
 }
 
 .server-pill.checking {
-  color: var(--warning);
+  color: var(--color-warning);
 }
 
 .conversation {
@@ -294,14 +294,14 @@
 .composer textarea::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: var(--border-scrollbar);
+  background: var(--color-scrollbar);
   background-clip: content-box;
 }
 
 .conversation:hover::-webkit-scrollbar-thumb,
 .session-list:hover::-webkit-scrollbar-thumb,
 .composer textarea:hover::-webkit-scrollbar-thumb {
-  background: var(--border-scrollbar-hover);
+  background: var(--color-scrollbar-hover);
   background-clip: content-box;
 }
 
@@ -311,7 +311,7 @@
   padding: 3px 8px;
   border: 0;
   border-radius: 999px;
-  color: color-mix(in srgb, var(--ink-muted), transparent 18%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 18%);
   background: transparent;
   box-shadow: none;
   font-size: var(--font-size-caption);

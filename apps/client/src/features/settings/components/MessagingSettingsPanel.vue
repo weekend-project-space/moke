@@ -845,10 +845,10 @@ onBeforeUnmount(() => {
   display: grid;
   width: min(400px, 100%);
   overflow: hidden;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  color: var(--ink);
-  background: var(--tone-surface);
+  color: var(--color-text-primary);
+  background: var(--color-bg-content);
   box-shadow: 0 16px 44px rgb(31 35 40 / 16%), 0 2px 8px rgb(31 35 40 / 8%);
 }
 
@@ -863,12 +863,12 @@ onBeforeUnmount(() => {
 
 .messaging-channel-enter {
   flex: 0 0 auto;
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   opacity: 0.58;
 }
 
 .messaging-channel-row:hover:not(:disabled) .messaging-channel-enter {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   opacity: 1;
 }
 
@@ -879,7 +879,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 14px;
   padding: 16px 16px 14px;
-  border-bottom: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .messaging-modal-title {
@@ -901,10 +901,10 @@ onBeforeUnmount(() => {
   height: 30px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
-  color: var(--ink-soft);
-  background: var(--surface-muted-faint);
+  color: var(--color-text-secondary);
+  background: var(--color-zinc-50);
 }
 
 .messaging-modal-icon .messaging-brand-icon {
@@ -920,7 +920,7 @@ onBeforeUnmount(() => {
 }
 
 .messaging-modal-heading span {
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   font-size: var(--font-size-meta);
   line-height: 1.4;
 }
@@ -936,7 +936,7 @@ onBeforeUnmount(() => {
   margin: 12px 16px 0;
   padding: 3px;
   border-radius: var(--radius-sm);
-  background: var(--surface-muted-faint);
+  background: var(--color-zinc-50);
 }
 
 .messaging-setup-modes button,
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   border: 0;
   border-radius: calc(var(--radius-sm) - 2px);
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-size-meta);
   background: transparent;
@@ -957,14 +957,14 @@ onBeforeUnmount(() => {
 
 .messaging-setup-modes button.active,
 .feishu-region-choice button.active {
-  color: var(--ink);
-  background: var(--tone-surface);
-  box-shadow: 0 0 0 1px var(--line-soft), 0 1px 2px rgb(31 35 40 / 8%);
+  color: var(--color-text-primary);
+  background: var(--color-bg-content);
+  box-shadow: 0 0 0 1px var(--color-border-default), 0 1px 2px rgb(31 35 40 / 8%);
 }
 
 .messaging-setup-modes button:focus-visible,
 .feishu-region-choice button:focus-visible {
-  outline: 2px solid var(--focus-control-border);
+  outline: 2px solid var(--color-focus-border);
   outline-offset: 1px;
 }
 
@@ -977,7 +977,7 @@ onBeforeUnmount(() => {
 .messaging-modal label {
   display: grid;
   gap: 6px;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-meta);
 }
 
@@ -987,24 +987,24 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   height: 36px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
   padding: 0 10px;
-  color: var(--ink);
+  color: var(--color-text-primary);
   font: inherit;
-  background: var(--surface-input);
+  background: var(--color-bg-input);
   outline: none;
 }
 
 .messaging-modal input:focus,
 .messaging-modal select:focus {
-  border-color: var(--focus-control-border);
-  box-shadow: 0 0 0 3px var(--focus-control-ring);
+  border-color: var(--color-focus-border);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-soft);
 }
 
 .messaging-modal-error {
   margin: 0;
-  color: var(--text-error);
+  color: var(--color-danger-text);
   font-size: var(--font-size-meta);
 }
 
@@ -1015,8 +1015,8 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 8px;
   padding: 10px 16px;
-  border-top: 1px solid var(--line-faint);
-  background: var(--surface-muted-faint);
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-zinc-50);
 }
 
 .weixin-setup-body {
@@ -1048,9 +1048,9 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr 1fr;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--line-faint);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--surface-muted-faint);
+  background: var(--color-zinc-50);
 }
 
 .feishu-region-choice button {
@@ -1089,21 +1089,21 @@ onBeforeUnmount(() => {
 }
 
 .weixin-setup-placeholder {
-  color: var(--ink-muted);
-  background: var(--surface-muted-faint);
+  color: var(--color-text-muted);
+  background: var(--color-zinc-50);
 }
 
 .weixin-setup-placeholder.error {
-  color: var(--text-error);
+  color: var(--color-danger-text);
 }
 
 .registration-setup-placeholder {
-  color: var(--ink-muted);
-  background: var(--surface-muted-faint);
+  color: var(--color-text-muted);
+  background: var(--color-zinc-50);
 }
 
 .registration-setup-placeholder.error {
-  color: var(--text-error);
+  color: var(--color-danger-text);
 }
 
 .weixin-login-state {
@@ -1112,13 +1112,13 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-meta);
   text-align: center;
 }
 
 .weixin-login-state.error {
-  color: var(--text-error);
+  color: var(--color-danger-text);
 }
 
 .registration-login-state {
@@ -1127,27 +1127,27 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-meta);
   text-align: center;
 }
 
 .registration-login-state.error {
-  color: var(--text-error);
+  color: var(--color-danger-text);
 }
 
 .weixin-login-state time {
   padding-left: 8px;
-  border-left: 1px solid var(--line-soft);
-  color: var(--ink-muted);
+  border-left: 1px solid var(--color-border-default);
+  color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
 }
 
 .registration-login-state time {
   padding-left: 8px;
-  border-left: 1px solid var(--line-soft);
-  color: var(--ink-muted);
+  border-left: 1px solid var(--color-border-default);
+  color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
 }
