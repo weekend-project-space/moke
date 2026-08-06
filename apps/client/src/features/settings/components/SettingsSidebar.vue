@@ -15,9 +15,6 @@ const emit = defineEmits<{
 
 <template>
   <aside class="settings-navigation" @contextmenu.prevent>
-    <div class="settings-navigation-header">
-      <h1>{{ uiText.app.settings }}</h1>
-    </div>
     <nav aria-label="Settings sections">
       <button
         v-for="item in settingsNavigationItems"

@@ -199,12 +199,6 @@ onUnmounted(() => {
 
 <template>
   <aside class="sidebar" @click="closeContextMenu()" @contextmenu.prevent>
-    <section class="brand">
-      <div class="brand-header">
-        <span class="brand-title">{{ uiText.sidebar.title }}</span>
-      </div>
-    </section>
-
     <nav class="sidebar-primary-actions" aria-label="Workspace">
       <button type="button" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
         <SquarePen :size="15" stroke-width="2.1" />
