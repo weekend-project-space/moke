@@ -321,6 +321,7 @@ const mcp = {
 
 const messaging = {
   add: 'Add',
+  addChannel: 'Add channel',
   addDingTalk: 'Add DingTalk',
   addDingTalkFailed: 'Failed to add DingTalk channel',
   addFeishu: 'Add Feishu',

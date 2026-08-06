@@ -7,6 +7,18 @@
 
   .settings-navigation {
     grid-column: 1;
+    grid-row: 1;
+  }
+
+  > .sidebar-resizer {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  > .workspace-layout-main {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 

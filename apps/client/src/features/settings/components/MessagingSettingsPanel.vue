@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../../services/apiAccess'
 import {
+  ChevronRight,
   CircleAlert,
   Link2,
   LoaderCircle,
@@ -688,13 +689,13 @@ onBeforeUnmount(() => {
     <div v-if="channelPickerOpen" class="messaging-modal-backdrop" @click.self="channelPickerOpen = false" @keydown.esc="channelPickerOpen = false">
       <section class="messaging-modal messaging-channel-picker" role="dialog" aria-modal="true" aria-labelledby="channel-picker-title">
         <div class="messaging-modal-heading">
-          <div class="messaging-modal-title"><div><h3 id="channel-picker-title">{{ uiText.messaging.add }}</h3><span>{{ uiText.messaging.availableChannelsDescription }}</span></div></div>
+          <div class="messaging-modal-title"><div><h3 id="channel-picker-title">{{ uiText.messaging.addChannel }}</h3><span>{{ uiText.messaging.availableChannelsDescription }}</span></div></div>
           <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" @click="channelPickerOpen = false"><X :size="14" /></button>
         </div>
         <div class="messaging-channel-list">
-          <button type="button" class="settings-list-row messaging-channel-row" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></span></span></button>
-          <button type="button" class="settings-list-row messaging-channel-row" @click="openDingTalkSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.dingtalk" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.dingTalk }}</strong><span>{{ uiText.messaging.dingTalkDescription }}</span></span></span></button>
-          <button type="button" class="settings-list-row messaging-channel-row" @click="openFeishuSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.feishu" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></span></span></button>
+          <button type="button" class="settings-list-row messaging-channel-row" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></span></span><ChevronRight class="messaging-channel-enter" :size="15" aria-hidden="true" /></button>
+          <button type="button" class="settings-list-row messaging-channel-row" @click="openDingTalkSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.dingtalk" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.dingTalk }}</strong><span>{{ uiText.messaging.dingTalkDescription }}</span></span></span><ChevronRight class="messaging-channel-enter" :size="15" aria-hidden="true" /></button>
+          <button type="button" class="settings-list-row messaging-channel-row" @click="openFeishuSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.feishu" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></span></span><ChevronRight class="messaging-channel-enter" :size="15" aria-hidden="true" /></button>
         </div>
       </section>
     </div>
@@ -849,6 +850,26 @@ onBeforeUnmount(() => {
   color: var(--ink);
   background: var(--tone-surface);
   box-shadow: 0 16px 44px rgb(31 35 40 / 16%), 0 2px 8px rgb(31 35 40 / 8%);
+}
+
+.messaging-channel-picker .messaging-channel-row {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.messaging-channel-picker .messaging-channel-row:first-child {
+  border-top: 0;
+}
+
+.messaging-channel-enter {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  opacity: 0.58;
+}
+
+.messaging-channel-row:hover:not(:disabled) .messaging-channel-enter {
+  color: var(--ink-soft);
+  opacity: 1;
 }
 
 .messaging-modal-heading {
