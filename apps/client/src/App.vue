@@ -29,7 +29,7 @@ const routeNavigator = useRouter()
 
 router.beforeEach((to, from) => {
   if (from.name === 'settings' && to.fullPath !== from.fullPath && settingsDirty.value) {
-    if (!window.confirm(uiText.skills.discardChanges)) return false
+    if (!window.confirm(uiText.settings.confirmDiscardModelChanges)) return false
     settingsDirty.value = false
   }
   return true
@@ -113,7 +113,7 @@ onMounted(async () => {
   const unlisten = await nativeAppWindow.onCloseRequested(async (event) => {
     if (!settingsDirty.value) return
     event.preventDefault()
-    if (!window.confirm(uiText.skills.discardChanges)) return
+    if (!window.confirm(uiText.settings.confirmDiscardModelChanges)) return
     await nativeAppWindow.destroy()
   })
   if (appDisposed) unlisten()

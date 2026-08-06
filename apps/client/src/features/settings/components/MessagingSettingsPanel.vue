@@ -16,6 +16,7 @@ import dingTalkIcon from '../../../assets/dingtalk.svg'
 import feishuIcon from '../../../assets/feishu.svg'
 import weChatIcon from '../../../assets/wechat.svg'
 import { uiText } from '../../../text/uiText'
+import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
 
 type ConnectionState = 'stopped' | 'starting' | 'connected' | 'reconnecting' | 'reauth_required' | 'error'
 
@@ -64,6 +65,7 @@ const props = defineProps<{ apiBase: string }>()
 
 const connections = ref<MessagingConnection[]>([])
 const setupChannel = ref<'weixin' | 'dingtalk' | 'feishu' | null>(null)
+const channelPickerOpen = ref(false)
 const loginConnectionId = ref<string>()
 const dingtalkClientId = ref('')
 const dingtalkClientSecret = ref('')
@@ -86,6 +88,8 @@ const loading = ref(false)
 const creatingLogin = ref(false)
 const busyConnectionId = ref('')
 const error = ref('')
+const deleteConfirmationOpen = ref(false)
+const deleteTarget = ref<MessagingConnection | null>(null)
 let pollTimer: number | undefined
 let registrationPollTimer: number | undefined
 let loginRequest = 0
@@ -309,6 +313,7 @@ async function submitVerifyCode() {
 }
 
 function openWeixinSetup(connectionId?: string) {
+  channelPickerOpen.value = false
   setupChannel.value = 'weixin'
   loginConnectionId.value = connectionId
   login.value = null
@@ -318,6 +323,7 @@ function openWeixinSetup(connectionId?: string) {
 }
 
 function openDingTalkSetup() {
+  channelPickerOpen.value = false
   setupChannel.value = 'dingtalk'
   dingtalkSetupMode.value = 'quick'
   error.value = ''
@@ -334,6 +340,7 @@ function editDingTalk(connection: MessagingConnection) {
 }
 
 function openFeishuSetup() {
+  channelPickerOpen.value = false
   setupChannel.value = 'feishu'
   feishuSetupMode.value = 'quick'
   error.value = ''
@@ -404,17 +411,42 @@ async function closeSetup() {
   }
 }
 
-async function connectionAction(connection: MessagingConnection, action: 'start' | 'stop' | 'reauthorize' | 'delete') {
-  if (action === 'delete' && !window.confirm(uiText.messaging.confirmRemove(platformLabel(connection.platform)))) return
+function requestDeleteConnection(connection: MessagingConnection) {
+  if (busyConnectionId.value === connection.id) return
+  deleteTarget.value = connection
+  deleteConfirmationOpen.value = true
+}
+
+function cancelDeleteConnection() {
+  if (busyConnectionId.value) return
+  deleteConfirmationOpen.value = false
+  deleteTarget.value = null
+}
+
+async function confirmDeleteConnection() {
+  const connection = deleteTarget.value
+  if (!connection || busyConnectionId.value) return
+  busyConnectionId.value = connection.id
+  error.value = ''
+  try {
+    await requestJson(`/api/messaging/connections/${encodeURIComponent(connection.id)}`, { method: 'DELETE' })
+    await loadConnections()
+    deleteConfirmationOpen.value = false
+    deleteTarget.value = null
+  } catch (reason) {
+    error.value = messageFrom(reason, uiText.messaging.updateFailed)
+  } finally {
+    busyConnectionId.value = ''
+  }
+}
+
+async function connectionAction(connection: MessagingConnection, action: 'start' | 'stop' | 'reauthorize') {
   busyConnectionId.value = connection.id
   error.value = ''
   try {
     if (action === 'reauthorize') {
       if (connection.platform !== 'weixin') return
       openWeixinSetup(connection.id)
-    } else if (action === 'delete') {
-      await requestJson(`/api/messaging/connections/${encodeURIComponent(connection.id)}`, { method: 'DELETE' })
-      await loadConnections()
     } else {
       await requestJson(`/api/messaging/connections/${encodeURIComponent(connection.id)}`, json('PATCH', {
         enabled: action === 'start',
@@ -563,30 +595,34 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="settings-section messaging-settings">
-    <div class="messaging-heading">
+    <div class="settings-group">
+    <header class="settings-group-heading">
       <div>
         <h3>{{ uiText.messaging.yourChannels }}</h3>
         <span>{{ connections.length ? uiText.messaging.channelCount(connections.length) : uiText.messaging.noChannels }}</span>
       </div>
-      <button type="button" class="settings-icon-button" :title="uiText.messaging.refreshChannels" :aria-label="uiText.messaging.refreshChannels" :disabled="loading" @click="loadConnections">
-        <RefreshCw :size="14" :class="{ spinning: loading }" />
-      </button>
-    </div>
+      <div class="messaging-header-actions">
+        <button type="button" class="settings-icon-button" :title="uiText.messaging.refreshChannels" :aria-label="uiText.messaging.refreshChannels" :disabled="loading" @click="loadConnections">
+          <RefreshCw :size="14" :class="{ spinning: loading }" />
+        </button>
+        <button type="button" class="settings-secondary" :disabled="Boolean(hasActiveLogin)" @click="channelPickerOpen = true"><Plus :size="14" />{{ uiText.messaging.add }}</button>
+      </div>
+    </header>
 
     <p v-if="error" class="messaging-feedback error" role="alert">{{ error }}</p>
 
     <div v-if="loading && connections.length === 0" class="settings-note">{{ uiText.messaging.loading }}</div>
     <div v-else-if="connections.length === 0" class="messaging-empty">
       <Link2 :size="18" stroke-width="1.7" />
-      <span>{{ uiText.messaging.empty }}</span>
+      <span>{{ uiText.messaging.noChannels }}</span>
     </div>
     <div v-else class="messaging-connection-list">
-      <article v-for="connection in connections" :key="connection.id" class="messaging-connection-row">
-        <div class="messaging-connection-main">
+      <article v-for="connection in connections" :key="connection.id" class="settings-list-row messaging-connection-row">
+        <div class="settings-list-main messaging-connection-main">
           <div class="messaging-connection-icon" aria-hidden="true">
             <img class="messaging-brand-icon" :src="channelIcons[connection.platform]" alt="" />
           </div>
-          <div class="messaging-connection-copy">
+          <div class="settings-list-copy messaging-connection-copy">
             <strong>{{ connection.bot_name || platformLabel(connection.platform) }}<template v-if="!connection.bot_name && connection.name !== platformLabel(connection.platform)"> · {{ connection.name }}</template></strong>
             <span>{{ connectionTime(connection) }}</span>
             <small v-if="connection.last_error">{{ connection.last_error.message }}</small>
@@ -638,48 +674,31 @@ onBeforeUnmount(() => {
           >
             <Link2 :size="14" />
           </button>
-          <button type="button" class="settings-icon-button messaging-delete-button" :title="uiText.messaging.removeChannel" :aria-label="uiText.messaging.removeChannel" :disabled="busyConnectionId === connection.id" @click="connectionAction(connection, 'delete')">
+          <button type="button" class="settings-icon-button messaging-delete-button" :title="uiText.messaging.removeChannel" :aria-label="uiText.messaging.removeChannel" :disabled="busyConnectionId === connection.id" @click="requestDeleteConnection(connection)">
             <Trash2 :size="14" />
           </button>
         </div>
       </article>
     </div>
-
-  </section>
-
-  <section class="settings-section messaging-settings">
-    <div class="messaging-heading">
-      <div>
-        <h3>{{ uiText.messaging.availableChannels }}</h3>
-        <span>{{ uiText.messaging.availableChannelsDescription }}</span>
-      </div>
     </div>
-    <div class="messaging-channel-list">
-      <article class="messaging-channel-row">
-        <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></div>
-          <div class="messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></div>
-        </div>
-        <button type="button" class="settings-secondary messaging-channel-action" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><Plus :size="14" />{{ uiText.messaging.add }}</button>
-      </article>
-      <article class="messaging-channel-row">
-        <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.dingtalk" alt="" /></div>
-          <div class="messaging-connection-copy"><strong>{{ uiText.messaging.dingTalk }}</strong><span>{{ uiText.messaging.dingTalkDescription }}</span></div>
-        </div>
-        <button type="button" class="settings-secondary messaging-channel-action" @click="openDingTalkSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
-      </article>
-      <article class="messaging-channel-row">
-        <div class="messaging-connection-main">
-          <div class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.feishu" alt="" /></div>
-          <div class="messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></div>
-        </div>
-        <button type="button" class="settings-secondary messaging-channel-action" @click="openFeishuSetup"><Plus :size="14" />{{ uiText.messaging.add }}</button>
-      </article>
-    </div>
+
   </section>
 
   <Teleport to="body">
+    <div v-if="channelPickerOpen" class="messaging-modal-backdrop" @click.self="channelPickerOpen = false" @keydown.esc="channelPickerOpen = false">
+      <section class="messaging-modal messaging-channel-picker" role="dialog" aria-modal="true" aria-labelledby="channel-picker-title">
+        <div class="messaging-modal-heading">
+          <div class="messaging-modal-title"><div><h3 id="channel-picker-title">{{ uiText.messaging.add }}</h3><span>{{ uiText.messaging.availableChannelsDescription }}</span></div></div>
+          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" @click="channelPickerOpen = false"><X :size="14" /></button>
+        </div>
+        <div class="messaging-channel-list">
+          <button type="button" class="settings-list-row messaging-channel-row" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></span></span></button>
+          <button type="button" class="settings-list-row messaging-channel-row" @click="openDingTalkSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.dingtalk" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.dingTalk }}</strong><span>{{ uiText.messaging.dingTalkDescription }}</span></span></span></button>
+          <button type="button" class="settings-list-row messaging-channel-row" @click="openFeishuSetup"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.feishu" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.feishu }}</strong><span>{{ uiText.messaging.feishuDescription }}</span></span></span></button>
+        </div>
+      </section>
+    </div>
+
     <div v-if="setupChannel" class="messaging-modal-backdrop" @click.self="closeSetup" @keydown.esc="closeSetup">
       <section
         class="messaging-modal"
@@ -795,6 +814,18 @@ onBeforeUnmount(() => {
       </section>
     </div>
   </Teleport>
+
+  <SettingsConfirmSheet
+    :open="deleteConfirmationOpen"
+    dialog-id="messaging-delete-confirm"
+    :title="uiText.messaging.removeChannel"
+    :description="deleteTarget ? uiText.messaging.confirmRemove(platformLabel(deleteTarget.platform)) : ''"
+    :confirm-label="uiText.messaging.removeChannel"
+    :cancel-label="uiText.messaging.cancel"
+    :busy="Boolean(busyConnectionId)"
+    @cancel="cancelDeleteConnection"
+    @confirm="confirmDeleteConnection"
+  />
 </template>
 
 <style scoped>

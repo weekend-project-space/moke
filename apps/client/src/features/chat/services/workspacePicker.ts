@@ -31,6 +31,17 @@ export async function pickLocalFiles(defaultPath?: string) {
   return Array.isArray(selected) ? selected : []
 }
 
+export async function pickSkillFile(defaultPath?: string) {
+  const selected = await open({
+    defaultPath: defaultPath || undefined,
+    directory: false,
+    multiple: false,
+    filters: [{ name: 'Skill file', extensions: ['md'] }],
+    title: 'Select SKILL.md',
+  })
+  return typeof selected === 'string' ? selected : null
+}
+
 export function isSupportedImagePath(path: string) {
   return /\.(?:gif|jpe?g|png|webp)$/i.test(path)
 }

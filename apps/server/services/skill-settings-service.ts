@@ -1,4 +1,4 @@
-import { SkillRepository, type SkillDraft } from '@moke/agent-skills';
+import { SkillRepository } from '@moke/agent-skills';
 
 export class SkillSettingsService {
   private readonly repository: SkillRepository;
@@ -14,17 +14,9 @@ export class SkillSettingsService {
     };
   }
 
-  get(id: string) {
-    return this.repository.get(id);
-  }
-
-  create(input: Record<string, unknown>) {
-    return this.repository.create(readDraft(input));
-  }
-
-  update(id: string, input: Record<string, unknown>) {
-    const draft = readDraft({ ...input, id });
-    return this.repository.update(id, draft);
+  importFromPath(input: Record<string, unknown>) {
+    const sourcePath = typeof input.path === 'string' ? input.path : '';
+    return this.repository.importFromPath(sourcePath);
   }
 
   async setEnabled(id: string, input: Record<string, unknown>) {
@@ -37,23 +29,4 @@ export class SkillSettingsService {
     return { deleted: true, id };
   }
 
-  validate(input: Record<string, unknown>) {
-    const draft = readDraft(input);
-    const currentId = typeof input.currentId === 'string' ? input.currentId : undefined;
-    return this.repository.validate(draft, currentId);
-  }
-}
-
-function readDraft(input: Record<string, unknown>): SkillDraft {
-  return {
-    id: stringValue(input.id),
-    name: stringValue(input.name),
-    description: stringValue(input.description),
-    content: stringValue(input.content),
-    enabled: input.enabled !== false,
-  };
-}
-
-function stringValue(value: unknown) {
-  return typeof value === 'string' ? value : '';
 }

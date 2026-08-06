@@ -118,6 +118,33 @@ export class SkillRepository {
     return this.get(normalized.id);
   }
 
+  async importFromPath(sourcePath: string) {
+    const source = path.resolve(sourcePath.trim());
+    const sourceInfo = await stat(source).catch(() => null);
+    if (!sourceInfo) throw new SkillRepositoryError('SKILL_IMPORT_NOT_FOUND', 'Skill file or directory was not found');
+    const filePath = sourceInfo.isDirectory() ? path.join(source, SKILL_FILE) : source;
+    if (path.basename(filePath).toLowerCase() !== SKILL_FILE.toLowerCase()) {
+      throw new SkillRepositoryError('SKILL_IMPORT_INVALID', 'Select a SKILL.md file or a folder that contains one');
+    }
+    const raw = await readFile(filePath, 'utf8').catch(() => {
+      throw new SkillRepositoryError('SKILL_IMPORT_READ_FAILED', 'Skill file could not be read');
+    });
+    const parsed = parseSkillFile(raw, path.basename(path.dirname(filePath)));
+    const name = parsed.name.trim();
+    const description = parsed.description.trim();
+    const content = parsed.content.trim();
+    const baseId = slugifySkillId(name || path.basename(path.dirname(filePath)));
+    const existingIds = new Set((await this.listAll()).map((skill) => skill.id));
+    let id = baseId;
+    let suffix = 2;
+    while (existingIds.has(id)) {
+      const suffixText = `-${suffix++}`;
+      id = `${baseId.slice(0, 64 - suffixText.length)}${suffixText}`;
+    }
+    const imported = await this.create({ id, name, description, content, enabled: false });
+    return { ...imported, imported_from: filePath };
+  }
+
   async update(id: string, draft: Omit<SkillDraft, 'id'>) {
     this.assertId(id);
     const current = await this.get(id);
@@ -260,6 +287,16 @@ export class SkillRepository {
   private async writeRegistry(registry: SkillRegistry) {
     await writeAtomic(this.registryPath, `${JSON.stringify(registry, null, 2)}\n`);
   }
+}
+
+function slugifySkillId(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  return /^[a-z0-9]/.test(slug) ? slug : 'imported-skill';
 }
 
 function validateValues(id: string, name: string, description: string, content: string) {

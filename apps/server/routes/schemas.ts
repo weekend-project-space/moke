@@ -137,21 +137,33 @@ export const runtimeSettingsSchema = z.object({
   providers: z.array(providerInputSchema).optional(),
 }).strict();
 
-export const skillDraftSchema = z.object({
-  id: safeId.optional(),
-  name: z.string().optional(),
-  description: z.string().optional(),
-  content: z.string().optional(),
-  enabled: z.boolean().optional(),
-  currentId: safeId.optional(),
-}).strict();
-
 export const skillStatusSchema = z.object({
   enabled: z.boolean(),
 }).strict();
 
+export const skillImportSchema = z.object({
+  path: nonEmptyText.max(4000),
+}).strict();
+
 export const mcpSettingsSchema = z.object({
   raw: z.string(),
+}).strict();
+
+export const mcpServerCreateSchema = z.object({
+  id: safeId,
+  command: nonEmptyText.max(2000),
+  args: z.array(z.string().max(4000)).max(100).default([]),
+}).strict();
+
+export const mcpServerUpdateSchema = z.object({
+  command: nonEmptyText.max(2000).optional(),
+  args: z.array(z.string().max(4000)).max(100).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one MCP server field is required',
+});
+
+export const mcpServerStatusSchema = z.object({
+  enabled: z.boolean(),
 }).strict();
 
 export const revokePermissionSchema = z.object({

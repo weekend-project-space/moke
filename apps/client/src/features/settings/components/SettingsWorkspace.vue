@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { AlertTriangle, ArrowLeft, Cookie, Database, FolderX, RotateCw, Trash2 } from 'lucide-vue-next'
+import { Cookie, Database, Folder, FolderX, RotateCw, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { apiFetch } from '../../../services/apiAccess'
 import McpSettingsPanel from './McpSettingsPanel.vue'
 import ModelSettingsPanel from './ModelSettingsPanel.vue'
+import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
 import SettingsSidebar from './SettingsSidebar.vue'
 import SkillSettingsPanel from './SkillSettingsPanel.vue'
 import MessagingSettingsPanel from './MessagingSettingsPanel.vue'
@@ -40,7 +41,9 @@ const activeSettingsTab = computed(() => {
   return typeof tab === 'string' && settingsNavigationItems.some((item) => item.id === tab) ? tab as SettingsTab : 'model'
 })
 const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
-const skillSettingsDirty = ref(false)
+const modelSettingsDirty = ref(false)
+const settingsDirty = computed(() => modelSettingsDirty.value)
+const pendingSettingsTab = ref<SettingsTab | null>(null)
 const browserSettings = reactive<BrowserPreferences>({ ...DEFAULT_BROWSER_PREFERENCES })
 const browserDataAvailable = isNativeBrowserAvailable()
 const clearingBrowserData = ref<BrowserDataKind | null>(null)
@@ -49,6 +52,8 @@ const browserDataConfirmationOpen = ref(false)
 const permissions = ref<WorkspaceRootPermission[]>([])
 const loadingPermissions = ref(false)
 const permissionError = ref('')
+const permissionToRevoke = ref<WorkspaceRootPermission | null>(null)
+const revokingPermission = ref(false)
 function loadBrowserSettings() {
   Object.assign(browserSettings, loadBrowserPreferences())
 }
@@ -72,20 +77,43 @@ async function loadPermissions() {
   }
 }
 
-async function revokePermission(path: string) {
+function requestPermissionRevoke(permission: WorkspaceRootPermission) {
+  if (revokingPermission.value) return
+  permissionToRevoke.value = permission
+}
+
+function cancelPermissionRevoke() {
+  if (revokingPermission.value) return
+  permissionToRevoke.value = null
+}
+
+async function confirmPermissionRevoke() {
+  const permission = permissionToRevoke.value
+  if (!permission || revokingPermission.value) return
+
+  revokingPermission.value = true
   permissionError.value = ''
   try {
     const response = await apiFetch(`${props.apiBase}/api/settings/permissions/revoke`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path: permission.path }),
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
     permissions.value = data.workspace_roots || []
+    permissionToRevoke.value = null
   } catch {
     permissionError.value = uiText.settings.removePermissionFailed
+  } finally {
+    revokingPermission.value = false
   }
+}
+
+function formatPermissionDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return uiText.settings.permissionAuthorized
+  return uiText.settings.permissionAdded(date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))
 }
 
 function requestBrowserDataClear(kind: BrowserDataKind) {
@@ -105,8 +133,8 @@ function cancelBrowserDataClear() {
 
 async function confirmBrowserDataClear() {
   if (clearingBrowserData.value) return
-  browserDataConfirmationOpen.value = false
   await clearBrowserData('cookies')
+  browserDataConfirmationOpen.value = false
 }
 
 async function clearBrowserData(kind: BrowserDataKind) {
@@ -129,11 +157,22 @@ async function clearBrowserData(kind: BrowserDataKind) {
 
 function selectSettingsTab(tab: SettingsTab) {
   if (tab === activeSettingsTab.value) return
-  if (activeSettingsTab.value === 'skills' && skillSettingsDirty.value && !window.confirm(uiText.skills.discardChanges)) return
-  if (skillSettingsDirty.value) {
-    skillSettingsDirty.value = false
-    emit('dirtyChange', false)
+  if (activeSettingsTab.value === 'model' && modelSettingsDirty.value) {
+    pendingSettingsTab.value = tab
+    return
   }
+  void router.push({ name: 'settings', params: { tab } })
+}
+
+function cancelSettingsTabChange() {
+  pendingSettingsTab.value = null
+}
+
+function confirmSettingsTabChange() {
+  const tab = pendingSettingsTab.value
+  if (!tab) return
+  pendingSettingsTab.value = null
+  if (activeSettingsTab.value === 'model') modelSettingsDirty.value = false
   void router.push({ name: 'settings', params: { tab } })
 }
 
@@ -141,16 +180,11 @@ function closeSettings() {
   emit('close')
 }
 
-function updateSkillSettingsDirty(dirty: boolean) {
-  skillSettingsDirty.value = dirty
-  emit('dirtyChange', dirty)
+function updateModelSettingsDirty(dirty: boolean) {
+  modelSettingsDirty.value = dirty
 }
 
-watch(activeSettingsTab, () => {
-  if (!skillSettingsDirty.value) return
-  skillSettingsDirty.value = false
-  emit('dirtyChange', false)
-})
+watch(settingsDirty, (dirty) => emit('dirtyChange', dirty), { immediate: true })
 
 onMounted(() => {
   loadBrowserSettings()
@@ -171,56 +205,72 @@ onMounted(() => {
       <section class="settings-content">
         <header class="settings-content-header">
           <div class="settings-content-frame settings-content-header-inner">
-            <button
-              type="button"
-              class="settings-back-button"
-              :title="uiText.settings.returnToChat"
-              :aria-label="uiText.settings.returnToChat"
-              @click="closeSettings"
-            >
-              <ArrowLeft :size="16" stroke-width="2" />
-            </button>
             <h2>{{ activeSettingsItem.label }}</h2>
           </div>
         </header>
 
-        <div class="settings-content-scroll">
+        <div class="settings-content-scroll" :class="{ 'model-settings-scroll': activeSettingsTab === 'model' }">
           <div class="settings-content-frame">
-          <ModelSettingsPanel v-if="activeSettingsTab === 'model'" :api-base="apiBase" />
+          <ModelSettingsPanel v-if="activeSettingsTab === 'model'" :api-base="apiBase" @dirty-change="updateModelSettingsDirty" />
 
     <McpSettingsPanel v-else-if="activeSettingsTab === 'mcp'" :api-base="apiBase" />
 
-    <SkillSettingsPanel
-      v-else-if="activeSettingsTab === 'skills'"
-      :api-base="apiBase"
-      @dirty-change="updateSkillSettingsDirty"
-    />
+    <SkillSettingsPanel v-else-if="activeSettingsTab === 'skills'" :api-base="apiBase" />
 
     <MessagingSettingsPanel v-else-if="activeSettingsTab === 'messaging'" :api-base="apiBase" />
 
-    <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section">
-      <div class="settings-section-heading">
-        <button type="button" class="settings-icon-button" :title="uiText.settings.refresh" :aria-label="uiText.settings.refresh" @click="loadPermissions">
-          <RotateCw :size="14" />
-        </button>
-      </div>
-      <div v-if="permissionError" class="settings-note error">{{ permissionError }}</div>
-      <div v-else-if="loadingPermissions" class="settings-note">{{ uiText.settings.loading }}</div>
-      <div v-else-if="permissions.length === 0" class="settings-note">{{ uiText.settings.noPermissions }}</div>
-      <div v-else class="permission-list">
-        <div v-for="permission in permissions" :key="permission.path" class="permission-row">
-          <span>{{ permission.path }}</span>
-          <button type="button" :title="uiText.settings.remove" :aria-label="uiText.settings.remove" @click="revokePermission(permission.path)">
-            <FolderX :size="14" />
+    <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section permissions-settings">
+      <div class="settings-group">
+        <header class="settings-group-heading">
+          <div>
+            <h3>{{ uiText.settings.authorizedFolders }}</h3>
+            <span>{{ uiText.settings.authorizedFoldersDescription }}</span>
+          </div>
+          <button
+            type="button"
+            class="settings-icon-button"
+            :title="uiText.settings.refresh"
+            :aria-label="uiText.settings.refresh"
+            :disabled="loadingPermissions"
+            @click="loadPermissions"
+          >
+            <RotateCw :size="14" :class="{ spinning: loadingPermissions }" />
           </button>
+        </header>
+        <div v-if="permissionError" class="settings-note error" role="alert">{{ permissionError }}</div>
+        <div v-if="loadingPermissions && permissions.length === 0" class="settings-note">{{ uiText.settings.loading }}</div>
+        <div v-else-if="permissions.length === 0 && !permissionError" class="settings-empty-state">
+          <Folder :size="18" stroke-width="1.7" />
+          <span>{{ uiText.settings.noPermissions }}</span>
+        </div>
+        <div v-else-if="permissions.length > 0" class="permission-list">
+          <div v-for="permission in permissions" :key="permission.path" class="settings-list-row permission-row">
+            <div class="settings-list-main">
+              <span class="settings-row-icon" aria-hidden="true"><Folder :size="16" /></span>
+              <div class="settings-list-copy">
+                <code :title="permission.path">{{ permission.path }}</code>
+                <time :datetime="permission.added_at">{{ formatPermissionDate(permission.added_at) }}</time>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="settings-icon-button"
+              :title="uiText.settings.remove"
+              :aria-label="uiText.settings.removePermissionLabel(permission.path)"
+              :disabled="revokingPermission"
+              @click="requestPermissionRevoke(permission)"
+            >
+              <FolderX :size="14" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <div v-else-if="activeSettingsTab === 'browser'" class="settings-section browser-settings">
-      <div class="browser-settings-group">
-        <header class="browser-settings-group-heading">
-          <h3>{{ uiText.settings.browserSearch }}</h3>
+      <div class="settings-group">
+        <header class="settings-group-heading">
+          <div><h3>{{ uiText.settings.browserSearch }}</h3></div>
         </header>
         <label class="settings-row browser-search-row">
           <span>{{ uiText.settings.searchEngine }}</span>
@@ -232,9 +282,9 @@ onMounted(() => {
         </label>
       </div>
 
-      <div class="browser-settings-group">
-        <header class="browser-settings-group-heading">
-          <h3>{{ uiText.settings.browserData }}</h3>
+      <div class="settings-group">
+        <header class="settings-group-heading">
+          <div><h3>{{ uiText.settings.browserData }}</h3></div>
         </header>
         <div class="browser-data-action">
           <div class="browser-data-copy">
@@ -291,38 +341,39 @@ onMounted(() => {
       </section>
   </WorkspaceLayout>
 
-  <Teleport to="body">
-    <div
-      v-if="browserDataConfirmationOpen"
-      class="browser-data-confirm-backdrop"
-      tabindex="-1"
-      @click.self="cancelBrowserDataClear"
-      @keydown.esc="cancelBrowserDataClear"
-    >
-      <section
-        class="browser-data-confirm-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="browser-data-confirm-title"
-        aria-describedby="browser-data-confirm-description"
-      >
-        <div class="browser-data-confirm-heading">
-          <span class="browser-data-confirm-icon" aria-hidden="true">
-            <AlertTriangle :size="18" />
-          </span>
-          <h2 id="browser-data-confirm-title">{{ uiText.settings.confirmClearCookiesTitle }}</h2>
-        </div>
-        <p id="browser-data-confirm-description">{{ uiText.settings.confirmClearCookies }}</p>
-        <div class="browser-data-confirm-actions">
-          <button type="button" class="settings-secondary" autofocus @click="cancelBrowserDataClear">
-            {{ uiText.settings.cancel }}
-          </button>
-          <button type="button" class="browser-confirm-danger" @click="confirmBrowserDataClear">
-            <Trash2 :size="14" />
-            {{ uiText.settings.confirmClearCookiesAction }}
-          </button>
-        </div>
-      </section>
-    </div>
-  </Teleport>
+  <SettingsConfirmSheet
+    :open="Boolean(pendingSettingsTab)"
+    dialog-id="model-tab-discard-confirm"
+    :title="uiText.settings.confirmDiscardChangesTitle"
+    :description="uiText.settings.confirmDiscardModelChanges"
+    :confirm-label="uiText.settings.confirmDiscardModelChangesAction"
+    :cancel-label="uiText.settings.cancel"
+    tone="neutral"
+    @cancel="cancelSettingsTabChange"
+    @confirm="confirmSettingsTabChange"
+  />
+
+  <SettingsConfirmSheet
+    :open="Boolean(permissionToRevoke)"
+    dialog-id="permission-revoke-confirm"
+    :title="uiText.settings.confirmRevokePermissionTitle"
+    :description="uiText.settings.confirmRevokePermission(permissionToRevoke?.path || '')"
+    :confirm-label="uiText.settings.confirmRevokePermissionAction"
+    :cancel-label="uiText.settings.cancel"
+    :busy="revokingPermission"
+    @cancel="cancelPermissionRevoke"
+    @confirm="confirmPermissionRevoke"
+  />
+
+  <SettingsConfirmSheet
+    :open="browserDataConfirmationOpen"
+    dialog-id="browser-data-confirm"
+    :title="uiText.settings.confirmClearCookiesTitle"
+    :description="uiText.settings.confirmClearCookies"
+    :confirm-label="uiText.settings.confirmClearCookiesAction"
+    :cancel-label="uiText.settings.cancel"
+    :busy="clearingBrowserData === 'cookies'"
+    @cancel="cancelBrowserDataClear"
+    @confirm="confirmBrowserDataClear"
+  />
 </template>
