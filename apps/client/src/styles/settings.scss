@@ -3,7 +3,6 @@
 .shell.settings-workspace-layout,
 .shell.settings-workspace-layout.trace-collapsed {
   grid-template-columns: var(--sidebar-width, 268px) 1px minmax(0, 1fr) 0 0;
-  background: var(--surface-solid);
 
   .settings-navigation {
     grid-column: 1;
@@ -124,11 +123,12 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+  background: var(--surface-panel);
 }
 
 .settings-content-header {
-  height: 52px;
-  flex: 0 0 52px;
+  height: 48px;
+  flex: 0 0 48px;
   padding: 0 28px;
   border-bottom: 1px solid var(--line-faint);
 
