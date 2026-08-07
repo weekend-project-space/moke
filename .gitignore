@@ -16,7 +16,6 @@ apps/client/src-tauri/resources/server/
 !packages/agent-skills/
 !packages/agent-skills/**
 packages/*/dist/
-docs
-!docs/
 docs/*
 !docs/approval-strategies-implementation-plan.md
+!docs/img/
