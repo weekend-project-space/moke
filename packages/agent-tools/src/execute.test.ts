@@ -14,6 +14,9 @@ function createSystemBackend() {
     async readFile() {
       return { path: 'a.md', content: '', lines: [], offset: 0 };
     },
+    async readImage() {
+      return { path: 'a.png', mime_type: 'image/png', size: 1, data_url: 'data:image/png;base64,AA==' };
+    },
     async grep() {
       return { mode: 'content', matches: [] };
     },

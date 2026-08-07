@@ -1,7 +1,6 @@
 import type { Ref } from 'vue'
 
 import type { SessionSummary } from '../model/conversation'
-import { readSessionIdFromHash, writeSessionIdToHash } from '../services/sessionRoute'
 
 type UseSessionNavigationOptions = {
   archiveSession: (id: string) => Promise<boolean>
@@ -12,30 +11,31 @@ type UseSessionNavigationOptions = {
   sessionId: Ref<string>
   startAgentSession: () => boolean
   sortedSessions: Readonly<Ref<SessionSummary[]>>
+  readSessionId: () => string
+  writeSessionId: (id: string, replace?: boolean) => void
 }
 
 export function useSessionNavigation(options: UseSessionNavigationOptions) {
-  function initialSessionFromHash() {
-    const hashSessionId = readSessionIdFromHash()
-    if (!hashSessionId) return options.sortedSessions.value[0]
-    return options.sortedSessions.value.find((session) => session.id === hashSessionId)
-      || options.sortedSessions.value[0]
+  function initialSession() {
+    const routeSessionId = options.readSessionId()
+    if (!routeSessionId) return undefined
+    return options.sortedSessions.value.find((session) => session.id === routeSessionId)
   }
 
   async function selectSession(id: string) {
     if (!(await options.selectAgentSession(id))) return false
 
     options.clearQueuedMessages()
-    writeSessionIdToHash(id)
+    options.writeSessionId(id)
     options.closeTransientPanels()
     return true
   }
 
-  async function startNewSession() {
+  async function startNewSession(replace = false) {
     if (!options.startAgentSession()) return false
 
     options.clearQueuedMessages()
-    writeSessionIdToHash('')
+    options.writeSessionId('', replace)
     options.closeTransientPanels()
     return true
   }
@@ -44,21 +44,21 @@ export function useSessionNavigation(options: UseSessionNavigationOptions) {
     if (!(await options.forkSession(messageId))) return false
 
     options.clearQueuedMessages()
-    writeSessionIdToHash(options.sessionId.value)
+    options.writeSessionId(options.sessionId.value, true)
     options.closeTransientPanels()
     return true
   }
 
   async function archiveSelectedSession(id: string) {
     if (!(await options.archiveSession(id))) return false
-    writeSessionIdToHash(options.sessionId.value)
+    options.writeSessionId(options.sessionId.value, true)
     return true
   }
 
   return {
     archiveSelectedSession,
     forkMessage,
-    initialSessionFromHash,
+    initialSession,
     selectSession,
     startNewSession,
   }

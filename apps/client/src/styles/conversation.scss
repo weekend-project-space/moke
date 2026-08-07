@@ -30,7 +30,7 @@
   min-width: 0;
   max-width: 100%;
   padding: 9px 12px;
-  border: 1px solid var(--line-medium);
+  border: 1px solid var(--color-border-divider);
   border-radius: 14px;
   font-size: var(--font-size-body);
   line-height: 1.5;
@@ -41,8 +41,8 @@
   &.user {
     max-width: min(520px, 72%);
     border: 0;
-    color: var(--text-user);
-    background: var(--accent-wash);
+    color: var(--color-text-user);
+    background: var(--color-primary-soft);
     border-bottom-right-radius: 6px;
     box-shadow: none;
     white-space: pre-wrap;
@@ -51,7 +51,7 @@
   &.assistant {
     max-width: 100%;
     padding: 0;
-    color: var(--ink);
+    color: var(--color-text-primary);
     border-color: transparent;
     background: transparent;
     border-radius: 0;
@@ -65,7 +65,7 @@
     padding: 5px 2px;
 
     .thinking-label {
-      color: var(--ink-muted);
+      color: var(--color-text-muted);
       font-size: var(--font-size-ui);
       font-weight: 430;
       animation: thinking-breathe 1.6s ease-in-out infinite;
@@ -80,7 +80,7 @@
   margin-left: 3px;
   vertical-align: -0.12em;
   content: '';
-  background: var(--ink-muted);
+  background: var(--color-text-muted);
   animation: streaming-caret 1s ease-in-out infinite;
 }
 
@@ -96,11 +96,45 @@
     display: block;
     max-width: min(360px, 100%);
     max-height: 260px;
-    border: 1px solid var(--line-soft);
+    border: 1px solid var(--color-border-default);
     border-radius: var(--radius-lg);
     object-fit: contain;
-    background: var(--surface-panel);
+    background: var(--color-bg-content);
     box-shadow: var(--shadow-hairline);
+  }
+}
+
+.user-files {
+  display: flex;
+  max-width: min(520px, 72%);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.user-file {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 240px;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-content);
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--font-size-ui);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -127,7 +161,7 @@
 }
 
 .message-action {
-  @include icon-control(30px, $color: var(--ink-muted));
+  @include icon-control(30px, $color: var(--color-text-muted));
   flex: 0 0 auto;
   border: 0;
   box-shadow: none;
@@ -142,8 +176,8 @@
   }
 
   &:hover {
-    color: var(--ink);
-    background: var(--surface-muted);
+    color: var(--color-text-primary);
+    background: var(--color-zinc-100);
   }
 }
 
@@ -166,7 +200,7 @@
 
   h3 {
     margin: 0;
-    color: var(--ink);
+    color: var(--color-text-primary);
     font-size: var(--font-size-title);
     font-weight: 520;
     letter-spacing: 0;
@@ -175,7 +209,7 @@
   > p {
     display: block;
     margin: 0;
-    color: var(--ink-soft);
+    color: var(--color-text-secondary);
     font-size: var(--font-size-body);
     line-height: 1.45;
   }
@@ -185,31 +219,31 @@
   display: none;
   align-items: center;
   padding: 5px 10px;
-  border: 1px solid var(--accent-border);
+  border: 1px solid var(--color-primary-border);
   border-radius: 999px;
-  color: var(--accent-strong);
-  background: var(--accent-wash);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft);
   font-size: var(--font-size-caption);
   font-weight: 650;
 }
 
 .suggestion-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
-  gap: 0;
+  gap: 2px 12px;
   margin-top: 8px;
-  padding: 2px 0;
-  border-top: 1px solid var(--line-subtle);
-  border-bottom: 1px solid var(--line-subtle);
+  padding: 0;
 
   button {
     display: flex;
     min-width: 0;
     align-items: center;
-    padding: 10px 8px;
+    min-height: 32px;
+    padding: 5px 6px;
     border: 0;
-    border-radius: 0;
-    color: var(--ink);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
     text-align: left;
     background: transparent;
     box-shadow: none;
@@ -217,13 +251,9 @@
       color 0.14s ease,
       background 0.14s ease;
 
-    + button {
-      border-top: 1px solid var(--line-faint);
-    }
-
     &:hover {
-      color: var(--ink);
-      background: var(--surface-muted-soft);
+      color: var(--color-text-primary);
+      background: var(--color-zinc-50);
     }
   }
 
@@ -231,7 +261,7 @@
     min-width: 0;
     overflow: hidden;
     font-size: var(--font-size-ui);
-    font-weight: 520;
+    font-weight: 430;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -250,6 +280,8 @@
   }
 
   .suggestion-grid {
+    grid-template-columns: 1fr;
+
     button {
       align-items: flex-start;
     }

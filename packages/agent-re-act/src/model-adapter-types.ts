@@ -1,5 +1,5 @@
 import type { AgentStep, ResolvedImageAttachment, TokenUsage, ToolCall } from '@moke/protocol';
-import type { AgentRunInput, RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
+import type { AgentRunInput, RuntimeContextItem, RuntimeMessage, RuntimeToolImage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 
 export type ModelConversationState = {
@@ -42,6 +42,7 @@ export type ModelAdapter = {
     callId: string;
     name: string;
     output: unknown;
+    images?: RuntimeToolImage[];
     status?: 'error' | 'success';
   }): void;
   appendContext(state: ModelConversationState, context: RuntimeContextItem[]): void;

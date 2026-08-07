@@ -7,11 +7,11 @@
 }
 
 :where(input, textarea, select) {
-  color: var(--ink);
+  color: var(--color-text-primary);
 }
 
 :where(input, textarea, select)::placeholder {
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
 }
 
 :where(
@@ -28,7 +28,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-icon-button);
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   background: transparent;
 }
 
@@ -42,8 +42,38 @@
   .browser-tab-add,
   .settings-icon-button
 ):hover {
-  color: var(--ink);
-  background: var(--surface-control-hover);
+  color: var(--color-text-primary);
+  background: var(--color-secondary-hover);
+}
+
+.segmented-filter {
+  display: inline-flex;
+  width: max-content;
+  height: 32px;
+  align-items: center;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-zinc-50);
+
+  button {
+    height: 26px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    background: transparent;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+
+    &:hover {
+      color: var(--color-text-primary);
+    }
+
+    &.active {
+      color: var(--color-text-primary);
+      background: var(--color-bg-content);
+      box-shadow: var(--shadow-control);
+    }
+  }
 }
 
 

@@ -1,4 +1,4 @@
-import { createRouter } from '../http/router.js';
+import { createRouter, type RouterSecurityOptions } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { registerBrowserRoutes } from './browser.js';
 import { registerAttachmentRoutes } from './attachments.js';
@@ -9,10 +9,12 @@ import { registerSessionRoutes } from './sessions.js';
 import { registerToolRoutes } from './tools.js';
 import { registerMessagingRoutes } from './messaging.js';
 import { registerWeixinRoutes } from './weixin.js';
+import { registerFeishuRoutes } from './feishu.js';
+import { registerDingTalkRoutes } from './dingtalk.js';
 import { registerScheduledTaskRoutes } from './scheduled-tasks.js';
 
-export function createRoutes(context: RoutesContext) {
-  const router = createRouter<RoutesContext>();
+export function createRoutes(context: RoutesContext, security?: RouterSecurityOptions) {
+  const router = createRouter<RoutesContext>(security);
 
   registerHealthRoutes(router);
   registerToolRoutes(router);
@@ -23,6 +25,8 @@ export function createRoutes(context: RoutesContext) {
   registerRunRoutes(router);
   registerMessagingRoutes(router);
   registerWeixinRoutes(router);
+  registerFeishuRoutes(router);
+  registerDingTalkRoutes(router);
   registerScheduledTaskRoutes(router);
 
   return router.handler(context);

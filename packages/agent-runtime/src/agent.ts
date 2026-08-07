@@ -28,7 +28,7 @@ export type AgentRunInput = {
   eventBus: EventBus;
   toolRegistry: ToolRegistry;
   context: ToolContext;
-  limits: RuntimeLimits;
+  limits: Pick<RuntimeLimits, 'max_steps' | 'max_tool_calls'>;
 };
 
 export type AgentRunResult = {

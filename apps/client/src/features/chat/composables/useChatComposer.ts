@@ -1,7 +1,7 @@
 import { computed, nextTick, ref, type Ref } from 'vue'
 
 import { uiText } from '../../../text/uiText'
-import type { ImageAttachment, PendingAsk, ReasoningEffort } from '../model/conversation'
+import type { FileAttachmentInput, ImageAttachment, PendingAsk, ReasoningEffort } from '../model/conversation'
 import { useQueuedMessages, type QueuedMessage } from './useQueuedMessages'
 
 type UseChatComposerOptions = {
@@ -22,9 +22,10 @@ export function useChatComposer(options: UseChatComposerOptions) {
   const maxQueuedMessages = options.maxQueuedMessages ?? 3
   const input = ref('')
   const attachments = ref<ImageAttachment[]>([])
+  const files = ref<FileAttachmentInput[]>([])
   const queue = useQueuedMessages(maxQueuedMessages)
 
-  const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0)
+  const hasDraftContent = computed(() => Boolean(input.value.trim()) || attachments.value.length > 0 || files.value.length > 0)
   const primaryDisabled = computed(() => {
     if (options.isRunning.value) {
       if (options.pendingAsk.value) return true
@@ -45,7 +46,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
     queue.messages.value.map((message) => {
       const preview = draftTextPreview(message)
       return {
-        attachmentCount: message.attachments.length,
+        attachmentCount: message.attachments.length + (message.files?.length || 0),
         content: preview,
         preview,
       }
@@ -60,15 +61,17 @@ export function useChatComposer(options: UseChatComposerOptions) {
   function clearDraft() {
     input.value = ''
     attachments.value = []
+    files.value = []
     void resize()
   }
 
   async function submitMessage() {
     const content = input.value.trim()
-    if ((!content && !attachments.value.length) || options.isRunning.value) return false
+    if ((!content && !attachments.value.length && !files.value.length) || options.isRunning.value) return false
     return sendCurrentDraft({
       content,
       attachments: [...attachments.value],
+      files: [...files.value],
       options: options.currentRunOptions(),
     })
   }
@@ -76,30 +79,35 @@ export function useChatComposer(options: UseChatComposerOptions) {
   async function sendCurrentDraft(draft: QueuedMessage) {
     const previousInput = input.value
     const previousAttachments = [...attachments.value]
+    const previousFiles = [...files.value]
     input.value = ''
     attachments.value = []
+    files.value = []
     await resize()
 
     if (await options.sendMessage(draft)) return true
 
     input.value = previousInput || draft.content
     attachments.value = previousAttachments.length ? previousAttachments : draft.attachments
+    files.value = previousFiles.length ? previousFiles : (draft.files || [])
     await resize()
     return false
   }
 
   function queueCurrentInput() {
     const content = input.value.trim()
-    if ((!content && !attachments.value.length) || !options.sessionId.value) return false
+    if ((!content && !attachments.value.length && !files.value.length) || !options.sessionId.value) return false
     const queued = queue.enqueue(options.sessionId.value, {
       content,
       attachments: [...attachments.value],
+      files: [...files.value],
       options: options.currentRunOptions(),
     })
     if (!queued) return false
 
     input.value = ''
     attachments.value = []
+    files.value = []
     void nextTick(() => {
       options.onResize()
       options.onFocus()
@@ -140,6 +148,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
     if (!hasDraftContent.value) {
       input.value = nextMessage.content
       attachments.value = nextMessage.attachments
+      files.value = nextMessage.files || []
       await resize()
     } else {
       queue.enqueue(options.sessionId.value, nextMessage)
@@ -162,15 +171,27 @@ export function useChatComposer(options: UseChatComposerOptions) {
     attachments.value = attachments.value.filter((attachment) => attachment.id !== id)
   }
 
+  function addFiles(nextFiles: FileAttachmentInput[]) {
+    const paths = new Set(files.value.map((file) => file.path.toLowerCase()))
+    files.value = [...files.value, ...nextFiles.filter((file) => !paths.has(file.path.toLowerCase()))].slice(0, 10)
+  }
+
+  function removeFile(path: string) {
+    files.value = files.value.filter((file) => file.path !== path)
+  }
+
   function draftTextPreview(message: QueuedMessage) {
-    const text = message.content.trim() || uiText.composer.imageAttachment
+    const text = message.content.trim()
+      || (message.files?.length ? uiText.composer.fileAttachment : uiText.composer.imageAttachment)
     return text.length > 120 ? `${text.slice(0, 120)}...` : text
   }
 
   return {
     addAttachments,
+    addFiles,
     applySuggestion,
     attachments,
+    files,
     cancelQueuedMessage: queue.clear,
     cancelQueuedMessageAt: queue.remove,
     clearDraft,
@@ -185,6 +206,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
     queuedMessageLabel,
     queuedStopRequested: queue.stopRequested,
     removeAttachment,
+    removeFile,
     sendOnEnter,
     sendQueuedMessageIfReady,
     submitMessage,

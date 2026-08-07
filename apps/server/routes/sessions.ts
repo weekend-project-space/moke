@@ -1,4 +1,7 @@
-import type { Message, Session } from '@moke/protocol';
+import { basename, isAbsolute, resolve } from 'node:path';
+import { statSync } from 'node:fs';
+import { SessionRunActiveError } from '@moke/agent-runtime';
+import type { FileAttachmentInput, Message, Session } from '@moke/protocol';
 import { HttpError, type Router } from '../http/router.js';
 import type { RoutesContext } from './context.js';
 import { AttachmentStoreError, toStoredAttachment } from '../storage/attachment-store.js';
@@ -103,10 +106,12 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const rawRequestBody = await body();
     rejectImmutableWorkspace(environmentFromSendRequest(rawRequestBody));
     const requestBody = parseInput(sendMessageSchema, rawRequestBody);
+    rejectActiveSessionRun(context, sessionId);
     const content = requestBody.message.content.trim();
     const attachments = saveImageAttachments(context, requestBody.message.attachments);
-    if (!content && attachments.length === 0) {
-      throw new HttpError(400, 'BAD_REQUEST', 'message.content or message.attachments is required');
+    const files = saveFileReferences(requestBody.message.files);
+    if (!content && attachments.length === 0 && files.length === 0) {
+      throw new HttpError(400, 'BAD_REQUEST', 'message.content, message.attachments, or message.files is required');
     }
 
     const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager, context.defaultWorkspaceRoot);
@@ -114,6 +119,7 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
       session,
       content,
       attachments,
+      files,
       env: requestBody.env,
       options: {
       ...requestBody.options,
@@ -147,11 +153,24 @@ function withEnvironmentError<T>(operation: () => T): T {
   try {
     return operation();
   } catch (error) {
+    if (error instanceof SessionRunActiveError) {
+      throw new HttpError(409, error.code, error.message);
+    }
     if (error instanceof SessionEnvironmentError) {
       throw new HttpError(400, error.code, error.message);
     }
     throw error;
   }
+}
+
+function rejectActiveSessionRun(context: RoutesContext, sessionId: string) {
+  const activeRun = context.runManager.getActiveRunForSession(sessionId);
+  if (!activeRun) return;
+  throw new HttpError(
+    409,
+    'SESSION_RUN_ACTIVE',
+    `Session ${sessionId} already has an active run: ${activeRun.id}`,
+  );
 }
 
 function saveImageAttachments(context: RoutesContext, input: unknown) {
@@ -163,6 +182,33 @@ function saveImageAttachments(context: RoutesContext, input: unknown) {
     }
     throw error;
   }
+}
+
+function saveFileReferences(input: FileAttachmentInput[] | undefined) {
+  return (input || []).map((file) => {
+    const rawPath = file.path.trim();
+    if (!isAbsolute(rawPath)) {
+      throw new HttpError(400, 'INVALID_FILE_PATH', 'Attached file paths must be absolute');
+    }
+
+    const path = resolve(rawPath);
+    let size: number;
+    try {
+      const stats = statSync(path);
+      if (!stats.isFile()) throw new Error('not a file');
+      size = stats.size;
+    } catch {
+      throw new HttpError(400, 'FILE_NOT_FOUND', 'Attached file is not available: ' + path);
+    }
+
+    return {
+      id: id('file'),
+      kind: 'file' as const,
+      name: basename(path),
+      path,
+      size,
+    };
+  });
 }
 
 function getSession(context: RoutesContext, id: string) {

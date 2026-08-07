@@ -10,6 +10,7 @@
     { "path": "../../packages/protocol" },
     { "path": "../../packages/messaging-core" },
     { "path": "../../packages/messaging-weixin" },
+    { "path": "../../packages/messaging-tools" },
     { "path": "../../packages/agent-runtime" },
     { "path": "../../packages/agent-re-act" },
     { "path": "../../packages/agent-tools" },

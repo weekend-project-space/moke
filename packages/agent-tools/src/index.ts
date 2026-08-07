@@ -8,4 +8,5 @@ export { createReadFileTool } from './read-file.js';
 export { registerAgentTools } from './register-tools.js';
 export type { AgentToolsSystemBackend } from './register-tools.js';
 export { createSearchTool } from './search.js';
+export { createViewImageTool } from './view-image.js';
 export { createWriteFileTool } from './write-file.js';

@@ -3,7 +3,7 @@
   width: var(--content-width);
   max-width: min(var(--content-width), calc(100% - 24px));
   padding: 3px 0 1px;
-  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 10%);
   font-size: var(--font-size-body);
   line-height: 1.45;
 }
@@ -16,7 +16,7 @@
   gap: 6px;
   padding: 2px 0;
   border-radius: 6px;
-  color: var(--ink);
+  color: var(--color-text-primary);
   background: transparent;
   font-size: var(--font-size-body);
   font-weight: 400;
@@ -25,11 +25,11 @@
 
 .process-group.active .process-toggle {
   grid-template-columns: auto minmax(0, auto) auto;
-  color: color-mix(in srgb, var(--ink-muted), transparent 4%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 4%);
   opacity: 1;
 
   &:hover {
-    color: var(--ink-soft);
+    color: var(--color-text-secondary);
   }
 }
 
@@ -37,7 +37,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--color-primary);
   animation: process-active-breathe 1.6s ease-in-out infinite;
 }
 
@@ -47,7 +47,7 @@
 }
 
 .process-active-label {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   animation: process-active-label-breathe 1.6s ease-in-out infinite;
 }
 
@@ -60,7 +60,7 @@
 
   50% {
     opacity: 1;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
   }
 }
 
@@ -86,7 +86,7 @@
 .process-result-divider {
   width: 100%;
   margin: 2px 0 8px;
-  border-top: 1px solid var(--line-divider);
+  border-top: 1px solid var(--color-border-divider);
 }
 
 .process-caret {
@@ -124,7 +124,7 @@
 
 .process-item {
   min-width: 0;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
 
   summary {
     display: flex;
@@ -140,7 +140,7 @@
 
   &.assistant {
     margin: 6px 0 8px;
-    color: var(--ink);
+    color: var(--color-text-primary);
 
     .process-assistant-summary {
       display: block;
@@ -149,12 +149,12 @@
     }
 
     .markdown {
-      color: var(--ink);
+      color: var(--color-text-primary);
       font-size: var(--font-size-body);
       line-height: 1.52;
 
       p {
-        color: var(--ink);
+        color: var(--color-text-primary);
       }
     }
 
@@ -169,14 +169,14 @@
     .process-reasoning-icon,
     .process-reasoning-title,
     .process-step-caret {
-      color: color-mix(in srgb, var(--ink-muted), transparent 12%);
+      color: color-mix(in srgb, var(--color-text-muted), transparent 12%);
     }
 
     &:hover {
       .process-reasoning-icon,
       .process-reasoning-title,
       .process-step-caret {
-        color: color-mix(in srgb, var(--ink-soft), transparent 8%);
+        color: color-mix(in srgb, var(--color-text-secondary), transparent 8%);
       }
     }
   }
@@ -188,7 +188,7 @@
   max-width: 100%;
   column-gap: 6px;
   align-items: center;
-  color: var(--ink);
+  color: var(--color-text-primary);
 
   .process-tool-title {
     flex: 0 1 auto;
@@ -208,7 +208,7 @@
   align-items: center;
   min-height: 28px;
   max-width: 100%;
-  color: var(--ink);
+  color: var(--color-text-primary);
 }
 
 .process-ask-icon {
@@ -243,13 +243,13 @@
   flex: 0 1 auto;
   align-items: center;
   gap: 5px;
-  color: var(--accent-strong);
+  color: var(--color-primary-hover);
   font-size: var(--font-size-caption);
   font-weight: 500;
   white-space: nowrap;
 
   &.failed {
-    color: color-mix(in srgb, var(--danger), var(--ink-muted) 35%);
+    color: color-mix(in srgb, var(--color-danger), var(--color-text-muted) 35%);
   }
 }
 
@@ -297,7 +297,7 @@
 }
 
 .process-reasoning-title {
-  color: color-mix(in srgb, var(--ink-muted), transparent 10%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 10%);
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: 1.5;
@@ -313,7 +313,7 @@
 }
 
 .tool-detail-raw-caret {
-  color: color-mix(in srgb, var(--ink-muted), transparent 22%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 22%);
 }
 
 .process-item[open] > summary .process-step-caret .when-closed,
@@ -347,7 +347,7 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  color: var(--accent-strong);
+  color: var(--color-primary-hover);
   font-size: var(--font-size-caption);
   font-weight: 500;
   line-height: 1.4;
@@ -355,7 +355,7 @@
 
   &.rejected,
   &.failed {
-    color: color-mix(in srgb, var(--danger), var(--ink-muted) 35%);
+    color: color-mix(in srgb, var(--color-danger), var(--color-text-muted) 35%);
   }
 }
 
@@ -385,7 +385,7 @@
   margin: 4px 0 8px 23px;
   padding: 2px 0 4px 0;
   overflow: auto;
-  color: color-mix(in srgb, var(--ink-muted), var(--ink) 14%);
+  color: color-mix(in srgb, var(--color-text-muted), var(--color-text-primary) 14%);
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: 1.56;

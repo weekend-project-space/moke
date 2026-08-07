@@ -39,8 +39,9 @@ export class SettingsService {
   }
 
   updateModelProviders(input: RuntimeSettingsInput) {
-    this.settings = normalizeRuntimeSettings(input);
-    saveRuntimeSettings(this.settingsPath, this.settings);
+    const nextSettings = normalizeRuntimeSettings(input);
+    saveRuntimeSettings(this.settingsPath, nextSettings);
+    this.settings = nextSettings;
     return this.get();
   }
 

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { BrowserPanel, useBrowserWorkspace } from '../../browser'
 import { ScheduledTasksWorkspace } from '../../scheduled-tasks'
@@ -18,15 +19,12 @@ import { useComposerReasoning } from '../composables/useComposerReasoning'
 import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
-import { writeSessionIdToHash } from '../services/sessionRoute'
-import { isNativeWorkspacePickerAvailable, pickWorkspaceDirectory } from '../services/workspacePicker'
+import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
 
-const props = defineProps<{
-  active: boolean
-}>()
+defineOptions({ name: 'ChatWorkspace' })
 
 const emit = defineEmits<{
   openSettings: []
@@ -40,8 +38,12 @@ const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
-const scheduledTasksActive = ref(false)
+const route = useRoute()
+const router = useRouter()
+const workspaceActive = computed(() => route.name === 'chat' || route.name === 'tasks')
+const scheduledTasksActive = computed(() => route.name === 'tasks')
 let runtimeTimer: number | undefined
+let chatRouteReady = false
 const {
   closeSidebar,
   closeTransientPanels,
@@ -103,7 +105,9 @@ const {
   onRunFinished: async () => {
     await sendNextQueuedMessage()
   },
-  onSessionCreated: writeSessionIdToHash,
+  onSessionCreated: (id) => {
+    void router.replace({ name: 'chat', params: id ? { sessionId: id } : {} })
+  },
 })
 const {
   activeModel,
@@ -120,8 +124,10 @@ const {
 } = useRecentWorkspaces()
 const {
   addAttachments,
+  addFiles,
   applySuggestion,
   attachments,
+  files,
   cancelQueuedMessage,
   cancelQueuedMessageAt,
   clearQueuedMessages,
@@ -135,6 +141,7 @@ const {
   queuedMessageLabel,
   queuedStopRequested,
   removeAttachment,
+  removeFile,
   sendOnEnter,
   sendQueuedMessageIfReady,
   stopAndSendQueuedMessage,
@@ -168,7 +175,7 @@ const {
 const {
   archiveSelectedSession,
   forkMessage,
-  initialSessionFromHash,
+  initialSession,
   selectSession: navigateToSession,
   startNewSession: createNewSession,
 } = useSessionNavigation({
@@ -180,10 +187,15 @@ const {
   sessionId,
   startAgentSession,
   sortedSessions,
+  readSessionId: () => route.name === 'chat' && typeof route.params.sessionId === 'string' ? route.params.sessionId : '',
+  writeSessionId: (id, replace = false) => {
+    const location = { name: 'chat', params: id ? { sessionId: id } : {} }
+    void (replace ? router.replace(location) : router.push(location))
+  },
 })
 
 function handleChatKeydown(event: KeyboardEvent) {
-  if (props.active) handleGlobalKeydown(event)
+  if (workspaceActive.value) handleGlobalKeydown(event)
 }
 
 function openSettings() {
@@ -211,15 +223,35 @@ async function chooseDraftWorkspaceDirectory() {
   }
 }
 
-const taskTemplates: TaskTemplate[] = uiText.chat.starters.map((prompt) => ({
-  title: prompt,
-  description: '',
-  prompt,
-}))
+async function chooseFiles() {
+  try {
+    const selected = await pickLocalFiles(currentWorkspaceRoot.value)
+    const imagePaths = selected.filter(isSupportedImagePath)
+    const filePaths = selected.filter((path) => !isSupportedImagePath(path))
+    addFiles(filePaths.map((path) => ({
+      name: path.split(/[\\/]/).pop() || path,
+      path,
+    })))
+    const images = await Promise.allSettled(imagePaths.map(readLocalImage))
+    const localImages = images.flatMap((result) => result.status === 'fulfilled'
+      ? [{ ...result.value, id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, kind: 'image' as const }]
+      : [])
+    composerBox.value?.addLocalImages(localImages, images.some((result) => result.status === 'rejected'))
+  } catch (error) {
+    console.error('Failed to choose files or images', error)
+  }
+}
+
 const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
+const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
 const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
+const taskTemplates = computed<TaskTemplate[]>(() => (currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters).map((starter) => ({
+  title: starter.title,
+  description: '',
+  prompt: starter.prompt,
+})))
 const sessionSubtitle = computed(() => {
   if (pendingAsk.value || pendingApproval.value) return ''
   if (isRunning.value) return uiText.app.working
@@ -322,19 +354,30 @@ watch(isRunning, (running) => {
 })
 
 async function selectSession(id: string) {
-  scheduledTasksActive.value = false
   await navigateToSession(id)
 }
 
 async function startNewSession() {
-  scheduledTasksActive.value = false
   await createNewSession()
 }
 
-function syncWorkspaceRoute() {
-  scheduledTasksActive.value = window.location.hash === '#tasks'
-  if (scheduledTasksActive.value) closeTransientPanels()
-}
+watch(() => route.name, (name) => {
+  if (name === 'tasks') closeTransientPanels()
+}, { immediate: true })
+
+watch(() => [route.name, route.params.sessionId] as const, ([name, value]) => {
+  if (!chatRouteReady || name !== 'chat') return
+  if (typeof value === 'string' && value) {
+    if (value === sessionId.value) return
+    if (sortedSessions.value.some((session) => session.id === value)) {
+      void navigateToSession(value)
+    } else {
+      void createNewSession(true)
+    }
+  } else if (sessionId.value) {
+    void createNewSession()
+  }
+})
 
 watch(sortedSessions, (nextSessions) => {
   seedRecentWorkspaces(nextSessions.flatMap((session) =>
@@ -345,35 +388,37 @@ watch(sortedSessions, (nextSessions) => {
 onMounted(async () => {
   window.addEventListener('keydown', handleChatKeydown)
   window.addEventListener('resize', handleWindowResize)
-  window.addEventListener('hashchange', syncWorkspaceRoute)
-  syncWorkspaceRoute()
   loadComposerReasoningEffort()
-  initBrowserWorkspace()
+  await initBrowserWorkspace()
   initWorkspacePanels()
 
   if (await checkServer()) {
     await loadReasoningCapability()
     await loadSessions()
-    if (scheduledTasksActive.value) return
-    const initialSession = initialSessionFromHash()
-    if (initialSession) {
-      await selectSession(initialSession.id)
+    if (scheduledTasksActive.value) {
+      chatRouteReady = true
+      return
+    }
+    const routedSession = initialSession()
+    if (routedSession) {
+      await selectSession(routedSession.id)
     } else {
-      await startNewSession()
+      await createNewSession(Boolean(route.params.sessionId))
     }
   }
+  chatRouteReady = true
 })
 
 onUnmounted(() => {
   window.clearInterval(runtimeTimer)
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)
-  window.removeEventListener('hashchange', syncWorkspaceRoute)
   disposeBrowserWorkspace()
   disposeAgentSession()
 })
 
 defineExpose({
+  newSession: startNewSession,
   openBrowser: openLinkInBrowser,
   refreshSettings: loadReasoningCapability,
 })
@@ -410,6 +455,7 @@ defineExpose({
         :trace-collapsed="traceCollapsed"
         :server-status="serverStatus"
         :server-status-label="serverStatusLabel"
+        :workspace-root="currentWorkspaceRoot"
         @new-session="startNewSession"
         @toggle-sidebar="toggleSidebar"
         @toggle-workspace="toggleWorkspace"
@@ -517,7 +563,7 @@ defineExpose({
           </div>
         </div>
         <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
-          :primary-is-stop="primaryIsStop" :attachments="attachments"
+          :primary-is-stop="primaryIsStop" :attachments="attachments" :files="files"
           :model-name="activeModel?.model || ''" :model-provider="activeModel?.providerName || ''"
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
@@ -530,8 +576,9 @@ defineExpose({
           @update:approval-mode="updateApprovalMode"
           @update:workspace-root="updateDraftWorkspace"
           @choose-workspace-directory="chooseDraftWorkspaceDirectory"
+          @choose-files="chooseFiles"
           @input="handleInput"
-          @add-attachments="addAttachments" @remove-attachment="removeAttachment"
+          @add-attachments="addAttachments" @remove-attachment="removeAttachment" @remove-file="removeFile"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />
       </div>
     </section>
@@ -546,7 +593,7 @@ defineExpose({
     />
 
     <template #auxiliary>
-      <BrowserPanel ref="browserPanel" :active="active && !scheduledTasksActive && !traceCollapsed" :maximized="workspaceMaximized" @toggle-maximized="toggleWorkspaceMaximized" />
+      <BrowserPanel ref="browserPanel" :active="workspaceActive && !scheduledTasksActive && !traceCollapsed" :maximized="workspaceMaximized" @toggle-maximized="toggleWorkspaceMaximized" />
     </template>
   </WorkspaceLayout>
 </template>

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { LocalSystemBackend } from './local-system-backend.js';
 
-function createBackend(options: { executeDelayMs?: number } = {}) {
+function createBackend(options: { executeDelayMs?: number; rawContent?: Uint8Array } = {}) {
   const calls: string[] = [];
   const backend = {
     id: 'fake-backend',
@@ -18,7 +18,16 @@ function createBackend(options: { executeDelayMs?: number } = {}) {
       return {};
     },
     async readRaw() {
-      return {};
+      return options.rawContent
+        ? {
+            data: {
+              content: options.rawContent,
+              mimeType: 'application/octet-stream',
+              created_at: new Date(0).toISOString(),
+              modified_at: new Date(0).toISOString(),
+            },
+          }
+        : {};
     },
     async grep() {
       return {};
@@ -82,6 +91,23 @@ test('writeFile writes directly when parent is the backend root', async () => {
   }
 });
 
+test('workspace symlinks cannot escape the approved root', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-symlink-root-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'moke-symlink-outside-'));
+  try {
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(outside, 'secret.txt'), 'outside');
+    symlinkSync(outside, path.join(root, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+    const system = new LocalSystemBackend(root);
+
+    await assert.rejects(() => system.readFile('link/secret.txt'), /Path requires approval/);
+    await assert.rejects(() => system.writeFile('link/new.txt', 'outside'), /Path requires approval/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test('readFile requests approval for the exact external file', async () => {
   const backend = createBackend();
   const workspace = path.resolve('E:/work/test/moke');
@@ -95,6 +121,28 @@ test('readFile requests approval for the exact external file', async () => {
       return true;
     },
   );
+});
+
+test('readImage detects image content and returns a data URL', async () => {
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, { backend: createBackend({ rawContent: png }) });
+
+  const result = await system.readImage('image.bin');
+
+  assert.equal(result.path, 'image.bin');
+  assert.equal(result.mime_type, 'image/png');
+  assert.equal(result.size, png.byteLength);
+  assert.equal(result.data_url, `data:image/png;base64,${Buffer.from(png).toString('base64')}`);
+});
+
+test('readImage rejects unsupported binary content', async () => {
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, {
+    backend: createBackend({ rawContent: Uint8Array.from([0x00, 0x01, 0x02]) }),
+  });
+
+  await assert.rejects(() => system.readImage('image.bin'), /supported PNG, JPEG, WebP, or GIF/);
 });
 
 test('execute rejects absolute command paths outside workspace', async () => {

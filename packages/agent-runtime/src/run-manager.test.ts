@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod';
 
 import type { ImageAttachment, Message, RunLifecycleEvent, Session, ToolApprovalRecord } from '@moke/protocol';
 import type { Agent } from './agent.js';
-import { RunManager, selectRecentHistory } from './run-manager.js';
+import { RunManager, selectRecentHistory, SessionRunActiveError } from './run-manager.js';
 import { ToolRegistry } from './tool-registry.js';
 
 function message(input: Partial<Message> & Pick<Message, 'role'>): Message {
@@ -152,10 +153,11 @@ test('RunManager emits the simplified lifecycle whenever a run status changes', 
   ]);
 });
 
-async function waitFor(predicate: () => boolean) {
-  for (let attempt = 0; attempt < 50; attempt++) {
+async function waitFor(predicate: () => boolean, timeoutMs = 1_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     if (predicate()) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setTimeout(resolve, 1));
   }
   throw new Error('Timed out waiting for run state');
 }
@@ -170,6 +172,76 @@ function createSession(): Session {
     metadata: {},
   };
 }
+
+test('RunManager allows only one active run per session', async () => {
+  const session = createSession();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run() {
+        await gate;
+        return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+
+  const first = manager.createRun(session, { content: 'first' });
+  assert.equal(manager.getActiveRunForSession(session.id)?.id, first.id);
+  assert.throws(
+    () => manager.createRun(session, { content: 'second' }),
+    (error: unknown) => error instanceof SessionRunActiveError
+      && error.sessionId === session.id
+      && error.runId === first.id,
+  );
+
+  release();
+  await waitFor(() => first.status === 'completed');
+  assert.equal(manager.getActiveRunForSession(session.id), undefined);
+
+  const next = manager.createRun(session, { content: 'next' });
+  await waitFor(() => next.status === 'completed');
+});
+
+test('RunManager times out the whole run and clears a pending approval', async () => {
+  const session = createSession();
+  let aborted = false;
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        input.context.abortSignal?.addEventListener('abort', () => { aborted = true; }, { once: true });
+        await input.context.approveTool?.({
+          callId: 'call_timeout',
+          tool: 'execute',
+          input: { command: 'npm test' },
+          reason: 'Run tests',
+        });
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'late' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+
+  const run = manager.createRun(session, { content: 'start' }, { timeout_ms: 20 });
+  await waitFor(() => Boolean(run.pending_approval));
+  const approvalId = run.pending_approval?.approval_id || '';
+  await waitFor(() => run.status === 'timeout');
+
+  assert.equal(aborted, true);
+  assert.equal(run.pending_approval, undefined);
+  assert.equal(manager.approve(run.id, approvalId, 'approved').status, 409);
+  assert.equal(manager.getActiveRunForSession(session.id), undefined);
+  assert.equal(
+    run.events.filter((event) => event.type === 'agent.done').at(-1)?.payload.status,
+    'timeout',
+  );
+  assert.match(session.messages.at(-1)?.content || '', /timed out after 20ms/);
+});
 
 test('RunManager records an ask answer as an interaction event instead of chat messages', async () => {
   const session = createSession();
@@ -439,16 +511,30 @@ test('RunManager freezes the session environment and uses its workspace for the 
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let skillWorkspace = '';
   let agentWorkspace = '';
+  let registryWorkspace = '';
+  let agentTools: string[] = [];
+  const baseRegistry = new ToolRegistry();
   const manager = new RunManager({
     runs: new Map(),
     agent: {
       async run(input) {
         agentWorkspace = input.context.workspace;
+        agentTools = input.toolRegistry.list().map((tool) => tool.name);
         return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
-    toolRegistry: new ToolRegistry(),
+    toolRegistry: baseRegistry,
     defaultWorkspaceRoot: 'E:\\work\\default',
+    resolveToolRegistry: async (workspace) => {
+      registryWorkspace = workspace;
+      return baseRegistry.withTools([{
+        name: 'workspace_tool',
+        description: 'Workspace tool',
+        approval: 'none',
+        schema: z.object({}),
+        async handler() { return { ok: true }; },
+      }]);
+    },
     createSkillContentManager: async (workspace) => {
       skillWorkspace = workspace;
       await gate;
@@ -470,6 +556,8 @@ test('RunManager freezes the session environment and uses its workspace for the 
   assert.equal(run.approval_mode, 'ai_review');
   assert.equal(skillWorkspace, 'E:\\work\\project-a');
   assert.equal(agentWorkspace, 'E:\\work\\project-a');
+  assert.equal(registryWorkspace, 'E:\\work\\project-a');
+  assert.deepEqual(agentTools, ['workspace_tool']);
 });
 
 test('RunManager auto-approves tool decisions and records the reviewer', async () => {

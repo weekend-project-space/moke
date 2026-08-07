@@ -1,70 +1,132 @@
 # Moke
 
-Moke is a lightweight agent for browsing the web pc app.
+Moke is a local AI work assistant. Describe a goal in natural language, and it can search for information, operate within a folder you choose, use its built-in browser, and turn the results into something useful.
 
-![moke-ask-rss](./docs/img/agent-ask_rss.png)
+In short: **Moke does more than answer questions. It can open pages, click, type, read files, and call tools for you.**
 
-It is built around a simple idea:
+> Moke is still in early development. It is suitable for personal use and experimentation, but is not recommended for unattended production workflows.
+
+![moke](./docs/img/app.png)
+
+## What It Can Do
+
+Moke is designed for tasks that involve finding information, taking a few actions, and delivering a result:
+
+- Research a topic across multiple sources and include useful links
+- Compare webpages or documents and highlight differences in prices, terms, dates, or other details
+- Organize files in a workspace and extract names, amounts, decisions, or action items
+- Use the web: search, open links, click buttons, scroll pages, and fill out forms
+- Turn research into notes, reports, or a clear list of next steps
+- Connect local tools and MCP services to access more data or capabilities
+
+Its basic workflow is deliberately short:
 
 ```text
-LLM + tools + inner browser
+Describe a goal -> Moke plans steps -> Browse/use tools -> Ask for confirmation when needed -> Summarize the result
 ```
 
-The LLM understands the task, tools provide local and external capabilities, and the inner browser opens real pages that the agent can inspect and operate.
+## How It Differs
 
-## Why
+| Tool | Main strength | How Moke differs |
+| --- | --- | --- |
+| Chatbot | Explains ideas and generates text | Moke can open pages, operate websites, and read files in your workspace |
+| Browser AI | Answers questions about the current page | Moke includes browser actions in the task flow and can work across pages |
+| Traditional RPA/scripts | Reliable fixed steps, but requires upfront programming | Moke uses natural language for tasks whose exact steps are not known in advance |
+| Cloud agent | Convenient, with data and execution hosted in the cloud | Moke runs locally first, so you control the workspace, browsing data, and tool permissions |
 
-There are already many chatbots, agents, and AI browsers. Most of them are powerful, but many browsing features still feel limited: the browser tab becomes text, and the AI mostly reads or summarizes it.
+Moke is not trying to automate everything without oversight. It focuses on low cost, visible execution, and confirmation for actions that write data or affect external systems.
 
-Reading is useful, but browsing is not only reading. Real web use often means opening links, clicking buttons, scrolling pages, filling forms, comparing pages, waiting for changes, and taking screenshots.
+## Getting Started
 
-Those actions are not especially complicated. Moke is an attempt to make a small agent that can do them directly.
+### Option 1: Local development mode (browser UI)
 
-## Positioning
+You need Node.js 20 or later and an available OpenAI-compatible model service. The model can run locally or be provided by a remote API.
 
-Moke is not trying to be a heavy general-purpose agent.
+```bash
+git clone <repository-url>
+cd moke
+npm install
+cp .env.example .env
+```
 
-It is closer to a small personal vehicle for information surfing:
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
-- cheap to run
-- simple to understand
-- good enough for daily use
-- easy to modify
-- not overloaded with features
+Edit `.env` and confirm at least these settings:
 
-As token prices keep falling, lightweight agents become more practical for everyday information work. In my own tests with a low-cost model, normal daily browsing could cost only a few cents. For this kind of tool, electricity is the cost, and tokens are the electricity.
+```dotenv
+OPENAI_API_KEY=your-model-service-key
+OPENAI_MODEL=your-model-name
+OPENAI_BASE_URL=https://your-model-service.example/v1
+```
 
-## What It Does
+Start Moke:
 
-Moke focuses on practical browsing and tool use:
+```bash
+npm run dev
+```
 
-- open pages in an inner browser
-- read page content and page structure
-- click, type, scroll, and upload files
-- take snapshots and screenshots
-- call local tools
-- connect to local LLM providers
-- connect to MCP servers
-- use skills for reusable workflows
+The terminal will print the frontend URL, usually `http://127.0.0.1:5173`. Open it in your browser and:
 
-The goal is not to support every possible agent feature. The goal is to keep the loop short: ask, browse, operate, summarize, continue.
+1. Choose a workspace folder. Moke can access and save files only within this boundary.
+2. Open Settings and test the model connection if needed.
+3. Start a new chat and describe the task, for example: `Read the meeting notes in this folder and list the decisions, owners, and deadlines.`
 
-## Why Not Just Browser AI
+### Option 2: Desktop mode
 
-Modern browsers are adding AI features, but many of them still treat the page mostly as readable text.
+The built-in browser and some file capabilities require the desktop app. In a development environment, run:
 
-Moke takes a slightly different view: if an AI assistant is helping with the web, it should be able to operate the web. It should read pages, but it should also click, scroll, fill, switch pages, and confirm what changed.
+```bash
+npm run desktop
+```
 
-That is why the inner browser is part of the core design rather than an optional extra.
+Use browser development mode for conversation testing or basic web reading. Use desktop mode when Moke needs to open and operate webpages as part of a task.
 
-## Current Status
+## Important Concepts
 
-Moke is still early. The experience is not as polished as mature tools like Codex, and many details are still being improved.
+### Workspace
 
-But for everyday information browsing, page reading, simple web operations, local model access, and MCP/tool integration, it is already useful enough for personal use.
+Every chat is attached to a workspace, which is a local folder. Moke treats it as the project boundary for reading files, creating files, and saving screenshots. To work on another project, choose a different folder and create a new chat.
 
-The direction is intentionally modest: make it cheap, make it simple, make it usable, then improve it step by step.
+### Action confirmations
 
-## One Line
+Moke may pause and ask for confirmation before writing files, running commands, accessing paths outside the workspace, or calling external tools. The chat approval settings offer three modes:
 
-Moke is a lightweight web-browsing agent: cheap enough for daily use, simple enough to own, and capable of both reading and operating the web.
+- **Manual**: you decide each time; this is the safest option
+- **AI review**: a review model checks whether the action matches the current task
+- **Auto-approve**: fewer interruptions; use only in an environment you fully trust
+
+Access outside the workspace may still require separate authorization, regardless of the selected mode.
+
+### Model services
+
+Moke uses an OpenAI-compatible API, so it can connect to local inference servers or compatible cloud services. Keep API keys in the local `.env` file or application settings. Do not commit them to Git or paste them into chat messages.
+
+### MCP tools (optional)
+
+MCP is a standard way to add tools to Moke, such as database, knowledge-base, or other local services. Most users can skip this at first. When you do configure one, add it in Settings and explicitly allow it to start. MCP tools require approval by default; only tools you explicitly mark as read-only skip tool approval.
+
+## Common Commands
+
+```bash
+npm run dev             # Start development mode
+npm run desktop         # Start desktop development mode
+npm run typecheck       # Run type checking
+npm test                # Run tests
+npm run build           # Build the client
+npm run package:desktop # Package the desktop app
+```
+
+## Design Approach
+
+Many real tasks are difficult not because the final text is hard to generate, but because the assistant needs context and must complete several connected actions. Moke therefore puts conversation, browsing, the workspace, and tools into one execution loop.
+
+The project follows a few boundaries:
+
+- **Local first**: the server, sessions, and browsing data can run locally; you choose the workspace
+- **Visible tools**: execution status, tool calls, and results are shown so failures can be traced
+- **Layered permissions**: read, write, external-path, and external-tool access are handled separately, with confirmation for important actions
+- **Small and extensible**: cover common information tasks first, then add capabilities through MCP and skills instead of shipping everything upfront
+
+## Project Status
+
+Moke is an actively evolving experimental project. The interface, configuration options, and agent behavior may change. If you want to contribute, start with `apps/` for applications, `packages/` for shared capabilities, and `docs/` for design documents.

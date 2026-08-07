@@ -24,5 +24,4 @@ export type RuntimeRun = RunSnapshot & {
   origin: RunOrigin;
   approval_mode: ApprovalMode;
   env: SessionEnvironment;
-  outbound_tool_texts?: string[];
 };

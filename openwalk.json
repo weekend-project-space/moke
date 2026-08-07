@@ -5,8 +5,11 @@
     "private": true
   },
   "tools": {
+    "v2ex/topic": {},
+    "weibo/hot": {},
     "weibo/search": {},
     "zhibo8/matches": {},
+    "zhihu/hot": {},
     "zhihu/search": {}
   }
 }

@@ -51,11 +51,16 @@ const imageUploadSchema = z.object({
   data_url: nonEmptyText,
 }).strict();
 
+const fileReferenceSchema = z.object({
+  name: nonEmptyText.max(260),
+  path: nonEmptyText.max(4000),
+}).strict();
+
 const runOptionsSchema = z.object({
   stream: z.boolean().optional(),
   max_steps: z.number().int().positive().max(1000).optional(),
   max_tool_calls: z.number().int().nonnegative().max(200).optional(),
-  timeout_ms: z.number().int().positive().max(3600000).optional(),
+  timeout_ms: z.number().int().positive().max(72 * 60 * 60 * 1_000).optional(),
   reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max', 'ultra']).optional(),
 }).strict();
 
@@ -69,6 +74,7 @@ export const sendMessageSchema = z.object({
     role: z.literal('user').optional(),
     content: z.string().default(''),
     attachments: z.array(imageUploadSchema).max(4).optional(),
+    files: z.array(fileReferenceSchema).max(10).optional(),
   }).strict(),
   env: mutableSessionEnvironmentInputSchema.optional(),
   options: runOptionsSchema.optional().default({}),
@@ -131,21 +137,33 @@ export const runtimeSettingsSchema = z.object({
   providers: z.array(providerInputSchema).optional(),
 }).strict();
 
-export const skillDraftSchema = z.object({
-  id: safeId.optional(),
-  name: z.string().optional(),
-  description: z.string().optional(),
-  content: z.string().optional(),
-  enabled: z.boolean().optional(),
-  currentId: safeId.optional(),
-}).strict();
-
 export const skillStatusSchema = z.object({
   enabled: z.boolean(),
 }).strict();
 
+export const skillImportSchema = z.object({
+  path: nonEmptyText.max(4000),
+}).strict();
+
 export const mcpSettingsSchema = z.object({
   raw: z.string(),
+}).strict();
+
+export const mcpServerCreateSchema = z.object({
+  id: safeId,
+  command: nonEmptyText.max(2000),
+  args: z.array(z.string().max(4000)).max(100).default([]),
+}).strict();
+
+export const mcpServerUpdateSchema = z.object({
+  command: nonEmptyText.max(2000).optional(),
+  args: z.array(z.string().max(4000)).max(100).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one MCP server field is required',
+});
+
+export const mcpServerStatusSchema = z.object({
+  enabled: z.boolean(),
 }).strict();
 
 export const revokePermissionSchema = z.object({
@@ -173,6 +191,12 @@ export const weixinLoginStartSchema = z.object({
 export const weixinLoginUpdateSchema = z.object({
   code: z.string().trim().regex(/^\d{1,12}$/),
 }).strict();
+
+export const feishuLoginStartSchema = z.object({
+  domain: z.enum(['feishu', 'lark']).optional().default('feishu'),
+}).strict();
+
+export const dingtalkLoginStartSchema = z.object({}).strict();
 
 export const messagingConnectionCreateSchema = z.discriminatedUnion('platform', [
   z.object({

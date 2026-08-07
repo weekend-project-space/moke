@@ -1,6 +1,6 @@
-import { isNativeBrowserAvailable, type BrowserBounds } from '../api/browser'
-import { loadBrowserPreferences, type BrowserLinkOpenMode } from '../model/preferences'
+import { isNativeBrowserAvailable, type BrowserBounds, type BrowserLinkOpenMode } from '../api/browser'
 import { connectBrowserBridge } from '../services/browserBridge'
+import { initializeApiAccess } from '../../../services/apiAccess'
 
 type UseBrowserWorkspaceOptions = {
   apiBase: string
@@ -25,7 +25,7 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     }
   }
 
-  async function openLinkInBrowser(rawUrl: string, mode = loadBrowserPreferences().linkOpenMode) {
+  async function openLinkInBrowser(rawUrl: string, mode: BrowserLinkOpenMode = 'current') {
     const url = normalizeHttpUrl(rawUrl)
     if (!url) return
 
@@ -47,8 +47,15 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
     }
   }
 
-  function initBrowserWorkspace() {
+  async function initBrowserWorkspace() {
     if (!isNativeBrowserAvailable()) return
+
+    try {
+      await initializeApiAccess()
+    } catch (error) {
+      console.error('Failed to initialize browser bridge authentication', error)
+      return
+    }
 
     disconnectBrowserBridge = connectBrowserBridge({
       apiBase: options.apiBase,

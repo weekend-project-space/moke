@@ -4,6 +4,7 @@ export type BrowserPage = {
   url: string
   title: string
   faviconUrl: string
+  faviconUrls: string[]
   canGoBack: boolean
   canGoForward: boolean
   isLoading: boolean
@@ -54,12 +55,22 @@ export type BrowserDialogResult = {
   handled: boolean
 }
 
+export type BrowserDownloadChange = {
+  url: string
+  path?: string | null
+  fileName: string
+  status: 'downloading' | 'completed' | 'failed'
+}
+
 export type BrowserBounds = {
   x: number
   y: number
   width: number
   height: number
 }
+
+export type BrowserLinkOpenMode = 'current' | 'new-tab'
+export type BrowserDataKind = 'cache' | 'cookies'
 
 type TauriGlobal = {
   core?: {
@@ -104,6 +115,13 @@ export const browserApi = {
     return listen<BrowserStateChange>('browser_state_change', (event) => handler(event.payload))
   },
 
+  listenDownloadChanges(handler: (change: BrowserDownloadChange) => void) {
+    const listen = window.__TAURI__?.event?.listen
+    if (!listen) return Promise.resolve(() => undefined)
+
+    return listen<BrowserDownloadChange>('browser_download_change', (event) => handler(event.payload))
+  },
+
   state() {
     return tauriInvoke<BrowserResult>('browser_state')
   },
@@ -134,6 +152,10 @@ export const browserApi = {
 
   capturePreview(pageId: number) {
     return tauriInvoke<string>('browser_capture_preview', { pageId })
+  },
+
+  openDownload(path: string, reveal = false) {
+    return tauriInvoke<void>('browser_open_download', { path, reveal })
   },
 
   click(options: BrowserAutomationOptions) {
@@ -193,5 +215,9 @@ export const browserApi = {
 
   close(pageId: number) {
     return tauriInvoke<BrowserResult>('browser_close', { pageId })
+  },
+
+  clearBrowsingData(kind: BrowserDataKind) {
+    return tauriInvoke<void>('browser_clear_data', { kind })
   },
 }

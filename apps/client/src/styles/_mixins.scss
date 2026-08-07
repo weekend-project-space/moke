@@ -4,7 +4,7 @@
   justify-content: center;
 }
 
-@mixin icon-control($size, $radius: var(--radius-icon-button), $background: transparent, $color: var(--ink-soft)) {
+@mixin icon-control($size, $radius: var(--radius-icon-button), $background: transparent, $color: var(--color-text-secondary)) {
   @include inline-center;
   width: $size;
   min-width: $size;
@@ -15,7 +15,7 @@
   background: $background;
 }
 
-@mixin button-control($height: 30px, $radius: 7px, $padding: 0 10px, $background: transparent, $color: var(--ink-soft)) {
+@mixin button-control($height: 30px, $radius: 7px, $padding: 0 10px, $background: transparent, $color: var(--color-text-secondary)) {
   @include inline-center;
   min-width: 0;
   height: $height;
@@ -26,19 +26,19 @@
   background: $background;
 }
 
-@mixin text-control($height: 30px, $radius: 7px, $background: var(--surface-input)) {
+@mixin text-control($height: 30px, $radius: 7px, $background: var(--color-bg-input)) {
   width: 100%;
   min-width: 0;
   height: $height;
-  border: 1px solid var(--border-control);
+  border: 1px solid var(--color-border-default);
   border-radius: $radius;
   outline: 0;
   padding: 0 9px;
-  color: var(--ink);
+  color: var(--color-text-primary);
   background: $background;
 }
 
-@mixin focus-ring($border-color: var(--focus-control-border), $ring: var(--focus-control-ring)) {
+@mixin focus-ring($border-color: var(--color-focus-border), $ring: var(--color-focus-ring-soft)) {
   border-color: $border-color;
   box-shadow: 0 0 0 3px $ring;
 }

@@ -1,7 +1,7 @@
 import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
 import type { RunHandle, RunLifecycleEvent } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
-import type { AgentEvent, ApprovalMode, AskOption, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
+import type { AgentEvent, ApprovalMode, AskOption, FileAttachmentInput, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
@@ -44,6 +44,7 @@ export type MessageSubmissionError = {
 export type SendMessageInput = {
   content: string
   attachments?: ImageAttachment[]
+  files?: FileAttachmentInput[]
   options?: {
     reasoningEffort?: ReasoningEffort
   }
@@ -286,7 +287,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const draft = typeof input === 'string' ? { content: input } : input
     const trimmedContent = draft.content.trim()
     const attachments = draft.attachments || []
-    if ((!trimmedContent && !attachments.length) || isRunning.value || messageSubmissionInFlight) return false
+    const files = draft.files || []
+    if ((!trimmedContent && !attachments.length && !files.length) || isRunning.value || messageSubmissionInFlight) return false
 
     const startedAsDraft = !sessionId.value
     let createdSessionForSend = false
@@ -322,6 +324,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       const optimisticMessage = appendOptimisticUserMessage(messages.value, {
         content: trimmedContent,
         attachments,
+        files,
       })
       pendingLocalSessions.add(targetSessionId)
 
@@ -329,6 +332,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         const run = await api.sendMessage(targetSessionId, {
           content: trimmedContent,
           attachments,
+          files,
           reasoningEffort: draft.options?.reasoningEffort,
         })
 

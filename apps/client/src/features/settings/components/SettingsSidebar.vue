@@ -15,15 +15,12 @@ const emit = defineEmits<{
 
 <template>
   <aside class="settings-navigation" @contextmenu.prevent>
-    <div class="settings-navigation-header">
-      <h1>{{ uiText.app.settings }}</h1>
-    </div>
     <nav aria-label="Settings sections">
       <button
         v-for="item in settingsNavigationItems"
         :key="item.id"
         type="button"
-        class="settings-navigation-button"
+        class="settings-navigation-button sidebar-navigation-item"
         :class="{ active: activeTab === item.id }"
         :aria-current="activeTab === item.id ? 'page' : undefined"
         @click="emit('select', item.id)"
@@ -35,7 +32,7 @@ const emit = defineEmits<{
     <footer class="settings-navigation-footer">
       <button
         type="button"
-        class="settings-return-button"
+        class="settings-return-button sidebar-navigation-item"
         @click="emit('close')"
       >
         <ArrowLeft :size="15" stroke-width="1.9" aria-hidden="true" />

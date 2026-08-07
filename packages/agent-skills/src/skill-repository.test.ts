@@ -60,6 +60,38 @@ test('skill repository rejects duplicate names and unsafe ids', async () => {
   });
 });
 
+test('skill repository imports a SKILL.md file disabled by default', async () => {
+  const source = await mkdtemp(path.join(tmpdir(), 'moke-skill-import-'));
+  try {
+    const sourceFile = path.join(source, 'SKILL.md');
+    await writeFile(sourceFile, [
+      '---',
+      'name: Release notes',
+      'description: Prepare concise release notes.',
+      '---',
+      '',
+      '# Workflow',
+      '',
+      'Review merged changes.',
+    ].join('\n'));
+
+    await withRepository(async (repository, root) => {
+      const imported = await repository.importFromPath(sourceFile);
+      assert.equal(imported.id, 'release-notes');
+      assert.equal(imported.enabled, false);
+      assert.match(await readFile(path.join(root, '.moke', 'skills', imported.id, 'SKILL.md'), 'utf8'), /Review merged changes/);
+      const invalidFile = path.join(source, 'not-a-skill.md');
+      await writeFile(invalidFile, '# Not a skill');
+      await assert.rejects(
+        repository.importFromPath(invalidFile),
+        (error: unknown) => error instanceof SkillRepositoryError && error.code === 'SKILL_IMPORT_INVALID',
+      );
+    });
+  } finally {
+    await rm(source, { recursive: true, force: true });
+  }
+});
+
 test('skill repository keeps malformed skill directories repairable', async () => {
   await withRepository(async (repository, root) => {
     const invalidDirectory = path.join(root, '.moke', 'skills', 'broken');

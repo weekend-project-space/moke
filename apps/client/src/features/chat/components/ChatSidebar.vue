@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Archive, CalendarClock, Clock3, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
+import { Archive, CalendarClock, Clock3, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import type { SessionSummary } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 
@@ -15,6 +16,8 @@ const props = defineProps<{
   sessionLabel: (session: SessionSummary) => string
   sessionMeta: (session: SessionSummary) => string
 }>()
+
+const router = useRouter()
 
 const emit = defineEmits<{
   archiveSession: [id: string]
@@ -55,7 +58,7 @@ function clearSearch() {
 }
 
 function openScheduledTasks() {
-  window.location.hash = 'tasks'
+  void router.push({ name: 'tasks' })
 }
 
 function isScheduledSession(session: SessionSummary) {
@@ -196,18 +199,12 @@ onUnmounted(() => {
 
 <template>
   <aside class="sidebar" @click="closeContextMenu()" @contextmenu.prevent>
-    <section class="brand">
-      <div class="brand-header">
-        <span class="brand-title">{{ uiText.sidebar.title }}</span>
-      </div>
-    </section>
-
     <nav class="sidebar-primary-actions" aria-label="Workspace">
-      <button type="button" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
+      <button type="button" class="sidebar-navigation-item" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
         <SquarePen :size="15" stroke-width="2.1" />
         <span>{{ uiText.sidebar.newChat }}</span>
       </button>
-      <button type="button" :class="{ active: scheduledTasksActive }" @click.stop="openScheduledTasks">
+      <button type="button" class="sidebar-navigation-item" :class="{ active: scheduledTasksActive }" @click.stop="openScheduledTasks">
         <CalendarClock :size="15" stroke-width="2.1" />
         <span>{{ uiText.sidebar.scheduledTasks }}</span>
       </button>
@@ -253,25 +250,44 @@ onUnmounted(() => {
         class="session"
         :class="{
           active: session.id === activeSessionId,
-          running: isSessionRunning(session.id),
           manageable: !disabled && editingSessionId !== session.id,
         }"
         @contextmenu="openContextMenu($event, session)"
       >
         <button
           v-if="editingSessionId !== session.id"
-          class="session-main"
+          class="session-main sidebar-navigation-item"
+          :class="{ active: session.id === activeSessionId }"
           type="button"
           :disabled="disabled"
           @click="emit('selectSession', session.id)"
         >
           <span class="session-line">
             <small>
-              <Clock3 v-if="isScheduledSession(session)" class="session-origin-icon" :size="11" stroke-width="2" aria-hidden="true" />
               <span class="session-title-text">{{ sessionLabel(session) }}</span>
+              <span
+                v-if="isScheduledSession(session)"
+                class="session-origin-icon"
+                role="img"
+                :aria-label="uiText.sidebar.scheduledSessionOrigin"
+                :title="uiText.sidebar.scheduledSessionOrigin"
+              >
+                <Clock3 :size="12" stroke-width="2" aria-hidden="true" />
+              </span>
               <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
             </small>
-            <time>{{ sessionMeta(session) }}</time>
+            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+              <span
+                v-if="isSessionRunning(session.id)"
+                class="session-running-status"
+                role="status"
+                :aria-label="uiText.sidebar.running"
+                :title="uiText.sidebar.running"
+              >
+                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+              </span>
+            </span>
           </span>
         </button>
         <form v-else class="session-main session-rename-form" @submit.prevent="submitRename(session)">
@@ -284,7 +300,18 @@ onUnmounted(() => {
               @blur="submitRename()"
               @keydown.esc.prevent="cancelRename"
             />
-            <time>{{ sessionMeta(session) }}</time>
+            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+              <span
+                v-if="isSessionRunning(session.id)"
+                class="session-running-status"
+                role="status"
+                :aria-label="uiText.sidebar.running"
+                :title="uiText.sidebar.running"
+              >
+                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+              </span>
+            </span>
           </span>
         </form>
         <button
@@ -304,7 +331,7 @@ onUnmounted(() => {
 
     <footer class="sidebar-footer">
       <button
-        class="sidebar-settings"
+        class="sidebar-settings sidebar-navigation-item"
         type="button"
         :class="{ active: settingsActive }"
         :aria-label="uiText.sidebar.settings"

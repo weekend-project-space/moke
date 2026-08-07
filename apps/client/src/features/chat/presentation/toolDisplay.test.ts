@@ -7,6 +7,7 @@ import type { ProcessItem, ToolStepViewItem } from './types'
 
 test('classifies workspace, browser, and channel tools by their owning surface', () => {
   assert.equal(describeToolCall('read_file', { path: 'README.md' }).toolCategory, 'view')
+  assert.equal(describeToolCall('view_image', { path: 'logo.png' }).toolCategory, 'view')
   assert.equal(describeToolCall('write_file', { path: 'README.md' }).toolCategory, 'change')
   assert.equal(describeToolCall('execute', { command: 'npm test' }).toolCategory, 'run')
   assert.equal(describeToolCall('create_page', { url: 'https://example.com' }).toolCategory, 'browser')

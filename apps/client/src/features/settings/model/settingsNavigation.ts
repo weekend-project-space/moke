@@ -10,7 +10,7 @@ export type SettingsNavigationItem = {
 }
 
 export const settingsNavigationItems: SettingsNavigationItem[] = [
-  { id: 'model', label: 'Model', icon: Bot },
+  { id: 'model', label: 'Models', icon: Bot },
   { id: 'mcp', label: 'MCP', icon: Boxes },
   { id: 'skills', label: 'Skills', icon: BookOpenText },
   { id: 'messaging', label: 'Channels', icon: MessageCircleMore },

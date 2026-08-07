@@ -151,7 +151,7 @@ export type BrowserBackend = {
   navigatePage(input: NavigatePageInput): Promise<BrowserResult>;
   evaluateScript(input: EvaluateScriptInput): Promise<BrowserActionResult>;
   takeSnapshot(input: TakeSnapshotInput): Promise<BrowserActionResult>;
-  takeScreenshot(input: TakeScreenshotInput): Promise<BrowserActionResult>;
+  takeScreenshot(input: TakeScreenshotInput, workspaceRoot: string): Promise<BrowserActionResult>;
   click(input: ClickInput): Promise<BrowserActionResult>;
   hover(input: ElementActionInput): Promise<BrowserActionResult>;
   fill(input: FillInput): Promise<BrowserActionResult>;

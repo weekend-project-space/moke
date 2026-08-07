@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowRight, Check, Copy, GitBranchPlus } from 'lucide-vue-next'
+import { apiUrl } from '../../../services/apiAccess'
+import { ArrowRight, Check, Copy, FileText, GitBranchPlus } from 'lucide-vue-next'
 import type { Message, MessageImageAttachment } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 
@@ -14,7 +15,7 @@ const props = defineProps<{
 
 function attachmentSrc(attachment: MessageImageAttachment) {
   if ('data_url' in attachment) return attachment.data_url
-  return `${props.apiBase}/api/attachments/${encodeURIComponent(attachment.sha256)}`
+  return apiUrl(`${props.apiBase}/api/attachments/${encodeURIComponent(attachment.sha256)}`)
 }
 
 const emit = defineEmits<{
@@ -36,6 +37,12 @@ const emit = defineEmits<{
           loading="lazy"
           decoding="async"
         />
+      </div>
+      <div v-if="message.files?.length" class="user-files">
+        <div v-for="file in message.files" :key="file.id" class="user-file" :title="file.name">
+          <FileText :size="15" stroke-width="1.9" />
+          <span>{{ file.name }}</span>
+        </div>
       </div>
       <div v-if="message.content" class="bubble user">
         <span>{{ message.content }}</span>

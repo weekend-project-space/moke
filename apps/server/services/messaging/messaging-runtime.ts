@@ -1,5 +1,6 @@
 import type { RunManager, RuntimeRun } from '@moke/agent-runtime';
 import { MessagingDeliveryError } from '@moke/messaging-core';
+import type { MessagingOutboundAccess } from '@moke/messaging-tools';
 import type {
   AgentEvent,
   PendingApproval,
@@ -16,6 +17,7 @@ import type {
   MessagingOutboundOperation,
   MessagingOutboundRequest,
   MessagingOutboundResult,
+  MessagingPlatform,
   OutboundContent,
 } from '@moke/messaging-core';
 
@@ -24,6 +26,7 @@ import {
   MessagingStore,
   type InboundJob,
   type InteractionRecord,
+  type MessagingBinding,
   type PublicMessagingConnection,
   type PublicWeixinConnection,
   type StoredOutboundOperation,
@@ -31,7 +34,6 @@ import {
 import { SessionApplicationService } from '../session-application-service.js';
 import { readMessagingDeliveryContents, validateMessagingMediaPaths } from './outbound-media.js';
 import { MessagingConnectionPool } from './connection-pool.js';
-import type { MessagingOutboundAccess } from './send-message-tool.js';
 
 const MAX_OUTBOUND_ATTEMPTS = 8;
 
@@ -115,6 +117,9 @@ export class MessagingRuntime {
   }
 
   onRunEvent(event: AgentEvent, run: RuntimeRun) {
+    if (event.type === 'agent.done' || event.type === 'agent.error') {
+      this.resumeQueuedBindingsForSession(run.session_id);
+    }
     if (run.origin.kind !== 'messaging') return;
     const bindingId = run.origin.binding_id;
     if (event.type === 'agent.started') {
@@ -203,6 +208,31 @@ export class MessagingRuntime {
     const completed = await this.waitForOutbound(input.idempotency_key);
     if (completed.state !== 'delivered') throw new Error(completed.error || 'Messaging delivery failed');
     return { receipts: completed.receipts };
+  }
+
+  resolveTarget(input: { platform: MessagingPlatform; sessionId: string }) {
+    const availableConnectionIds = new Set(
+      this.store.listConnections()
+        .filter((connection) =>
+          connection.platform === input.platform
+          && connection.enabled
+          && connection.state === 'connected')
+        .map((connection) => connection.id),
+    );
+    const platformBindings = this.store.listBindings({ platform: input.platform })
+      .filter((binding) => availableConnectionIds.has(binding.account_id));
+    const sessionBindings = platformBindings.filter((binding) => binding.session_id === input.sessionId);
+    if (sessionBindings.length === 1) return { status: 'resolved' as const, target: toResolvedTarget(sessionBindings[0]!) };
+    if (sessionBindings.length > 1) return { status: 'ambiguous' as const, count: sessionBindings.length };
+
+    if (platformBindings.length === 1) return { status: 'resolved' as const, target: toResolvedTarget(platformBindings[0]!) };
+    if (platformBindings.length > 1) return { status: 'ambiguous' as const, count: platformBindings.length };
+    return { status: 'not_found' as const };
+  }
+
+  getTarget(bindingId: string) {
+    const binding = this.store.getBinding(bindingId);
+    return binding ? toResolvedTarget(binding) : undefined;
   }
 
   async validateMediaPaths(contents: OutboundContent[], access?: MessagingOutboundAccess) {
@@ -315,11 +345,12 @@ export class MessagingRuntime {
     this.drainingBindings.add(bindingId);
     let job: InboundJob | null = null;
     try {
+      const binding = this.store.getBinding(bindingId);
+      const session = binding && this.sessions.getSession(binding.session_id);
+      if (session && this.runManager.getActiveRunForSession(session.id)) return;
       job = this.store.claimNextInboundJob(bindingId);
       if (!job) return;
       const claimedJob = job;
-      const binding = this.store.getBinding(bindingId);
-      const session = binding && this.sessions.getSession(binding.session_id);
       if (!binding || !session) {
         this.store.failInboundJob(bindingId, job.id, 'Messaging binding session is missing');
         queueMicrotask(() => void this.drainBinding(bindingId));
@@ -367,6 +398,12 @@ export class MessagingRuntime {
     }
   }
 
+  private resumeQueuedBindingsForSession(sessionId: string) {
+    for (const binding of this.store.listBindings()) {
+      if (binding.session_id === sessionId) void this.drainBinding(binding.id);
+    }
+  }
+
   private async finishRun(event: Extract<AgentEvent, { type: 'agent.done' | 'agent.error' }>, run: RuntimeRun) {
     const bindingId = run.origin.kind === 'messaging' ? run.origin.binding_id : undefined;
     if (!bindingId) return;
@@ -377,7 +414,14 @@ export class MessagingRuntime {
     this.store.expireRunInteractions(run.id);
     this.enqueueRunOperation(run, { kind: 'activity', active: false }, `run:${run.id}:activity:stop`);
     const completed = event.type === 'agent.done' && event.payload.status === 'completed';
-    const text = completed ? this.finalText(bindingId) : event.type === 'agent.error' ? `Task failed: ${event.payload.message}` : 'The task was cancelled.';
+    const timedOut = event.type === 'agent.done' && event.payload.status === 'timeout';
+    const text = completed
+      ? this.finalText(bindingId)
+      : timedOut
+        ? 'The task timed out.'
+        : event.type === 'agent.error'
+          ? `Task failed: ${event.payload.message}`
+          : 'The task was cancelled.';
     this.store.enqueueOutboundJob({
       idempotencyKey: `run:${run.id}:result`,
       bindingId,
@@ -386,7 +430,7 @@ export class MessagingRuntime {
       coalesceKey: `run:${run.id}:status`,
       operation: {
         kind: 'result',
-        outcome: completed ? 'completed' : event.type === 'agent.error' ? 'failed' : 'cancelled',
+        outcome: completed ? 'completed' : timedOut || event.type === 'agent.error' ? 'failed' : 'cancelled',
         text,
         message_already_delivered: this.store.hasDeliveredText(bindingId, text, run.id),
       },
@@ -589,6 +633,16 @@ function conversationTitle(platform: MessagingInboundEvent['platform']) {
   return platform === 'weixin' ? 'WeChat contact' : platform === 'dingtalk' ? 'DingTalk conversation' : 'Feishu conversation';
 }
 
+function toResolvedTarget(binding: MessagingBinding) {
+  return {
+    bindingId: binding.id,
+    platform: binding.platform,
+    connectionId: binding.account_id,
+    conversationId: binding.conversation_id,
+    conversationType: binding.conversation_type,
+  };
+}
+
 function approvalChoices() {
   return [
     { id: 'approve_once', label: 'Allow once', value: { decision: 'approved', scope: 'once' } },
@@ -598,7 +652,28 @@ function approvalChoices() {
 }
 
 function approvalDetail(approval: PendingApproval) {
-  return `${approval.reason}\n\nTool: ${approval.action.tool}`;
+  if (approval.action.tool === 'send_message') {
+    const input = approval.action.input;
+    const conversation = input.conversation && typeof input.conversation === 'object'
+      ? input.conversation as Record<string, unknown>
+      : {};
+    const destination = [
+      input.platform,
+      input.connection_id && `connection ${input.connection_id}`,
+      conversation.type && conversation.id && `${conversation.type} ${conversation.id}`,
+      input.binding_id && `binding ${input.binding_id}`,
+    ].filter(Boolean).join(' | ');
+    const content = [
+      typeof input.text === 'string' && input.text
+        ? `Text: ${input.text.length > 240 ? `${input.text.slice(0, 237)}...` : input.text}`
+        : '',
+      Array.isArray(input.images) && input.images.length ? `Images: ${input.images.length}` : '',
+      Array.isArray(input.files) && input.files.length ? `Files: ${input.files.length}` : '',
+    ].filter(Boolean).join(' | ');
+    return `${approval.reason}\n\nTool: ${approval.action.tool}\nTarget: ${destination}${content ? `\nContent: ${content}` : ''}`;
+  }
+  const workspace = approval.action.input.__moke_workspace;
+  return `${approval.reason}\n\nTool: ${approval.action.tool}${typeof workspace === 'string' ? `\nWorkspace: ${workspace}` : ''}`;
 }
 
 function retryDelay(attempt: number) {

@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, FolderOpen, FolderPlus, Hand, Image, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Brain, Check, ChevronDown, FileText, FolderOpen, FolderPlus, Hand, Paperclip, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
-import type { ApprovalMode, ImageAttachment, ReasoningEffort } from '../model/conversation'
+import type { ApprovalMode, FileAttachmentInput, ImageAttachment, ReasoningEffort } from '../model/conversation'
 import ComposerSelectControl from './ComposerSelectControl.vue'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
 
 const props = defineProps<{
   attachments: ImageAttachment[]
+  files: FileAttachmentInput[]
   inputValue: string
   modelName: string
   modelProvider: string
@@ -24,11 +25,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   addAttachments: [attachments: ImageAttachment[]]
+  chooseFiles: []
   chooseWorkspaceDirectory: []
   submit: []
   input: []
   enter: [event: KeyboardEvent]
   removeAttachment: [id: string]
+  removeFile: [path: string]
   'update:reasoningEffort': [value: ComposerReasoningEffort]
   'update:approvalMode': [value: ApprovalMode]
   'update:workspaceRoot': [value: string]
@@ -50,7 +53,7 @@ const isDraggingImage = ref(false)
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
-const addOptions = ['image'] as const
+const addOptions = ['attachment']
 const approvalOptions: ApprovalMode[] = ['manual', 'ai_review', 'auto_approve']
 
 function resize() {
@@ -163,6 +166,27 @@ async function addImageFiles(files: File[]) {
   }
 }
 
+function addLocalImages(images: ImageAttachment[], readFailed = false) {
+  attachmentError.value = ''
+  const availableSlots = Math.max(0, MAX_IMAGE_ATTACHMENTS - props.attachments.length)
+  let totalBytes = props.attachments.reduce((total, attachment) => total + approximateDataUrlBytes(attachment.data_url), 0)
+  let rejectedForSize = false
+  const accepted = images.slice(0, availableSlots).filter((image) => {
+    const size = approximateDataUrlBytes(image.data_url)
+    if (size > MAX_IMAGE_FILE_BYTES || totalBytes + size > MAX_IMAGE_TOTAL_BYTES) {
+      rejectedForSize = true
+      return false
+    }
+    totalBytes += size
+    return true
+  })
+
+  if (accepted.length) emit('addAttachments', accepted)
+  if (readFailed) attachmentError.value = uiText.composer.imageReadFailed
+  else if (rejectedForSize) attachmentError.value = uiText.composer.imageTooLarge
+  else if (images.length > availableSlots) attachmentError.value = uiText.composer.imageLimitReached
+}
+
 function approximateDataUrlBytes(dataUrl: string) {
   const commaIndex = dataUrl.indexOf(',')
   const base64Length = commaIndex >= 0 ? dataUrl.length - commaIndex - 1 : dataUrl.length
@@ -186,7 +210,10 @@ function chooseImages() {
 }
 
 function chooseAddAction(value: string) {
-  if (value === 'image') chooseImages()
+  if (value !== 'attachment') return
+  if (!props.nativeWorkspacePicker) return chooseImages()
+  addMenuOpen.value = false
+  emit('chooseFiles')
 }
 
 function updateAddMenu(value: boolean) {
@@ -334,11 +361,64 @@ function handleDrop(event: DragEvent) {
   void addImageFiles(files)
 }
 
-defineExpose({ focus, openWorkspaceEditor, resize })
+defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
 </script>
 
 <template>
   <form ref="composerEl" class="composer" @submit.prevent="$emit('submit')">
+    <div v-if="props.workspaceRoot !== undefined" class="composer-workspace-context">
+      <ComposerSelectControl
+        :open="workspaceMenuOpen"
+        :options="workspaceOptions()"
+        :selected="props.workspaceRoot || ''"
+        menu-class="composer-workspace-menu"
+        @select="chooseWorkspace"
+        @update:open="updateWorkspaceMenu"
+      >
+        <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
+        <template #option-icon>
+          <FolderOpen :size="15" stroke-width="2.1" />
+        </template>
+        <template #option-label="{ option }">
+          <span class="composer-workspace-option-copy">
+            <strong>{{ workspaceName(option) }}</strong>
+          </span>
+        </template>
+        <template #option-selected>
+          <Check :size="14" stroke-width="2.3" />
+        </template>
+        <template #menu-footer>
+          <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
+            <input
+              id="composer-workspace-input"
+              v-model="workspaceDraft"
+              :aria-label="uiText.composer.workspace"
+              type="text"
+              @keydown.enter.prevent="applyWorkspace"
+            />
+            <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
+          </div>
+          <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
+            <FolderPlus :size="15" stroke-width="2.1" />
+            <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
+          </button>
+        </template>
+        <template #trigger="{ open, toggle }">
+          <button
+            class="composer-workspace-context-trigger"
+            type="button"
+            :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
+            :title="props.workspaceRoot || uiText.composer.workspace"
+            :class="{ active: open }"
+            @click="toggle"
+          >
+            <FolderOpen :size="15" stroke-width="1.9" />
+            <span>{{ props.workspaceRoot ? workspaceName(props.workspaceRoot) : uiText.composer.chooseProject }}</span>
+            <ChevronDown :size="13" stroke-width="2.2" />
+          </button>
+        </template>
+      </ComposerSelectControl>
+    </div>
     <div
       class="composer-panel input-mode"
       :class="{ dragging: isDraggingImage }"
@@ -357,6 +437,20 @@ defineExpose({ focus, openWorkspaceEditor, resize })
               :aria-label="uiText.composer.removeImage"
               :title="uiText.composer.removeImage"
               @click="emit('removeAttachment', attachment.id)"
+            >
+              <X :size="12" stroke-width="2.4" />
+            </button>
+          </div>
+        </div>
+        <div v-if="props.files.length" class="composer-files">
+          <div v-for="file in props.files" :key="file.path" class="composer-file" :title="file.path">
+            <FileText :size="15" stroke-width="1.9" />
+            <span>{{ file.name }}</span>
+            <button
+              type="button"
+              :aria-label="uiText.composer.removeFile(file.name)"
+              :title="uiText.composer.removeFile(file.name)"
+              @click="emit('removeFile', file.path)"
             >
               <X :size="12" stroke-width="2.4" />
             </button>
@@ -383,9 +477,9 @@ defineExpose({ focus, openWorkspaceEditor, resize })
             @update:open="updateAddMenu"
           >
             <template #option-icon>
-              <Image :size="15" stroke-width="2.1" />
+              <Paperclip :size="15" stroke-width="2.1" />
             </template>
-            <template #option-label>{{ uiText.composer.chooseImage }}</template>
+            <template #option-label>{{ uiText.composer.addFilesOrImages }}</template>
             <template #trigger="{ open, toggle }">
               <button
                 class="composer-secondary-action"
@@ -397,59 +491,6 @@ defineExpose({ focus, openWorkspaceEditor, resize })
                 @click="toggle"
               >
                 <Plus :size="17" stroke-width="2.2" />
-              </button>
-            </template>
-          </ComposerSelectControl>
-          <ComposerSelectControl
-            v-if="props.workspaceRoot !== undefined"
-            :open="workspaceMenuOpen"
-            :options="workspaceOptions()"
-            :selected="props.workspaceRoot || ''"
-            menu-class="composer-workspace-menu"
-            @select="chooseWorkspace"
-            @update:open="updateWorkspaceMenu"
-          >
-            <template #menu-header>{{ uiText.composer.recentWorkspaces }}</template>
-            <template #option-icon>
-              <FolderOpen :size="17" stroke-width="1.9" />
-            </template>
-            <template #option-label="{ option }">
-              <span class="composer-workspace-option-copy">
-                <strong>{{ workspaceName(option) }}</strong>
-                <small>{{ option }}</small>
-              </span>
-            </template>
-            <template #option-selected>
-              <Check :size="15" stroke-width="2.3" />
-            </template>
-            <template #menu-footer>
-              <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
-                <input
-                  id="composer-workspace-input"
-                  v-model="workspaceDraft"
-                  :aria-label="uiText.composer.workspace"
-                  type="text"
-                  @keydown.enter.prevent="applyWorkspace"
-                />
-                <button type="button" @click="applyWorkspace">{{ uiText.composer.applyWorkspace }}</button>
-              </div>
-              <button v-else class="composer-workspace-other" type="button" @click="beginCustomWorkspace">
-                <FolderPlus :size="17" stroke-width="1.9" />
-                <span>{{ uiText.composer.chooseOtherWorkspace }}</span>
-              </button>
-            </template>
-            <template #trigger="{ open, toggle }">
-              <button
-                class="composer-workspace-action"
-                type="button"
-                :aria-label="uiText.composer.workspaceLabel(props.workspaceRoot || '')"
-                :title="props.workspaceRoot || uiText.composer.workspace"
-                :class="{ active: open }"
-                @click="toggle"
-              >
-                <FolderOpen :size="14" stroke-width="2.1" />
-                <span>{{ props.workspaceRoot || uiText.composer.workspace }}</span>
-                <ChevronDown :size="13" stroke-width="2.2" />
               </button>
             </template>
           </ComposerSelectControl>
@@ -480,9 +521,9 @@ defineExpose({ focus, openWorkspaceEditor, resize })
                 :class="{ active: open }"
                 @click="toggle"
               >
-                <ShieldCheck :size="14" stroke-width="2.1" />
-                <span>{{ approvalModeLabel(props.approvalMode) }}</span>
-                <ChevronDown :size="13" stroke-width="2.2" />
+                <Hand v-if="props.approvalMode === 'manual'" :size="14" stroke-width="2.1" />
+                <ShieldCheck v-else-if="props.approvalMode === 'ai_review'" :size="14" stroke-width="2.1" />
+                <ShieldAlert v-else :size="14" stroke-width="2.1" />
               </button>
             </template>
           </ComposerSelectControl>

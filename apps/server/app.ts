@@ -2,6 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import type { RuntimeRun } from '@moke/agent-runtime';
+import { registerMessagingTools } from '@moke/messaging-tools';
 import {
   loadFirstEnvFile,
   resolveEnvPaths,
@@ -13,7 +14,7 @@ import { createToolRegistry, createRunManager } from './runtime/factory.js';
 import { createRoutes } from './routes/index.js';
 import { BrowserBridge } from './services/browser-bridge.js';
 import { McpSettingsService } from './services/mcp-settings-service.js';
-import { registerMcpTools } from './services/mcp-tools.js';
+import { createMcpToolRuntime } from './services/mcp-tools.js';
 import { PermissionsService } from './services/permissions-service.js';
 import { SettingsService } from './services/settings-service.js';
 import { SkillSettingsService } from './services/skill-settings-service.js';
@@ -25,8 +26,9 @@ import { summarizeSession } from './domain/sessions.js';
 import { SessionApplicationService } from './services/session-application-service.js';
 import { MessagingConnectionPool } from './services/messaging/connection-pool.js';
 import { MessagingRuntime } from './services/messaging/messaging-runtime.js';
-import { createSendMessageTool } from './services/messaging/send-message-tool.js';
 import { WeixinLoginService } from './services/messaging/weixin-login-service.js';
+import { FeishuLoginService } from './services/messaging/feishu-login-service.js';
+import { DingTalkLoginService } from './services/messaging/dingtalk-login-service.js';
 import { WeixinAdapter } from '@moke/messaging-weixin';
 import { DingTalkAdapter } from '@moke/messaging-dingtalk';
 import { FeishuAdapter } from '@moke/messaging-feishu';
@@ -76,7 +78,6 @@ export async function createApp(): Promise<ServerApp> {
 
   const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
-  const mcpSettingsService = new McpSettingsService(mcpConfigPath);
   const settingsService = new SettingsService(settingsPath);
   const skillSettingsService = new SkillSettingsService(defaultWorkspaceRoot);
   const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
@@ -90,6 +91,7 @@ export async function createApp(): Promise<ServerApp> {
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
+  const mcpSettingsService = new McpSettingsService(mcpConfigPath, permissionsService);
   const approvedMessagingRoots = new Set([defaultWorkspaceRoot]);
   const sessionWorkspaceRoots = new Map<string, Set<string>>();
   for (const permission of permissionsService.listWorkspaceRoots()) {
@@ -102,10 +104,17 @@ export async function createApp(): Promise<ServerApp> {
   messagingStore.initialize();
   scheduledTaskStore.initialize();
 
-  const mcpManager = await registerMcpTools(toolRegistry, mcpConfigPath, defaultWorkspaceRoot);
+  const mcpRuntime = await createMcpToolRuntime(
+    mcpConfigPath,
+    defaultWorkspaceRoot,
+    (serverId, fingerprint) => permissionsService.isMcpServerTrusted(serverId, fingerprint),
+  );
   const runManager = createRunManager({
     runs,
     toolRegistry,
+    resolveToolRegistry: mcpRuntime
+      ? async (workspace) => toolRegistry.withTools(await mcpRuntime.getTools(workspace))
+      : undefined,
     createSkillContentManager,
     defaultWorkspaceRoot,
     approveWorkspaceRoot: (root, scope, sessionId) => {
@@ -172,11 +181,13 @@ export async function createApp(): Promise<ServerApp> {
     defaultWorkspaceRoot,
     () => [...approvedMessagingRoots],
   );
-  toolRegistry.register(createSendMessageTool(messagingRuntime));
+  registerMessagingTools(toolRegistry, messagingRuntime);
   const removeMessagingObserver = runManager.addObserver((event, run) => {
     messagingRuntime.onRunEvent(event, run);
   });
   const weixinLoginService = new WeixinLoginService(messagingRuntime);
+  const feishuLoginService = new FeishuLoginService(messagingRuntime);
+  const dingtalkLoginService = new DingTalkLoginService(messagingRuntime);
 
   const server = http.createServer(
     createRoutes({
@@ -192,9 +203,13 @@ export async function createApp(): Promise<ServerApp> {
       skillSettingsService,
       messagingRuntime,
       weixinLoginService,
+      feishuLoginService,
+      dingtalkLoginService,
       scheduledTaskService,
-      defaultWorkspaceRoot,
-    }),
+       defaultWorkspaceRoot,
+     }, {
+       apiToken: process.env.MOKE_API_TOKEN,
+     }),
   );
 
   await messagingRuntime.start();
@@ -207,10 +222,12 @@ export async function createApp(): Promise<ServerApp> {
       scheduledTaskService.stop();
       const httpClosed = closeHttpServer(server);
       removeMessagingObserver();
+      feishuLoginService.close();
+      dingtalkLoginService.close();
       const messagingClosed = messagingRuntime.close();
       const runsStopped = runManager.shutdown();
       browserBridge.close();
-      await mcpManager?.close();
+      await mcpRuntime?.close();
       await messagingClosed;
       await runsStopped;
       await httpClosed;

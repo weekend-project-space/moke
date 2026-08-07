@@ -162,8 +162,8 @@ export class BrowserBridgeBackend implements BrowserBackend {
     return this.callBrowser<BrowserActionResult>('take_snapshot', input);
   }
 
-  async takeScreenshot(input: TakeScreenshotInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('take_screenshot', input);
+  async takeScreenshot(input: TakeScreenshotInput, workspaceRoot: string): Promise<BrowserActionResult> {
+    return this.callBrowser<BrowserActionResult>('take_screenshot', { ...input, workspaceRoot });
   }
 
   async click(input: ClickInput): Promise<BrowserActionResult> {

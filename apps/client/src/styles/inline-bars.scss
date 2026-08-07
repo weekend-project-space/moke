@@ -9,9 +9,9 @@
   align-self: center;
   margin: 0 auto;
   padding: 9px 10px 9px 12px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-lg);
-  background: var(--surface-panel);
+  background: var(--color-bg-content);
   box-shadow: var(--shadow-menu);
 }
 
@@ -23,7 +23,7 @@
 
 .approval-inline-title {
   overflow: hidden;
-  color: var(--ink);
+  color: var(--color-text-primary);
   font-size: var(--font-size-body);
   font-weight: 540;
   line-height: 1.35;
@@ -36,7 +36,7 @@
   min-width: 0;
   align-items: center;
   gap: 4px;
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   font-size: var(--font-size-body);
   line-height: 1.35;
 }
@@ -48,7 +48,7 @@
 .approval-inline-detail code {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--ink), transparent 8%);
+  color: color-mix(in srgb, var(--color-text-primary), transparent 8%);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--font-size-ui);
   font-weight: 500;
@@ -59,7 +59,7 @@
 .approval-inline-reason {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--ink-muted), transparent 8%);
+  color: color-mix(in srgb, var(--color-text-muted), transparent 8%);
   font-size: var(--font-size-body);
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -86,31 +86,31 @@
 }
 
 .approval-inline .primary {
-  border: 1px solid var(--accent-strong);
+  border: 1px solid var(--color-primary-hover);
   color: white;
-  background: var(--accent-strong);
+  background: var(--color-primary-hover);
 }
 
 .approval-inline .secondary {
-  border: 1px solid var(--line);
-  color: var(--ink);
-  background: var(--surface-panel);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  background: var(--color-bg-content);
 }
 
 .approval-inline .ghost {
   border: 1px solid transparent;
-  color: var(--ink-muted);
+  color: var(--color-text-muted);
   background: transparent;
 }
 
 .approval-inline .primary:not(:disabled):hover {
-  background: color-mix(in srgb, var(--accent-strong), black 8%);
+  background: color-mix(in srgb, var(--color-primary-hover), black 8%);
 }
 
 .approval-inline .secondary:not(:disabled):hover,
 .approval-inline .ghost:not(:disabled):hover {
-  color: var(--ink);
-  background: var(--surface-control-hover);
+  color: var(--color-text-primary);
+  background: var(--color-secondary-hover);
 }
 
 .approval-inline button:disabled {

@@ -1,6 +1,7 @@
 import type { RunManager, RunOptions } from '@moke/agent-runtime';
 import type {
   CreateSessionEnvironmentInput,
+  FileAttachment,
   ResolvedImageAttachment,
   SendMessageEnvironmentInput,
   Session,
@@ -39,6 +40,7 @@ export class SessionApplicationService {
     session: Session;
     content: string;
     attachments?: ResolvedImageAttachment[];
+    files?: FileAttachment[];
     options?: RunOptions;
     env?: SendMessageEnvironmentInput;
     source?: {
@@ -50,9 +52,12 @@ export class SessionApplicationService {
   }) {
     const content = input.content.trim();
     const attachments = input.attachments || [];
+    const files = input.files || [];
     const source = input.source;
     const previousSession = structuredClone(input.session);
-    if (!content && attachments.length === 0) throw new Error('message.content or message.attachments is required');
+    if (!content && attachments.length === 0 && files.length === 0) {
+      throw new Error('message.content, message.attachments, or message.files is required');
+    }
     if (input.env) {
       input.session.env = applyMutableSessionEnvironmentInput(
         input.session.env,
@@ -68,7 +73,7 @@ export class SessionApplicationService {
         && message.source.message_id === source.message_id)
       : undefined;
     if (!existing) {
-      maybeSetTitleFromFirstUserMessage(input.session, content || 'Image');
+      maybeSetTitleFromFirstUserMessage(input.session, content || (files.length ? files[0]?.name || 'File' : 'Image'));
       const createdAt = now();
       input.session.messages.push({
         id: id('msg'),
@@ -76,13 +81,14 @@ export class SessionApplicationService {
         content,
         created_at: createdAt,
         ...(attachments.length ? { attachments: attachments.map(({ data_url: _dataUrl, ...stored }) => stored) } : {}),
+        ...(files.length ? { files } : {}),
         ...(source ? { source } : {}),
       });
       input.session.updated_at = createdAt;
     }
     if (!existing || input.env) this.sessionStore.save(input.session);
     try {
-      const run = this.runManager.createRun(input.session, { content, attachments }, input.options);
+      const run = this.runManager.createRun(input.session, { content, attachments, files }, input.options);
       return { messageId: existing?.id || input.session.messages.at(-1)?.id || '', runId: run.id };
     } catch (error) {
       Object.assign(input.session, previousSession);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import test from 'node:test';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -127,4 +128,33 @@ test('router dispatches DELETE requests and sends an empty 204 response', async 
 
   assert.equal(responseBody.status, 204);
   assert.equal(responseBody.body, undefined);
+});
+
+test('router enforces the API token and allowed origins', async () => {
+  const router = createRouter<{}>({
+    apiToken: 'test-token',
+    allowedOrigins: ['http://tauri.localhost'],
+  });
+  router.get('/api/example', ({ json }) => json(200, { ok: true }));
+  const server = http.createServer(router.handler({}));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address() as { port: number };
+
+  try {
+    const missing = await fetch(`http://127.0.0.1:${address.port}/api/example`);
+    assert.equal(missing.status, 401);
+
+    const wrongOrigin = await fetch(`http://127.0.0.1:${address.port}/api/example`, {
+      headers: { Authorization: 'Bearer test-token', Origin: 'https://evil.example' },
+    });
+    assert.equal(wrongOrigin.status, 403);
+
+    const allowed = await fetch(`http://127.0.0.1:${address.port}/api/example`, {
+      headers: { Authorization: 'Bearer test-token', Origin: 'http://tauri.localhost' },
+    });
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.headers.get('access-control-allow-origin'), 'http://tauri.localhost');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });

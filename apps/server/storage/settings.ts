@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import type { ChatModelSettings } from '@moke/agent-re-act';
@@ -192,10 +192,13 @@ export function loadRuntimeSettings(settingsPath: string): RuntimeSettings {
 }
 
 export function saveRuntimeSettings(settingsPath: string, settings: RuntimeSettings) {
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  const temporaryPath = `${settingsPath}.tmp-${process.pid}-${randomUUID()}`;
   try {
-    mkdirSync(dirname(settingsPath), { recursive: true });
-    writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+    writeFileSync(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporaryPath, settingsPath);
   } catch (error) {
-    console.warn(`Failed to save settings to ${settingsPath}:`, error);
+    rmSync(temporaryPath, { force: true });
+    throw new Error(`Failed to save settings to ${settingsPath}`, { cause: error });
   }
 }

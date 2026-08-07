@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { json, readJson, RequestBodyError } from './response.js';
@@ -11,6 +12,11 @@ type Route<TContext> = {
   path: string;
   parts: string[];
   handler: RouteHandler<TContext>;
+};
+
+export type RouterSecurityOptions = {
+  apiToken?: string;
+  allowedOrigins?: string[];
 };
 
 export type RequestContext<TContext> = {
@@ -41,8 +47,9 @@ export function rawResponse() {
   return RAW_RESPONSE;
 }
 
-export function createRouter<TContext>() {
+export function createRouter<TContext>(security: RouterSecurityOptions = {}) {
   const routes: Route<TContext>[] = [];
+  const allowedOrigins = new Set(security.allowedOrigins || defaultAllowedOrigins());
 
   function add(method: Method, path: string, handler: RouteHandler<TContext>) {
     routes.push({ method, path, parts: splitPath(path), handler });
@@ -56,9 +63,22 @@ export function createRouter<TContext>() {
     handler(context: TContext) {
       return async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         try {
+          const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+          if (origin && !allowedOrigins.has(origin)) {
+            return json(res, 403, { error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Origin is not allowed' } });
+          }
+          if (origin) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Last-Event-ID');
+            res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+          }
           if (req.method === 'OPTIONS') return json(res, 204, {});
 
           const url = new URL(req.url || '/', `http://${req.headers.host}`);
+          if (security.apiToken && !isAuthorized(req, url, security.apiToken)) {
+            return json(res, 401, { error: { code: 'UNAUTHORIZED', message: 'API token is required' } });
+          }
           const match = matchRoute(routes, req.method || 'GET', url.pathname);
           if (!match) {
             return json(res, 404, {
@@ -118,6 +138,37 @@ function memoizeBody(req: IncomingMessage) {
 
 function splitPath(path: string) {
   return path.split('/').filter(Boolean);
+}
+
+function defaultAllowedOrigins() {
+  const configured = process.env.MOKE_ALLOWED_ORIGINS
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return configured?.length
+    ? configured
+    : ['http://127.0.0.1:5173', 'http://localhost:5173', 'http://tauri.localhost', 'https://tauri.localhost'];
+}
+
+function isAuthorized(req: IncomingMessage, url: URL, expectedToken: string) {
+  const authorization = req.headers.authorization;
+  const bearer = typeof authorization === 'string' && authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined;
+  const queryToken = req.method === 'GET' && isQueryTokenRoute(url.pathname) ? url.searchParams.get('token') || undefined : undefined;
+  return [bearer, queryToken].some((candidate) => candidate ? tokensEqual(candidate, expectedToken) : false);
+}
+
+function isQueryTokenRoute(pathname: string) {
+  return pathname === '/api/browser/connect'
+    || /^\/api\/runs\/[^/]+\/events$/.test(pathname)
+    || /^\/api\/attachments\/[a-f0-9]{64}$/.test(pathname);
+}
+
+function tokensEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 function matchRoute<TContext>(routes: Route<TContext>[], method: string, pathname: string) {

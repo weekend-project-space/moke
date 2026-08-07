@@ -6,7 +6,6 @@ export { default as ConversationView } from './components/ConversationView.vue'
 export { useAgentSession } from './composables/useAgentSession'
 export { useChatComposer } from './composables/useChatComposer'
 export { useComposerReasoning } from './composables/useComposerReasoning'
-export { useSessionNavigation } from './composables/useSessionNavigation'
 export { formatSessionTime, formatTimelineTime } from './presentation/timeFormat'
 export { isVisibleMessage, useConversationDisplay } from './presentation/useConversationDisplay'
 export type {

@@ -1,8 +1,8 @@
-import { AIMessageChunk, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessageChunk, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
 
 import type { AgentStep, ResolvedImageAttachment, TokenUsage } from '@moke/protocol';
-import type { AgentRunInput, RuntimeContextItem, RuntimeMessage } from '@moke/agent-runtime';
+import type { AgentRunInput, RuntimeContextItem, RuntimeMessage, RuntimeToolImage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
   createHistoryMessages,
@@ -316,6 +316,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
     callId: string;
     name: string;
     output: unknown;
+    images?: RuntimeToolImage[];
     status?: 'error' | 'success';
   }) {
     state.langchain?.push(
@@ -326,6 +327,12 @@ export class ChatCompletionsAdapter implements ModelAdapter {
         status: input.status,
       }),
     );
+    if (input.images?.length) {
+      state.langchain?.push(new HumanMessage(input.images.map((image) => ({
+        type: 'image_url' as const,
+        image_url: { url: image.data_url },
+      }))));
+    }
   }
 
   appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
@@ -396,6 +403,7 @@ export class ResponsesAdapter implements ModelAdapter {
     callId: string;
     name: string;
     output: unknown;
+    images?: RuntimeToolImage[];
     status?: 'error' | 'success';
   }) {
     state.responses?.push({
@@ -403,6 +411,15 @@ export class ResponsesAdapter implements ModelAdapter {
       call_id: input.callId,
       output: stringifyToolOutput(input.output),
     });
+    if (input.images?.length) {
+      state.responses?.push({
+        role: 'user',
+        content: input.images.map((image) => ({
+          type: 'input_image',
+          image_url: image.data_url,
+        })),
+      });
+    }
   }
 
   appendContext(state: ModelConversationState, context: RuntimeContextItem[]) {
