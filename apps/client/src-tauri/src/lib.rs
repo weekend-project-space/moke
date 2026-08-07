@@ -2032,6 +2032,23 @@ fn show_browser_page(
     Ok(())
 }
 
+fn select_browser_page(state: &BrowserState, page_id: u32) -> Result<(), String> {
+    let pages = state
+        .pages
+        .lock()
+        .map_err(|_| "Browser state is unavailable".to_string())?;
+    if !pages.iter().any(|page| page.page_id == page_id) {
+        return Err(format!("Browser page {page_id} was not found"));
+    }
+    drop(pages);
+
+    *state
+        .active_page_id
+        .lock()
+        .map_err(|_| "Browser state is unavailable".to_string())? = Some(page_id);
+    Ok(())
+}
+
 fn hide_active_browser_page(app: &tauri::AppHandle, state: &BrowserState) -> Result<(), String> {
     let pages = state
         .pages
@@ -2193,6 +2210,8 @@ fn create_browser_page(
     }
     if visible {
         show_browser_page(app, state, page_id, Some(bounds))?;
+    } else {
+        select_browser_page(state, page_id)?;
     }
 
     let result = browser_result(state)?;
@@ -2907,12 +2926,10 @@ async fn navigate_page(
 
 #[tauri::command]
 async fn select_page(
-    app: tauri::AppHandle,
     state: tauri::State<'_, BrowserState>,
     page_id: u32,
-    bounds: Option<BrowserBounds>,
 ) -> Result<BrowserResult, String> {
-    show_browser_page(&app, &state, page_id, bounds)?;
+    select_browser_page(&state, page_id)?;
     browser_result(&state)
 }
 
@@ -3024,6 +3041,14 @@ async fn browser_close(
         .active_page_id
         .lock()
         .map_err(|_| "Browser state is unavailable".to_string())?;
+    let closed_page_was_visible = state
+        .pages
+        .lock()
+        .map_err(|_| "Browser state is unavailable".to_string())?
+        .iter()
+        .find(|page| page.page_id == page_id)
+        .map(|page| page.visible)
+        .unwrap_or(false);
     let next_active = {
         let mut pages = state
             .pages
@@ -3051,7 +3076,11 @@ async fn browser_close(
         .map_err(|_| "Browser state is unavailable".to_string())? = next_active;
 
     if let Some(next_active) = next_active {
-        show_browser_page(&app, &state, next_active, None)?;
+        if closed_page_was_visible {
+            show_browser_page(&app, &state, next_active, None)?;
+        } else {
+            select_browser_page(&state, next_active)?;
+        }
     }
 
     let result = browser_result(&state)?;

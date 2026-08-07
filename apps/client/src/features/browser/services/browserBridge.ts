@@ -40,13 +40,6 @@ async function revealBrowserPanel(options: BrowserBridgeOptions) {
   return options.getBrowserBounds?.() || undefined
 }
 
-async function executeAfterReveal<T>(
-  options: BrowserBridgeOptions,
-  action: (bounds: BrowserBounds | undefined) => Promise<T>,
-) {
-  return action(await revealBrowserPanel(options))
-}
-
 export async function executeBrowserRequest(
   request: BrowserBridgeRequest,
   options: BrowserBridgeOptions,
@@ -59,23 +52,15 @@ export async function executeBrowserRequest(
     case 'list_pages':
       return browserApi.state()
     case 'create_page': {
-      const visible = readBool(params, 'visible') ?? true
-      if (!visible) {
-        return browserApi.open({
-          url: readString(params, 'url'),
-          visible,
-        })
-      }
-      return executeAfterReveal(options, (bounds) => browserApi.open({
+      return browserApi.open({
         url: readString(params, 'url'),
-        visible,
-        bounds,
-      }))
+        visible: false,
+      })
     }
     case 'select_page': {
       const pageId = readPageId(params)
       if (!pageId) throw new Error('pageId is required')
-      return executeAfterReveal(options, (bounds) => browserApi.show(pageId, bounds))
+      return browserApi.select(pageId)
     }
     case 'close_page': {
       const pageId = readPageId(params)
@@ -86,7 +71,6 @@ export async function executeBrowserRequest(
       const type = readString(params, 'type') as NavigateType | undefined
       if (!type) throw new Error('type is required')
       const pageId = readPageId(params)
-      await executeAfterReveal(options, (bounds) => browserApi.show(pageId, bounds))
       return browserApi.navigate({
         pageId,
         type,
@@ -95,38 +79,38 @@ export async function executeBrowserRequest(
       })
     }
     case 'evaluate_script':
-      return executeAfterReveal(options, () => browserApi.evaluateScript(params))
+      return browserApi.evaluateScript(params)
     case 'take_snapshot':
       return browserApi.takeSnapshot(params)
     case 'take_screenshot':
-      return executeAfterReveal(options, () => browserApi.takeScreenshot(params))
+      return browserApi.takeScreenshot(params)
     case 'click':
-      return executeAfterReveal(options, () => browserApi.click(params))
+      return browserApi.click(params)
     case 'hover':
-      return executeAfterReveal(options, () => browserApi.hover(params))
+      return browserApi.hover(params)
     case 'fill':
-      return executeAfterReveal(options, () => browserApi.fill(params))
+      return browserApi.fill(params)
     case 'fill_form':
-      return executeAfterReveal(options, () => browserApi.fillForm(params))
+      return browserApi.fillForm(params)
     case 'upload_file':
-      return executeAfterReveal(options, () => browserApi.uploadFile(params))
+      return browserApi.uploadFile(params)
     case 'wait_for':
       return browserApi.waitFor(params)
     case 'press_key':
-      return executeAfterReveal(options, () => browserApi.pressKey(params))
+      return browserApi.pressKey(params)
     case 'type_text':
-      return executeAfterReveal(options, () => browserApi.typeText(params))
+      return browserApi.typeText(params)
     case 'handle_dialog':
       return browserApi.handleDialog(params)
     case 'resize_page': {
       const width = readNumber(params, 'width')
       const height = readNumber(params, 'height')
       if (!width || !height) throw new Error('width and height are required')
-      return executeAfterReveal(options, () => browserApi.resizePage({
+      return browserApi.resizePage({
         pageId: readPageId(params),
         width,
         height,
-      }))
+      })
     }
     case 'show_browser': {
       const bounds = await revealBrowserPanel(options)

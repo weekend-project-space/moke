@@ -7,7 +7,6 @@ const emptySchema = z.object({});
 
 const createPageSchema = z.object({
   url: z.string().min(1).optional(),
-  visible: z.boolean().optional(),
 });
 
 const pageIdSchema = z.object({

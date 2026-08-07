@@ -209,6 +209,10 @@ export const browserApi = {
     return tauriInvoke<BrowserResult>('browser_show', { pageId, bounds })
   },
 
+  select(pageId: number) {
+    return tauriInvoke<BrowserResult>('select_page', { pageId })
+  },
+
   hide() {
     return tauriInvoke<BrowserResult>('browser_hide')
   },
