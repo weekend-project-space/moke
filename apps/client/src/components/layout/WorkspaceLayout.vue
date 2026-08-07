@@ -67,10 +67,12 @@ const layoutRoot = ref<HTMLElement | null>(null)
 const auxiliaryPanel = ref<HTMLElement | null>(null)
 const sidebarResizing = ref(false)
 const auxiliaryResizing = ref(false)
+const layoutTransitioning = ref(false)
 const sidebarMaximum = ref(SIDEBAR_MAX_WIDTH)
 const auxiliaryMaximum = ref(AUXILIARY_MAX_WIDTH)
 let resizeObserver: ResizeObserver | null = null
 let observedAuxiliary: HTMLElement | null = null
+let layoutTransitionTimer: number | undefined
 
 const layoutStyle = computed(() => ({
   '--sidebar-width': `${sharedSidebarWidth.value}px`,
@@ -231,6 +233,19 @@ watch(
   },
 )
 
+watch(
+  () => [props.sidebarCollapsed, props.auxiliaryVisible],
+  () => {
+    if (!isDesktopLayout()) return
+    layoutTransitioning.value = true
+    if (layoutTransitionTimer !== undefined) window.clearTimeout(layoutTransitionTimer)
+    layoutTransitionTimer = window.setTimeout(() => {
+      layoutTransitioning.value = false
+      layoutTransitionTimer = undefined
+    }, 200)
+  },
+)
+
 onMounted(() => {
   initializeSharedWidths()
   resizeObserver = new ResizeObserver(fitPanelWidths)
@@ -240,6 +255,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (layoutTransitionTimer !== undefined) window.clearTimeout(layoutTransitionTimer)
   stopSidebarResize()
   stopAuxiliaryResize()
   resizeObserver?.disconnect()
@@ -256,6 +272,7 @@ onBeforeUnmount(() => {
       'sidebar-open': sidebarOpen,
       'workspace-maximized': auxiliaryMaximized,
       'sidebar-resizing': sidebarResizing,
+      'layout-transitioning': layoutTransitioning,
       'workspace-resizing': auxiliaryResizing,
     }"
     :style="layoutStyle"
@@ -290,7 +307,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-if="auxiliaryVisible"
       class="workspace-resizer"
       role="separator"
       :aria-label="auxiliaryLabel || 'Resize auxiliary panel'"
@@ -303,7 +319,7 @@ onBeforeUnmount(() => {
       @pointerdown="startAuxiliaryResize"
     ></div>
 
-    <aside v-if="auxiliaryVisible" ref="auxiliaryPanel" class="workspace">
+    <aside ref="auxiliaryPanel" class="workspace">
       <slot name="auxiliary" />
     </aside>
   </main>
