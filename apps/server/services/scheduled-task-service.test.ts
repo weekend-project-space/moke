@@ -25,6 +25,7 @@ test('persists tasks and starts an agent session when a task is due', () => {
     const session: Session = {
       id: 'sess_scheduled',
       title: 'Scheduled',
+      visibility: 'visible',
       created_at: '2026-07-29T00:00:00.000Z',
       updated_at: '2026-07-29T00:00:00.000Z',
       messages: [],

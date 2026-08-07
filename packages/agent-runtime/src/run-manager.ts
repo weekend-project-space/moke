@@ -7,7 +7,6 @@ import type {
   ImageAttachment,
   Message,
   PendingApproval,
-  ReasoningEffort,
   ResolvedImageAttachment,
   RunLifecycleEvent,
   RunStatus,
@@ -55,7 +54,6 @@ type RunManagerConfig = {
 export type RunOptions = {
   max_steps?: number;
   max_tool_calls?: number;
-  reasoningEffort?: ReasoningEffort;
   timeout_ms?: number;
   origin?: RunOrigin;
   /**
@@ -222,9 +220,6 @@ export class RunManager {
         input: input.content,
         attachments: input.attachments,
         history,
-        options: {
-          reasoningEffort: options.reasoningEffort,
-        },
         eventBus,
         toolRegistry,
         context: {

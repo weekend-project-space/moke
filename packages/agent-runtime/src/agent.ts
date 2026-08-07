@@ -1,7 +1,6 @@
 import type {
   AssistantMessage,
   Message,
-  ReasoningEffort,
   ResolvedImageAttachment,
   RuntimeLimits,
   TokenUsage,
@@ -22,9 +21,6 @@ export type AgentRunInput = {
   input: string;
   attachments?: ResolvedImageAttachment[];
   history?: RuntimeMessage[];
-  options?: {
-    reasoningEffort?: ReasoningEffort;
-  };
   eventBus: EventBus;
   toolRegistry: ToolRegistry;
   context: ToolContext;

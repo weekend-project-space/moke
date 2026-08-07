@@ -1,13 +1,12 @@
 import { computed, ref } from 'vue'
-import type { FileAttachmentInput, ImageAttachment, ReasoningEffort } from '../model/conversation'
+import type { SendMessageEnvironmentInput } from '@moke/agent-sdk'
+import type { FileAttachmentInput, ImageAttachment } from '../model/conversation'
 
 export type QueuedMessage = {
   content: string
   attachments: ImageAttachment[]
   files?: FileAttachmentInput[]
-  options?: {
-    reasoningEffort?: ReasoningEffort
-  }
+  env?: SendMessageEnvironmentInput
 }
 
 export function useQueuedMessages(maxMessages = 3) {

@@ -84,7 +84,10 @@ class SessionsResource {
   }
 
   async list(options: ListSessionsOptions = {}) {
-    const query = options.includeArchived ? '?include_archived=true' : '';
+    const search = new URLSearchParams();
+    if (options.includeArchived) search.set('include_archived', 'true');
+    if (options.includeHidden) search.set('include_hidden', 'true');
+    const query = search.size ? `?${search}` : '';
     const data = await this.http.request<ListSessionsResponse>(`/api/sessions${query}`, {}, options);
     if (!Array.isArray(data.sessions)) throw new MokeProtocolError('Session list response is invalid');
     return data.sessions;
@@ -136,7 +139,6 @@ class SessionsResource {
       options: {
         stream: true,
         ...input.limits,
-        ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
       },
     };
     const data = await this.http.request<SendMessageResponse>(

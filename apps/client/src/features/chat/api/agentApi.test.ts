@@ -44,7 +44,7 @@ test('agentApi sends a typed message request and returns the SDK RunHandle', asy
   const run = await api.sendMessage('session_1', {
     content: 'hello',
     attachments: [],
-    reasoningEffort: 'high',
+    env: { reasoningEffort: 'high' },
   })
 
   assert.equal(run.id, 'run_1')
@@ -52,7 +52,8 @@ test('agentApi sends a typed message request and returns the SDK RunHandle', asy
   assert.equal(calls[0]?.url, 'http://localhost:4010/api/sessions/session_1/messages')
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     message: { role: 'user', content: 'hello' },
-    options: { stream: true, reasoningEffort: 'high' },
+    env: { reasoningEffort: 'high' },
+    options: { stream: true },
   })
 })
 

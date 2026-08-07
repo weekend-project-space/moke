@@ -11,7 +11,7 @@ test('useChatComposer sends a queued message without discarding the current draf
   const sessionId = ref('session_1')
   const composer = useChatComposer({
     cancelRun: () => undefined,
-    currentRunOptions: () => ({ reasoningEffort: 'high' }),
+    currentRunEnvironment: () => ({ reasoningEffort: 'high' }),
     isRunning,
     onFocus: () => undefined,
     onResize: () => undefined,
@@ -45,14 +45,14 @@ test('useChatComposer sends a queued message without discarding the current draf
   await composer.sendQueuedMessageIfReady()
 
   assert.equal(sent[0]?.content, 'queued message')
-  assert.deepEqual(sent[0]?.options, { reasoningEffort: 'high' })
+  assert.deepEqual(sent[0]?.env, { reasoningEffort: 'high' })
   assert.equal(composer.input.value, 'draft in progress')
 })
 
 test('useChatComposer restores a failed direct submission', async () => {
   const composer = useChatComposer({
     cancelRun: () => undefined,
-    currentRunOptions: () => undefined,
+    currentRunEnvironment: () => undefined,
     isRunning: ref(false),
     onFocus: () => undefined,
     onResize: () => undefined,

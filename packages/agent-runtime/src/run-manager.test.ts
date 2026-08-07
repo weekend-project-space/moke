@@ -504,6 +504,8 @@ test('RunManager freezes the session environment and uses its workspace for the 
   const session = createSession();
   session.env = {
     approval_mode: 'ai_review',
+    model: { provider_id: 'provider_openai', name: 'gpt-5' },
+    reasoningEffort: 'high',
     system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
     workspace: { root: 'E:\\work\\project-a' },
   };
@@ -554,6 +556,8 @@ test('RunManager freezes the session environment and uses its workspace for the 
 
   assert.equal(run.env.workspace.root, 'E:\\work\\project-a');
   assert.equal(run.approval_mode, 'ai_review');
+  assert.deepEqual(run.env.model, { provider_id: 'provider_openai', name: 'gpt-5' });
+  assert.equal(run.env.reasoningEffort, 'high');
   assert.equal(skillWorkspace, 'E:\\work\\project-a');
   assert.equal(agentWorkspace, 'E:\\work\\project-a');
   assert.equal(registryWorkspace, 'E:\\work\\project-a');

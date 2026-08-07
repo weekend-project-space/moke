@@ -22,10 +22,22 @@ test('send API accepts run timeouts up to 72 hours', () => {
   }).success, false);
 });
 
+test('send API validates the optional session model environment', () => {
+  assert.equal(sendMessageSchema.safeParse({
+    message: { content: 'hello' },
+    env: { model: { provider_id: 'provider_openai', name: 'gpt-5' } },
+  }).success, true);
+  assert.equal(sendMessageSchema.safeParse({
+    message: { content: 'hello' },
+    env: { model: { provider_id: 'bad.id' } },
+  }).success, false);
+});
+
 test('session detail omits internal context messages from the public API', async () => {
   const session: Session = {
     id: 'sess_1',
     title: 'Test',
+    visibility: 'visible',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     messages: [
@@ -63,9 +75,127 @@ test('session detail omits internal context messages from the public API', async
   }
 });
 
+test('session creation persists visibility and resolves its model environment', async () => {
+  let saved: Session | undefined;
+  const router = createRouter<RoutesContext>();
+  registerSessionRoutes(router);
+  const server = http.createServer(router.handler({
+    sessionStore: { save: (session: Session) => { saved = session; } },
+    runManager: {},
+    defaultWorkspaceRoot: 'E:\\work\\test\\moke',
+    settingsService: {
+      resolveModelSelection: (selection: { provider_id: string; name?: string }) => ({
+        provider_id: selection.provider_id,
+        name: selection.name || 'default-model',
+      }),
+    },
+  } as unknown as RoutesContext));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        visibility: 'hidden',
+        env: { model: { provider_id: 'provider_openai' } },
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(saved?.visibility, 'hidden');
+    assert.deepEqual(saved?.env?.model, { provider_id: 'provider_openai', name: 'default-model' });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('send API applies and clears session model environment atomically', async () => {
+  const session: Session = {
+    id: 'sess_send_env',
+    title: 'Test',
+    visibility: 'visible',
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    messages: [],
+    metadata: {},
+    env: {
+      approval_mode: 'manual',
+      system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
+      workspace: { root: 'E:\\work\\test\\moke' },
+    },
+  };
+  const router = createRouter<RoutesContext>();
+  registerSessionRoutes(router);
+  const server = http.createServer(router.handler({
+    sessionStore: { get: () => session, save: () => undefined },
+    attachmentStore: { saveImages: () => [] },
+    runManager: {
+      getActiveRunForSession: () => undefined,
+      createRun: () => ({ id: 'run_send_env' }),
+    },
+    defaultWorkspaceRoot: 'E:\\work\\test\\moke',
+    settingsService: {
+      resolveModelSelection: (selection: { provider_id: string; name?: string }) => ({
+        provider_id: selection.provider_id,
+        name: selection.name || 'default-model',
+      }),
+    },
+  } as unknown as RoutesContext));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  try {
+    const send = (content: string, env: unknown) => fetch(`http://127.0.0.1:${port}/api/sessions/${session.id}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: { role: 'user', content }, env }),
+    });
+
+    assert.equal((await send('use selected model', {
+      model: { provider_id: 'provider_openai' },
+      reasoningEffort: 'high',
+    })).status, 200);
+    assert.deepEqual(session.env?.model, { provider_id: 'provider_openai', name: 'default-model' });
+    assert.equal(session.env?.reasoningEffort, 'high');
+
+    assert.equal((await send('clear selected model', {
+      model: null,
+      reasoningEffort: null,
+    })).status, 200);
+    assert.equal(session.env?.model, undefined);
+    assert.equal(session.env?.reasoningEffort, undefined);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('session list hides hidden sessions unless requested', async () => {
+  const sessions = [
+    { id: 'sess_visible', title: 'Visible', visibility: 'visible', archived: false },
+    { id: 'sess_hidden', title: 'Hidden', visibility: 'hidden', archived: false },
+  ];
+  const router = createRouter<RoutesContext>();
+  registerSessionRoutes(router);
+  const server = http.createServer(router.handler({
+    sessionStore: { list: () => sessions },
+  } as unknown as RoutesContext));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  try {
+    const normal = await (await fetch(`http://127.0.0.1:${port}/api/sessions`)).json() as { sessions: typeof sessions };
+    const all = await (await fetch(`http://127.0.0.1:${port}/api/sessions?include_hidden=true`)).json() as { sessions: typeof sessions };
+    assert.deepEqual(normal.sessions.map((session) => session.id), ['sess_visible']);
+    assert.deepEqual(all.sessions.map((session) => session.id), ['sess_visible', 'sess_hidden']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test('session environment API updates approval mode without changing workspace', async () => {
   const session: Session = {
-    id: 'sess_env', title: 'Test', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
+    id: 'sess_env', title: 'Test', visibility: 'visible', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
     env: { approval_mode: 'manual', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
   };
   const router = createRouter<RoutesContext>();
@@ -93,7 +223,7 @@ test('session environment API updates approval mode without changing workspace',
 
 test('session environment and send APIs reject workspace changes', async () => {
   const session: Session = {
-    id: 'sess_env', title: 'Test', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
+    id: 'sess_env', title: 'Test', visibility: 'visible', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
     env: { approval_mode: 'manual', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
   };
   const router = createRouter<RoutesContext>();
@@ -134,7 +264,7 @@ test('session environment and send APIs reject workspace changes', async () => {
 
 test('send API rejects a second active run for the same session', async () => {
   const session: Session = {
-    id: 'sess_active', title: 'Test', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
+    id: 'sess_active', title: 'Test', visibility: 'visible', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
   };
   const router = createRouter<RoutesContext>();
   registerSessionRoutes(router);

@@ -3,18 +3,19 @@ import type {
   CreateSessionEnvironmentInput,
   RunLifecycleListener,
   RunLifecycleOptions,
+  SendMessageEnvironmentInput,
   SessionRunEventListener,
   SessionRunEventOptions,
   UpdateSessionEnvironmentInput,
 } from '@moke/agent-sdk'
-import type { FileAttachmentInput, ImageAttachment, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
+import type { FileAttachmentInput, ImageAttachment, Message, SessionSummary } from '../model/conversation'
 import { apiFetch, getApiToken } from '../../../services/apiAccess'
 
 export type SendMessageRequest = {
   content: string
   attachments: ImageAttachment[]
   files?: FileAttachmentInput[]
-  reasoningEffort?: ReasoningEffort
+  env?: SendMessageEnvironmentInput
 }
 
 export { MokeApiError as AgentApiError }
@@ -70,7 +71,7 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = apiFetch
         content: input.content,
         attachments: input.attachments,
         files: input.files,
-        reasoningEffort: input.reasoningEffort,
+        env: input.env,
       })
     },
   }

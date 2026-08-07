@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { CreateSessionEnvironmentInput, RunHandle, RunLifecycleEvent, RunLifecycleListener } from '@moke/agent-sdk'
+import type { CreateSessionEnvironmentInput, RunHandle, RunLifecycleEvent, RunLifecycleListener, SendMessageEnvironmentInput } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
 import type { AgentApi } from '../api/agentApi'
-import type { ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
+import type { ImageAttachment, Message } from '../model/conversation'
 import { useAgentSession } from './useAgentSession'
 
 Object.defineProperty(globalThis, 'window', {
@@ -24,7 +24,7 @@ function createHarness(initialMessages: Message[]) {
     input: {
       content: string
       attachments?: ImageAttachment[]
-      reasoningEffort?: ReasoningEffort
+      env?: SendMessageEnvironmentInput
     }
   }> = []
   const pendingSends: Array<{
@@ -55,7 +55,7 @@ function createHarness(initialMessages: Message[]) {
     sendMessage: (targetSessionId: string, input: {
       content: string
       attachments?: ImageAttachment[]
-      reasoningEffort?: ReasoningEffort
+      env?: SendMessageEnvironmentInput
     }) => {
       sendCalls.push({ sessionId: targetSessionId, input })
       return new Promise<RunHandle>((resolve, reject) => {

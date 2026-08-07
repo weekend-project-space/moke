@@ -82,6 +82,27 @@ test('sessions.create sends the creation-only workspace environment', async () =
   });
 });
 
+test('sessions.create sends visibility and session model environment', async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return json({ session: { id: 'sess_hidden' } });
+  }) as typeof fetch;
+  const client = new MokeClient({ baseUrl: 'http://127.0.0.1:4010', fetch: fetcher });
+
+  await client.sessions.create({
+    title: 'Background task',
+    visibility: 'hidden',
+    env: { model: { provider_id: 'provider_openai', name: 'gpt-5' } },
+  });
+
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+    title: 'Background task',
+    visibility: 'hidden',
+    env: { model: { provider_id: 'provider_openai', name: 'gpt-5' } },
+  });
+});
+
 test('SessionHandle.send maps the message request and returns a RunHandle', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
@@ -93,9 +114,10 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
   const run = await client.session('sess_1').send({
     content: 'hello',
     files: [{ name: 'report.pdf', path: 'E:\\reports\\report.pdf' }],
-    reasoningEffort: 'high',
     env: {
       approval_mode: 'ai_review',
+      model: { provider_id: 'provider_openai', name: 'gpt-5' },
+      reasoningEffort: 'high',
     },
   });
 
@@ -111,9 +133,25 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
     },
     env: {
       approval_mode: 'ai_review',
+      model: { provider_id: 'provider_openai', name: 'gpt-5' },
+      reasoningEffort: 'high',
     },
-    options: { stream: true, reasoningEffort: 'high' },
+    options: { stream: true },
   });
+});
+
+test('sessions.list supports includeHidden without dropping includeArchived', async () => {
+  let requestUrl = '';
+  const client = new MokeClient({
+    baseUrl: 'http://127.0.0.1:4010',
+    fetch: (async (input: URL | RequestInfo) => {
+      requestUrl = String(input);
+      return json({ sessions: [], next_cursor: null });
+    }) as typeof fetch,
+  });
+
+  await client.sessions.list({ includeArchived: true, includeHidden: true });
+  assert.equal(requestUrl, 'http://127.0.0.1:4010/api/sessions?include_archived=true&include_hidden=true');
 });
 
 test('SessionHandle.get preserves session metadata returned by the detail endpoint', async () => {

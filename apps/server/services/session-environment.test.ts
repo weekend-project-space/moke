@@ -41,6 +41,19 @@ test('applyMutableSessionEnvironmentInput updates approval and preserves workspa
   assert.equal(unchangedUpdate.workspace.root, path.resolve('E:\\work\\project-a'));
 });
 
+test('applyMutableSessionEnvironmentInput persists and clears a model selection', () => {
+  const current = createSessionEnvironment({ defaultWorkspaceRoot: 'E:\\work\\default' });
+  const selected = applyMutableSessionEnvironmentInput(current, {
+    model: { provider_id: 'provider_openai', name: 'gpt-5' },
+    reasoningEffort: 'high',
+  }, 'E:\\work\\default');
+
+  assert.deepEqual(selected.model, { provider_id: 'provider_openai', name: 'gpt-5' });
+  assert.equal(selected.reasoningEffort, 'high');
+  const restored = applyMutableSessionEnvironmentInput(selected, { model: null }, 'E:\\work\\default');
+  assert.equal(restored.model, undefined);
+});
+
 test('session environment rejects a relative workspace root', () => {
   assert.throws(
     () => createSessionEnvironment({

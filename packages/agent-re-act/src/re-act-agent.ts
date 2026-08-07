@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AgentRunInput, AgentRunResult } from '@moke/agent-runtime';
 import { normalizeRuntimeToolResult, ToolExecutionError } from '@moke/agent-runtime';
-import type { AgentStep, AgentStepPhase, TokenUsage, ToolCall } from '@moke/protocol';
+import type { AgentStep, AgentStepPhase, ModelSelection, TokenUsage, ToolCall } from '@moke/protocol';
 import {
   ASK_USER_TOOL_NAME,
   askUserTool,
@@ -70,7 +70,7 @@ function addTokenUsage(total: TokenUsage, usage?: TokenUsage) {
 export class ReActAgent {
   constructor(
     private readonly config: {
-      getModelSettings?: () => Partial<ChatModelSettings>;
+      getModelSettings?: (selection?: ModelSelection) => Partial<ChatModelSettings>;
     } = {},
   ) {}
 
@@ -82,11 +82,10 @@ export class ReActAgent {
     toolRegistry,
     context,
     limits: rawLimits,
-    options: rawOptions = {},
   }: AgentRunInput): Promise<AgentRunResult> {
     const modelSettings = {
-      ...resolveChatModelSettings(this.config.getModelSettings?.()),
-      ...(rawOptions.reasoningEffort ? { reasoningEffort: rawOptions.reasoningEffort } : {}),
+      ...resolveChatModelSettings(this.config.getModelSettings?.(context.run?.env.model)),
+      ...(context.run?.env.reasoningEffort ? { reasoningEffort: context.run.env.reasoningEffort } : {}),
     };
     if (!modelSettings.apiKey) {
       throw new Error('OPENAI_API_KEY is not set; ReAct agent requires an LLM provider.');

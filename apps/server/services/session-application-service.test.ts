@@ -10,6 +10,7 @@ test('send rolls back the session environment and message when run creation fail
   const session: Session = {
     id: 'sess_1',
     title: 'New chat',
+    visibility: 'visible',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     messages: [],
@@ -48,6 +49,7 @@ test('send persists local file references and passes them to the run', () => {
   const session: Session = {
     id: 'sess_files',
     title: 'New chat',
+    visibility: 'visible',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     messages: [],

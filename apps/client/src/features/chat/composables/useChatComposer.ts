@@ -1,12 +1,13 @@
 import { computed, nextTick, ref, type Ref } from 'vue'
+import type { SendMessageEnvironmentInput } from '@moke/agent-sdk'
 
 import { uiText } from '../../../text/uiText'
-import type { FileAttachmentInput, ImageAttachment, PendingAsk, ReasoningEffort } from '../model/conversation'
+import type { FileAttachmentInput, ImageAttachment, PendingAsk } from '../model/conversation'
 import { useQueuedMessages, type QueuedMessage } from './useQueuedMessages'
 
 type UseChatComposerOptions = {
   cancelRun: () => void | Promise<void>
-  currentRunOptions: () => { reasoningEffort?: ReasoningEffort } | undefined
+  currentRunEnvironment: () => SendMessageEnvironmentInput | undefined
   isRunning: Readonly<Ref<boolean>>
   maxQueuedMessages?: number
   onFocus: () => void
@@ -72,7 +73,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
       content,
       attachments: [...attachments.value],
       files: [...files.value],
-      options: options.currentRunOptions(),
+      env: options.currentRunEnvironment(),
     })
   }
 
@@ -101,7 +102,7 @@ export function useChatComposer(options: UseChatComposerOptions) {
       content,
       attachments: [...attachments.value],
       files: [...files.value],
-      options: options.currentRunOptions(),
+      env: options.currentRunEnvironment(),
     })
     if (!queued) return false
 

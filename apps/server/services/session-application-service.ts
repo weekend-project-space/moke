@@ -5,6 +5,7 @@ import type {
   ResolvedImageAttachment,
   SendMessageEnvironmentInput,
   Session,
+  SessionVisibility,
 } from '@moke/protocol';
 import type { SessionRepository } from '../storage/session-store.js';
 import { id, maybeSetTitleFromFirstUserMessage, now } from '../domain/sessions.js';
@@ -17,11 +18,17 @@ export class SessionApplicationService {
     private readonly defaultWorkspaceRoot: string,
   ) {}
 
-  createSession(input: { title: string; metadata?: Record<string, unknown>; env?: CreateSessionEnvironmentInput }) {
+  createSession(input: {
+    title: string;
+    metadata?: Record<string, unknown>;
+    visibility?: SessionVisibility;
+    env?: CreateSessionEnvironmentInput;
+  }) {
     const createdAt = now();
     const session: Session = {
       id: id('sess'),
       title: input.title,
+      visibility: input.visibility || 'visible',
       created_at: createdAt,
       updated_at: createdAt,
       messages: [],

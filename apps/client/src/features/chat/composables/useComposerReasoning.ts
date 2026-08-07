@@ -79,9 +79,9 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
     }
   }
 
-  function currentRunOptions() {
+  function currentRunEnvironment() {
     return composerReasoningEffort.value === 'default'
-      ? undefined
+      ? { reasoningEffort: null }
       : { reasoningEffort: composerReasoningEffort.value }
   }
 
@@ -97,7 +97,7 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
     activeModel,
     composerReasoningEffort,
     composerReasoningOptions,
-    currentRunOptions,
+    currentRunEnvironment,
     loadCapability,
     loadStoredSelection,
   }

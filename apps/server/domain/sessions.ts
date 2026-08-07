@@ -163,6 +163,7 @@ export function forkSession({ source, messageId, now }: ForkSessionInput): Sessi
   return {
     id: id('sess'),
     title: source.title,
+    visibility: source.visibility,
     created_at: now,
     updated_at: now,
     messages,

@@ -1,3 +1,5 @@
+import type { ModelSelection } from '@moke/protocol';
+
 import {
   loadRuntimeSettings,
   normalizeProvider,
@@ -9,6 +11,15 @@ import {
   type RuntimeSettings,
   type RuntimeSettingsInput,
 } from '../storage/settings.js';
+
+export class ModelProviderNotFoundError extends Error {
+  readonly code = 'MODEL_PROVIDER_NOT_FOUND';
+
+  constructor(readonly providerId: string) {
+    super(`Model provider "${providerId}" was not found`);
+    this.name = 'ModelProviderNotFoundError';
+  }
+}
 
 export class SettingsService {
   private settings: RuntimeSettings;
@@ -32,10 +43,25 @@ export class SettingsService {
     };
   }
 
-  getModelSettings() {
-    const provider =
-      this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
-    return providerToModelSettings(provider);
+  resolveModelSelection(selection?: ModelSelection): ModelSelection {
+    const provider = selection
+      ? this.settings.providers.find((item) => item.id === selection.provider_id)
+      : this.settings.providers.find((item) => item.id === this.settings.activeProviderId) || this.settings.providers[0];
+    if (!provider) throw new ModelProviderNotFoundError(selection?.provider_id || this.settings.activeProviderId);
+    return {
+      provider_id: provider.id,
+      name: selection?.name?.trim() || provider.model,
+    };
+  }
+
+  getModelSettings(selection?: ModelSelection) {
+    const resolved = this.resolveModelSelection(selection);
+    const provider = this.settings.providers.find((item) => item.id === resolved.provider_id);
+    if (!provider) throw new ModelProviderNotFoundError(resolved.provider_id);
+    return {
+      ...providerToModelSettings(provider),
+      model: resolved.name || provider.model,
+    };
   }
 
   updateModelProviders(input: RuntimeSettingsInput) {

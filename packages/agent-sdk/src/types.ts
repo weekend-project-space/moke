@@ -5,9 +5,9 @@ import type {
   FileAttachmentInput,
   PendingApproval,
   PendingAsk,
-  ReasoningEffort,
   RuntimeLimits,
   RunLifecycleEvent,
+  SessionVisibility,
   CreateSessionEnvironmentInput,
   SendMessageEnvironmentInput,
   UpdateSessionEnvironmentInput,
@@ -29,11 +29,13 @@ export type RequestOptions = {
 
 export type ListSessionsOptions = RequestOptions & {
   includeArchived?: boolean;
+  includeHidden?: boolean;
 };
 
 export type CreateSessionInput = {
   title?: string;
   metadata?: Record<string, unknown>;
+  visibility?: SessionVisibility;
   env?: CreateSessionEnvironmentInput;
 };
 
@@ -54,7 +56,6 @@ export type SendMessageInput = {
   content: string;
   attachments?: ImageAttachmentUpload[];
   files?: FileAttachmentInput[];
-  reasoningEffort?: ReasoningEffort;
   limits?: Partial<RuntimeLimits>;
   env?: SendMessageEnvironmentInput;
 };

@@ -36,6 +36,7 @@ test('run lifecycle route sends current and subsequent statuses across sessions'
   const session: Session = {
     id: 'sess_1',
     title: 'Test',
+    visibility: 'visible',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     messages: [],

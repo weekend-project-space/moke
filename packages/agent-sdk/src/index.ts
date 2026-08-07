@@ -40,6 +40,7 @@ export type {
 export type {
   AgentEvent,
   Message,
+  ModelSelection,
   PendingApproval,
   PendingAsk,
   RunSnapshot,
@@ -47,6 +48,7 @@ export type {
   RunStatus,
   Session,
   SessionSummary,
+  SessionVisibility,
   CreateSessionEnvironmentInput,
   SendMessageEnvironmentInput,
 } from '@moke/protocol';

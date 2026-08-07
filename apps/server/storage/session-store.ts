@@ -15,7 +15,7 @@ import { normalizeSessionEnvironment } from '../services/session-environment.js'
 const SAVE_DEBOUNCE_MS = 80;
 const MAX_RETRY_DELAY_MS = 5_000;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 
 export type SessionSummaryFactory = (session: Session) => SessionSummary;
 
@@ -215,9 +215,12 @@ export class JsonSessionStore implements SessionRepository {
   private readSessionFile(filePath: string, expectedId: string) {
     const session = JSON.parse(readFileSync(filePath, 'utf8')) as Partial<Session>;
     if (!isSession(session) || session.id !== expectedId) throw new Error('invalid session shape or filename');
-    if (!this.input.workspace) return session as Session;
-    const normalized = { ...session, env: normalizeSessionEnvironment(session.env, this.input.workspace) } as Session;
-    if (JSON.stringify(session.env) !== JSON.stringify(normalized.env)) this.pendingSessions.set(normalized.id, normalized);
+    const normalized = {
+      ...session,
+      visibility: session.visibility === 'hidden' ? 'hidden' : 'visible',
+      ...(this.input.workspace ? { env: normalizeSessionEnvironment(session.env, this.input.workspace) } : {}),
+    } as Session;
+    if (JSON.stringify(session) !== JSON.stringify(normalized)) this.pendingSessions.set(normalized.id, normalized);
     return normalized;
   }
 
@@ -303,6 +306,7 @@ function isSessionSummary(value: unknown): value is SessionSummary {
     && typeof candidate.title === 'string'
     && typeof candidate.created_at === 'string'
     && typeof candidate.updated_at === 'string'
+    && (candidate.visibility === 'visible' || candidate.visibility === 'hidden')
     && typeof candidate.archived === 'boolean'
     && typeof candidate.pinned === 'boolean'
     && typeof candidate.preview === 'string'

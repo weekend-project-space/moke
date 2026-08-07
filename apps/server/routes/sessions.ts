@@ -24,23 +24,26 @@ import {
 } from '../domain/sessions.js';
 import { SessionApplicationService } from '../services/session-application-service.js';
 import { applyMutableSessionEnvironmentInput, SessionEnvironmentError } from '../services/session-environment.js';
+import { ModelProviderNotFoundError } from '../services/settings-service.js';
 
 export function registerSessionRoutes(router: Router<RoutesContext>) {
   router.post('/api/sessions', async ({ body, context, json }) => {
     const requestBody = await parseBody(body, createSessionSchema);
-    const session = withEnvironmentError(() =>
+    const session = withRequestError(() =>
       new SessionApplicationService(context.sessionStore, context.runManager, context.defaultWorkspaceRoot).createSession({
         title: requestBody.title || 'New chat',
         metadata: requestBody.metadata,
-        env: requestBody.env,
+        visibility: requestBody.visibility,
+        env: resolveEnvironmentModel(context, requestBody.env),
       }));
     return json(200, { session });
   });
 
   router.get('/api/sessions', ({ context, json, query }) => {
-    const { include_archived: includeArchived } = parseQuery(query, listSessionsQuerySchema);
+    const { include_archived: includeArchived, include_hidden: includeHidden } = parseQuery(query, listSessionsQuerySchema);
     const visibleSessions = context.sessionStore.list().filter(
-      (session) => includeArchived === 'true' || !session.archived,
+      (session) => (includeArchived === 'true' || !session.archived)
+        && (includeHidden === 'true' || session.visibility !== 'hidden'),
     );
 
     return json(200, {
@@ -66,9 +69,9 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     const rawInput = await body();
     rejectImmutableWorkspace(rawInput);
     const input = parseInput(updateSessionEnvironmentSchema, rawInput);
-    session.env = withEnvironmentError(() => applyMutableSessionEnvironmentInput(
+    session.env = withRequestError(() => applyMutableSessionEnvironmentInput(
       session.env,
-      input,
+      resolveEnvironmentModel(context, input) || input,
       context.defaultWorkspaceRoot,
     ));
     session.updated_at = now();
@@ -115,16 +118,13 @@ export function registerSessionRoutes(router: Router<RoutesContext>) {
     }
 
     const sessionApplicationService = new SessionApplicationService(context.sessionStore, context.runManager, context.defaultWorkspaceRoot);
-    const result = withEnvironmentError(() => sessionApplicationService.acceptUserMessage({
+    const result = withRequestError(() => sessionApplicationService.acceptUserMessage({
       session,
       content,
       attachments,
       files,
-      env: requestBody.env,
-      options: {
-      ...requestBody.options,
-      reasoningEffort: requestBody.options.reasoningEffort === 'ultra' ? 'max' : requestBody.options.reasoningEffort,
-      },
+      env: resolveEnvironmentModel(context, requestBody.env),
+      options: requestBody.options,
     }));
 
     return json(200, {
@@ -149,7 +149,15 @@ function rejectImmutableWorkspace(value: unknown) {
   );
 }
 
-function withEnvironmentError<T>(operation: () => T): T {
+function resolveEnvironmentModel<T extends { model?: { provider_id: string; name?: string } | null }>(
+  context: RoutesContext,
+  input: T | undefined,
+): T | undefined {
+  if (!input || input.model === undefined || input.model === null) return input;
+  return { ...input, model: context.settingsService.resolveModelSelection(input.model) };
+}
+
+function withRequestError<T>(operation: () => T): T {
   try {
     return operation();
   } catch (error) {
@@ -157,6 +165,9 @@ function withEnvironmentError<T>(operation: () => T): T {
       throw new HttpError(409, error.code, error.message);
     }
     if (error instanceof SessionEnvironmentError) {
+      throw new HttpError(400, error.code, error.message);
+    }
+    if (error instanceof ModelProviderNotFoundError) {
       throw new HttpError(400, error.code, error.message);
     }
     throw error;

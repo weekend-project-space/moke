@@ -1,7 +1,7 @@
 import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
-import type { RunHandle, RunLifecycleEvent } from '@moke/agent-sdk'
+import type { RunHandle, RunLifecycleEvent, SendMessageEnvironmentInput } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
-import type { AgentEvent, ApprovalMode, AskOption, FileAttachmentInput, ImageAttachment, Message, ReasoningEffort } from '../model/conversation'
+import type { AgentEvent, ApprovalMode, AskOption, FileAttachmentInput, ImageAttachment, Message } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
 import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
@@ -45,9 +45,7 @@ export type SendMessageInput = {
   content: string
   attachments?: ImageAttachment[]
   files?: FileAttachmentInput[]
-  options?: {
-    reasoningEffort?: ReasoningEffort
-  }
+  env?: SendMessageEnvironmentInput
 }
 
 export function useAgentSession(options: UseAgentSessionOptions) {
@@ -333,7 +331,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           content: trimmedContent,
           attachments,
           files,
-          reasoningEffort: draft.options?.reasoningEffort,
+          env: draft.env,
         })
 
         localRunIds.add(run.id)

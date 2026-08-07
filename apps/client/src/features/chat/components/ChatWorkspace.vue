@@ -114,7 +114,7 @@ const {
   activeModel,
   composerReasoningEffort,
   composerReasoningOptions,
-  currentRunOptions,
+  currentRunEnvironment,
   loadCapability: loadReasoningCapability,
   loadStoredSelection: loadComposerReasoningEffort,
 } = useComposerReasoning({ apiBase, serverStatus })
@@ -148,7 +148,7 @@ const {
   stopAndSendQueuedMessage,
 } = useChatComposer({
   cancelRun,
-  currentRunOptions,
+  currentRunEnvironment,
   isRunning,
   onFocus: () => composerBox.value?.focus(),
   onResize: resizeComposer,

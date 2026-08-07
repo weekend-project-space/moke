@@ -10,23 +10,35 @@ export const attachmentParamsSchema = z.object({
 
 export const listSessionsQuerySchema = z.object({
   include_archived: z.enum(['true', 'false']).optional().default('false'),
+  include_hidden: z.enum(['true', 'false']).optional(),
 }).strict();
 
 const approvalModeSchema = z.enum(['manual', 'ai_review', 'auto_approve']);
 const scheduledTaskStatusSchema = z.enum(['enabled', 'paused']);
+const modelSelectionSchema = z.object({
+  provider_id: safeId,
+  name: nonEmptyText.max(200).optional(),
+}).strict();
+
+const sessionVisibilitySchema = z.enum(['visible', 'hidden']);
 
 const createSessionEnvironmentInputSchema = z.object({
   approval_mode: approvalModeSchema.optional(),
+  model: modelSelectionSchema.nullable().optional(),
+  reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max']).nullable().optional(),
   workspace: z.object({ root: nonEmptyText.max(2000) }).strict().optional(),
 }).strict();
 
 const mutableSessionEnvironmentInputSchema = z.object({
   approval_mode: approvalModeSchema.optional(),
+  model: modelSelectionSchema.nullable().optional(),
+  reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max']).nullable().optional(),
 }).strict();
 
 export const createSessionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  visibility: sessionVisibilitySchema.optional(),
   env: createSessionEnvironmentInputSchema.optional(),
 }).strict();
 
@@ -61,7 +73,6 @@ const runOptionsSchema = z.object({
   max_steps: z.number().int().positive().max(1000).optional(),
   max_tool_calls: z.number().int().nonnegative().max(200).optional(),
   timeout_ms: z.number().int().positive().max(72 * 60 * 60 * 1_000).optional(),
-  reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max', 'ultra']).optional(),
 }).strict();
 
 export const forkSessionSchema = z.object({

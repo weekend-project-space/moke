@@ -136,7 +136,7 @@ export async function createApp(): Promise<ServerApp> {
       return { approved: true, scope };
     },
     workspaceRoots: (sessionId) => [...(sessionWorkspaceRoots.get(sessionId) || [])],
-    getModelSettings: () => settingsService.getModelSettings(),
+    getModelSettings: (selection) => settingsService.getModelSettings(selection),
     resolveImageAttachments: (attachments) => attachments.map((attachment) => attachmentStore.resolve(attachment)),
     onSessionChanged: (session) => sessionStore.save(session),
   });

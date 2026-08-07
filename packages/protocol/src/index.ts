@@ -1,5 +1,12 @@
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
+export type ModelSelection = {
+  provider_id: string;
+  name?: string;
+};
+
+export type SessionVisibility = 'visible' | 'hidden';
+
 export type RunStatus =
   | 'queued'
   | 'running'
@@ -129,6 +136,8 @@ export type ApprovalReviewer = 'user' | 'ai' | 'auto_approve';
 
 export type SessionEnvironment = {
   approval_mode: ApprovalMode;
+  model?: ModelSelection;
+  reasoningEffort?: ReasoningEffort;
   system: {
     platform: 'windows' | 'macos' | 'linux' | 'other';
     arch: string;
@@ -142,6 +151,8 @@ export type SessionEnvironment = {
 /** Environment fields accepted only while a Session is being created. */
 export type CreateSessionEnvironmentInput = {
   approval_mode?: ApprovalMode;
+  model?: ModelSelection | null;
+  reasoningEffort?: ReasoningEffort | null;
   workspace?: {
     root: string;
   };
@@ -149,12 +160,16 @@ export type CreateSessionEnvironmentInput = {
 
 /** Session policy fields that remain mutable after creation. */
 export type UpdateSessionEnvironmentInput = {
-  approval_mode: ApprovalMode;
+  approval_mode?: ApprovalMode;
+  model?: ModelSelection | null;
+  reasoningEffort?: ReasoningEffort | null;
 };
 
 /** Optional atomic policy update applied before a message starts its Run. */
 export type SendMessageEnvironmentInput = {
   approval_mode?: ApprovalMode;
+  model?: ModelSelection | null;
+  reasoningEffort?: ReasoningEffort | null;
 };
 
 export type ToolMessage = {
@@ -173,6 +188,7 @@ export type Message = UserMessage | AssistantMessage | ToolMessage;
 export type Session = {
   id: string;
   title: string;
+  visibility: SessionVisibility;
   created_at: string;
   updated_at: string;
   messages: Message[];
@@ -317,6 +333,7 @@ export type ApiErrorResponse = {
 export type CreateSessionRequest = {
   title?: string;
   metadata?: Record<string, unknown>;
+  visibility?: SessionVisibility;
   env?: CreateSessionEnvironmentInput;
 };
 
@@ -394,7 +411,6 @@ export type SendMessageRequest = {
     max_steps?: number;
     max_tool_calls?: number;
     timeout_ms?: number;
-    reasoningEffort?: ReasoningEffort;
   };
 };
 

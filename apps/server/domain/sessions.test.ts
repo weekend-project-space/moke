@@ -14,6 +14,7 @@ function createSession(): Session {
   return {
     id: 'sess_test',
     title: 'Original',
+    visibility: 'visible',
     created_at: '2026-06-27T00:00:00.000Z',
     updated_at: '2026-06-27T00:00:00.000Z',
     messages: [],
@@ -116,6 +117,7 @@ test('forkSession copies messages through the selected message', () => {
   const source: Session = {
     id: 'sess_source',
     title: 'Source',
+    visibility: 'visible',
     created_at: '2026-06-27T00:00:00.000Z',
     updated_at: '2026-06-27T00:01:00.000Z',
     metadata: { theme: 'test' },
@@ -166,6 +168,7 @@ test('forkSession preserves cloned tool call links', () => {
   const source: Session = {
     id: 'sess_source',
     title: 'Source',
+    visibility: 'visible',
     created_at: '2026-06-27T00:00:00.000Z',
     updated_at: '2026-06-27T00:01:00.000Z',
     metadata: {},
@@ -207,6 +210,7 @@ test('forkSession returns null when the message does not exist', () => {
   const source: Session = {
     id: 'sess_source',
     title: 'Source',
+    visibility: 'visible',
     created_at: '2026-06-27T00:00:00.000Z',
     updated_at: '2026-06-27T00:01:00.000Z',
     metadata: {},

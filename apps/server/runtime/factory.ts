@@ -11,7 +11,7 @@ import {
 import { registerBrowserTools } from '@moke/browser-tools';
 import type { ChatModelSettings } from '@moke/agent-re-act';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
-import type { ImageAttachment, ResolvedImageAttachment, Session } from '@moke/protocol';
+import type { ImageAttachment, ModelSelection, ResolvedImageAttachment, Session } from '@moke/protocol';
 
 export function createToolRegistry(input: {
   defaultWorkspaceRoot: string;
@@ -51,7 +51,7 @@ export function createRunManager(input: {
   defaultWorkspaceRoot: string;
   approveWorkspaceRoot: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
   workspaceRoots: (sessionId: string) => string[];
-  getModelSettings: () => Partial<ChatModelSettings>;
+  getModelSettings: (selection?: ModelSelection) => Partial<ChatModelSettings>;
   resolveImageAttachments: (
     attachments: ImageAttachment[],
   ) => ResolvedImageAttachment[] | Promise<ResolvedImageAttachment[]>;
