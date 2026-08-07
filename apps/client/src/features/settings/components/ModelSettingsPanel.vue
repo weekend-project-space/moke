@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Eye, EyeOff, Plus, RotateCw, Save, Trash2, Undo2 } from 'lucide-vue-next'
+import { ChevronRight, Eye, EyeOff, Minus, Plus, RotateCw, Save, Trash2, Undo2 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { uiText } from '../../../text/uiText'
@@ -66,6 +66,23 @@ const modelTestStatusText = computed(() => {
   if (modelTest.value === 'checking') return uiText.settings.testing
   return modelTestMessage.value || uiText.settings.notTested
 })
+
+const reasoningEffortOptions = [
+  { value: 'off', label: uiText.settings.reasoningOff },
+  { value: 'low', label: uiText.settings.reasoningLow },
+  { value: 'medium', label: uiText.settings.reasoningMedium },
+  { value: 'high', label: uiText.settings.reasoningHigh },
+  { value: 'max', label: uiText.settings.reasoningMax },
+] as const
+
+function adjustTimeout(deltaSeconds: number) {
+  editingTimeoutSeconds.value = editingTimeoutSeconds.value + deltaSeconds
+}
+
+function adjustRetries(delta: number) {
+  const next = Math.max(0, Math.min(MODEL_PROVIDER_MAX_RETRIES_MAX, Math.trunc(Number(editingProvider.maxRetries) || 0) + delta))
+  editingProvider.maxRetries = next
+}
 
 function createProvider(): ModelProviderProfile {
   return {
@@ -363,12 +380,11 @@ onBeforeUnmount(() => emit('dirtyChange', false))
               <strong>{{ provider.name }}</strong>
               <span v-if="provider.id === activeProviderId" class="model-provider-status">{{ uiText.settings.defaultProvider }}</span>
             </span>
-            <small>{{ provider.model || provider.type }}</small>
+            <small :title="provider.model || provider.type">{{ provider.model || provider.type }}</small>
           </button>
         </div>
         <footer class="model-source-actions">
-          <button type="button" class="settings-icon-button" :title="uiText.settings.addProvider" :aria-label="uiText.settings.addProvider" :disabled="saving" @click="addProvider"><Plus :size="14" /></button>
-          <button type="button" class="settings-icon-button" :title="uiText.settings.confirmDeleteProviderAction" :aria-label="uiText.settings.confirmDeleteProviderAction" :disabled="providers.length <= 1 || saving" @click="requestDeleteProvider"><Trash2 :size="14" /></button>
+          <button type="button" class="settings-secondary model-add-provider" :disabled="saving" @click="addProvider"><Plus :size="14" />{{ uiText.settings.addProvider }}</button>
         </footer>
       </aside>
 
@@ -398,34 +414,40 @@ onBeforeUnmount(() => emit('dirtyChange', false))
 
           <div class="model-detail-form">
           <section class="settings-group model-detail-group">
-            <header class="settings-group-heading"><div><h3>{{ uiText.settings.connection }}</h3></div></header>
+            <header class="model-group-caption"><h3>{{ uiText.settings.connection }}</h3></header>
+            <div class="model-group-card">
             <label class="settings-row"><span>{{ uiText.settings.name }}</span><input v-model="editingProvider.name" type="text" spellcheck="false" /></label>
-            <label class="settings-row">
+            <div class="settings-row">
               <span>{{ uiText.settings.providerType }}</span>
-              <select v-model="editingProvider.type"><option value="openai-compatible">OpenAI Compatible</option><option value="openai-responses">OpenAI Responses</option></select>
-            </label>
+              <div class="settings-segmented" role="radiogroup" :aria-label="uiText.settings.providerType">
+                <button type="button" role="radio" :aria-checked="editingProvider.type === 'openai-compatible'" :class="{ active: editingProvider.type === 'openai-compatible' }" @click="editingProvider.type = 'openai-compatible'">OpenAI Compatible</button>
+                <button type="button" role="radio" :aria-checked="editingProvider.type === 'openai-responses'" :class="{ active: editingProvider.type === 'openai-responses' }" @click="editingProvider.type = 'openai-responses'">OpenAI Responses</button>
+              </div>
+            </div>
             <label class="settings-row"><span>{{ uiText.settings.apiBaseUrl }}</span><input v-model="editingProvider.apiBaseUrl" type="url" spellcheck="false" /></label>
             <label class="settings-row">
               <span>{{ uiText.settings.apiKey }}</span>
               <span class="model-secret-control">
                 <input v-model="editingProvider.apiKey" :type="apiKeyVisible ? 'text' : 'password'" spellcheck="false" autocomplete="off" />
-                <button type="button" class="settings-icon-button" :title="apiKeyVisible ? uiText.settings.hideApiKey : uiText.settings.showApiKey" :aria-label="apiKeyVisible ? uiText.settings.hideApiKey : uiText.settings.showApiKey" @click.prevent="apiKeyVisible = !apiKeyVisible">
+                <button type="button" class="model-secret-toggle" :title="apiKeyVisible ? uiText.settings.hideApiKey : uiText.settings.showApiKey" :aria-label="apiKeyVisible ? uiText.settings.hideApiKey : uiText.settings.showApiKey" @click.prevent="apiKeyVisible = !apiKeyVisible">
                   <EyeOff v-if="apiKeyVisible" :size="14" />
                   <Eye v-else :size="14" />
                 </button>
               </span>
             </label>
             <div class="settings-row model-command-row">
-              <div class="model-command-copy">
-                <span>{{ uiText.settings.connectionStatus }}</span>
-                <small :class="{ error: modelTest === 'error', success: modelTest === 'ok' }" role="status" aria-live="polite">{{ modelTestStatusText }}</small>
+              <span>{{ uiText.settings.connectionStatus }}</span>
+              <div class="model-command-status">
+                <span class="model-test-pill" :class="{ error: modelTest === 'error', success: modelTest === 'ok' }" role="status" aria-live="polite">{{ modelTestStatusText }}</span>
+                <button type="button" class="settings-secondary" :disabled="saving || modelTest === 'checking'" @click="testModel"><RotateCw :size="14" :class="{ spinning: modelTest === 'checking' }" />{{ modelTest === 'checking' ? uiText.settings.testing : uiText.settings.testConnection }}</button>
               </div>
-              <button type="button" class="settings-secondary" :disabled="saving || modelTest === 'checking'" @click="testModel"><RotateCw :size="14" :class="{ spinning: modelTest === 'checking' }" />{{ modelTest === 'checking' ? uiText.settings.testing : uiText.settings.testConnection }}</button>
+            </div>
             </div>
           </section>
 
           <section class="settings-group model-detail-group">
-            <header class="settings-group-heading"><div><h3>{{ uiText.settings.model }}</h3></div></header>
+            <header class="model-group-caption"><h3>{{ uiText.settings.model }}</h3></header>
+            <div class="model-group-card">
             <label class="settings-row">
               <span>{{ uiText.settings.model }}</span>
               <div class="settings-stacked-control">
@@ -437,25 +459,73 @@ onBeforeUnmount(() => emit('dirtyChange', false))
                 <datalist id="model-options"><option v-for="model in modelOptions" :key="model" :value="model" /></datalist>
               </div>
             </label>
+            </div>
           </section>
 
           <section class="settings-group model-detail-group">
+            <div class="model-group-card">
             <button
               type="button"
-              class="settings-group-heading model-disclosure-heading"
+              class="model-disclosure-heading"
               :aria-expanded="requestBehaviorExpanded"
               aria-controls="request-behavior-fields"
               @click="requestBehaviorExpanded = !requestBehaviorExpanded"
             >
-              <div><h3>{{ uiText.settings.requestBehavior }}</h3><span>{{ advancedPreview }}</span></div>
+              <div><h3>{{ uiText.settings.requestBehavior }}</h3><span v-if="!requestBehaviorExpanded">{{ advancedPreview }}</span></div>
               <ChevronRight :size="16" :class="{ expanded: requestBehaviorExpanded }" aria-hidden="true" />
             </button>
-            <div v-show="requestBehaviorExpanded" id="request-behavior-fields">
-              <label class="settings-row"><span>{{ uiText.settings.timeout }}</span><div class="settings-stacked-control"><input v-model.number="editingTimeoutSeconds" type="number" min="1" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS / 1000" step="1" /><small>{{ uiText.settings.timeoutHint }}</small></div></label>
-              <label class="settings-row"><span>{{ uiText.settings.retries }}</span><div class="settings-stacked-control"><input v-model.number="editingProvider.maxRetries" type="number" min="0" :max="MODEL_PROVIDER_MAX_RETRIES_MAX" step="1" /><small>{{ uiText.settings.retriesHint }}</small></div></label>
-              <label v-if="!isOpenAIResponsesProvider" class="settings-row"><span>{{ uiText.settings.reasoningProvider }}</span><div class="settings-stacked-control"><select v-model="editingProvider.reasoningProvider"><option value="none">{{ uiText.settings.reasoningProviderNone }}</option><option value="llama.cpp">{{ uiText.settings.reasoningProviderLlamaCpp }}</option></select><small>{{ uiText.settings.reasoningProviderHint }}</small></div></label>
-              <label v-if="showsReasoningEffort" class="settings-row"><span>{{ uiText.settings.reasoning }}</span><div class="settings-stacked-control"><select v-model="editingProvider.reasoningEffort"><option value="off">{{ uiText.settings.reasoningOff }}</option><option value="low">{{ uiText.settings.reasoningLow }}</option><option value="medium">{{ uiText.settings.reasoningMedium }}</option><option value="high">{{ uiText.settings.reasoningHigh }}</option><option value="max">{{ uiText.settings.reasoningMax }}</option></select><small>{{ isOpenAIResponsesProvider ? uiText.settings.responsesReasoningHint : uiText.settings.reasoningHint }}</small></div></label>
+            <div v-show="requestBehaviorExpanded" id="request-behavior-fields" class="model-disclosure-body">
+              <div class="settings-row">
+                <span>{{ uiText.settings.timeout }}</span>
+                <div class="settings-stacked-control">
+                  <div class="settings-stepper">
+                    <button type="button" :disabled="editingTimeoutSeconds <= 60" :aria-label="uiText.settings.timeout" @click="adjustTimeout(-60)"><Minus :size="13" /></button>
+                    <input v-model.number="editingTimeoutSeconds" type="number" min="1" :max="MODEL_PROVIDER_TIMEOUT_MAX_MS / 1000" step="1" />
+                    <button type="button" :disabled="editingTimeoutSeconds >= MODEL_PROVIDER_TIMEOUT_MAX_MS / 1000" :aria-label="uiText.settings.timeout" @click="adjustTimeout(60)"><Plus :size="13" /></button>
+                  </div>
+                  <small>{{ uiText.settings.timeoutHint }}</small>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span>{{ uiText.settings.retries }}</span>
+                <div class="settings-stacked-control">
+                  <div class="settings-stepper">
+                    <button type="button" :disabled="editingProvider.maxRetries <= 0" :aria-label="uiText.settings.retries" @click="adjustRetries(-1)"><Minus :size="13" /></button>
+                    <input v-model.number="editingProvider.maxRetries" type="number" min="0" :max="MODEL_PROVIDER_MAX_RETRIES_MAX" step="1" />
+                    <button type="button" :disabled="editingProvider.maxRetries >= MODEL_PROVIDER_MAX_RETRIES_MAX" :aria-label="uiText.settings.retries" @click="adjustRetries(1)"><Plus :size="13" /></button>
+                  </div>
+                  <small>{{ uiText.settings.retriesHint }}</small>
+                </div>
+              </div>
+              <div v-if="!isOpenAIResponsesProvider" class="settings-row">
+                <span>{{ uiText.settings.reasoningProvider }}</span>
+                <div class="settings-stacked-control">
+                  <div class="settings-segmented" role="radiogroup" :aria-label="uiText.settings.reasoningProvider">
+                    <button type="button" role="radio" :aria-checked="editingProvider.reasoningProvider === 'none'" :class="{ active: editingProvider.reasoningProvider === 'none' }" @click="editingProvider.reasoningProvider = 'none'">{{ uiText.settings.reasoningProviderNone }}</button>
+                    <button type="button" role="radio" :aria-checked="editingProvider.reasoningProvider === 'llama.cpp'" :class="{ active: editingProvider.reasoningProvider === 'llama.cpp' }" @click="editingProvider.reasoningProvider = 'llama.cpp'">llama.cpp</button>
+                  </div>
+                  <small>{{ uiText.settings.reasoningProviderHint }}</small>
+                </div>
+              </div>
+              <div v-if="showsReasoningEffort" class="settings-row">
+                <span>{{ uiText.settings.reasoning }}</span>
+                <div class="settings-stacked-control">
+                  <div class="settings-segmented" role="radiogroup" :aria-label="uiText.settings.reasoning">
+                    <button
+                      v-for="option in reasoningEffortOptions"
+                      :key="option.value"
+                      type="button"
+                      role="radio"
+                      :aria-checked="editingProvider.reasoningEffort === option.value"
+                      :class="{ active: editingProvider.reasoningEffort === option.value }"
+                      @click="editingProvider.reasoningEffort = option.value"
+                    >{{ option.label }}</button>
+                  </div>
+                  <small>{{ isOpenAIResponsesProvider ? uiText.settings.responsesReasoningHint : uiText.settings.reasoningHint }}</small>
+                </div>
+              </div>
               <label v-if="isLlamaCppReasoning" class="settings-row"><span>{{ uiText.settings.showRawReasoning }}</span><div class="settings-stacked-control"><input v-model="editingProvider.showRawReasoning" class="settings-switch" type="checkbox" role="switch" /><small>{{ uiText.settings.showRawReasoningHint }}</small></div></label>
+            </div>
             </div>
           </section>
 
@@ -463,8 +533,11 @@ onBeforeUnmount(() => emit('dirtyChange', false))
         </div>
 
         <footer class="settings-actions model-detail-actions">
-          <button type="button" class="settings-secondary" :disabled="saving || !isDirty" @click="revertProvider"><Undo2 :size="14" />{{ uiText.settings.revert }}</button>
-          <button type="button" class="settings-primary" :disabled="saving || !isDirty" @click="saveModelProviders"><Save :size="14" />{{ uiText.settings.save }}</button>
+          <button type="button" class="model-danger-ghost" :disabled="providers.length <= 1 || saving" @click="requestDeleteProvider"><Trash2 :size="14" />{{ uiText.settings.confirmDeleteProviderAction }}</button>
+          <div class="model-detail-actions-right">
+            <button type="button" class="settings-secondary" :disabled="saving || !isDirty" @click="revertProvider"><Undo2 :size="14" />{{ uiText.settings.revert }}</button>
+            <button type="button" class="settings-primary" :disabled="saving || !isDirty" @click="saveModelProviders"><Save :size="14" />{{ uiText.settings.save }}</button>
+          </div>
         </footer>
       </div>
     </div>

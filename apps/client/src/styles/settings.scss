@@ -236,7 +236,6 @@
   gap: 3px;
   overflow-y: auto;
   padding: 8px 0;
-  scrollbar-gutter: stable;
 
   > button {
     display: grid;
@@ -249,10 +248,24 @@
     background: transparent;
     text-align: left;
     cursor: pointer;
-    &:hover,
-    &.active {
+
+    &:hover:not(.active) {
       color: var(--color-text-primary);
       background: var(--color-secondary-hover);
+    }
+
+    &.active {
+      color: var(--color-primary-foreground);
+      background: var(--color-primary);
+
+      > small {
+        color: rgb(255 255 255 / 72%);
+      }
+
+      .model-provider-status {
+        color: var(--color-primary);
+        background: var(--color-white);
+      }
     }
 
     &:focus-visible {
@@ -291,8 +304,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 56px;
   border-top: 1px solid var(--color-border-subtle);
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .model-provider-detail {
@@ -307,9 +321,42 @@
 .model-detail-form {
   display: grid;
   min-width: 0;
-  gap: 26px;
+  gap: 22px;
   margin-top: 22px;
   padding-bottom: 20px;
+}
+
+.model-group-caption {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 7px;
+
+  h3 {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-caption-plus);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.model-group-card {
+  min-width: 0;
+
+  > .settings-row:first-child {
+    border-top: 0;
+  }
 }
 
 .model-detail-scroll {
@@ -320,26 +367,27 @@
   scrollbar-gutter: stable;
 }
 
+.model-detail-group {
+  max-width: 780px;
+}
+
 .model-detail-group .settings-row {
   min-height: 44px;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 150px minmax(0, 460px);
   gap: 16px;
 }
 
 .model-provider-status {
   display: inline-flex;
+  height: 16px;
   align-items: center;
-  gap: 6px;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-meta);
-
-  &::before {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-primary);
-    content: '';
-  }
+  border-radius: var(--radius-pill);
+  padding: 0 6px;
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft);
+  font-size: var(--font-size-micro);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .model-settings .settings-note {
@@ -551,7 +599,7 @@
 
   input,
   select {
-    @include text-control;
+    @include text-control(32px);
     padding: 0 9px;
     font-size: var(--font-size-ui);
 
@@ -607,11 +655,48 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 7px;
+  padding-right: 4px;
+  background: var(--color-bg-input);
+
+  &:focus-within {
+    @include focus-ring;
+  }
 
   input {
     min-width: 0;
     flex: 1 1 auto;
+    border: 0;
+    background: transparent;
+
+    &:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+  }
+}
+
+.model-secret-toggle {
+  @include inline-center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-secondary-hover);
+  }
+
+  &:focus-visible {
+    @include focus-ring;
   }
 }
 
@@ -619,6 +704,14 @@
   > button {
     justify-self: end;
   }
+}
+
+.model-command-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .model-command-copy {
@@ -648,24 +741,69 @@
 }
 
 .model-detail-actions {
-  min-height: 50px;
+  min-width: 0;
+  min-height: 56px;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 0;
   border-top: 1px solid var(--color-border-subtle);
   padding-top: 10px;
   background: var(--color-bg-content);
 }
 
-.settings-primary,
-.settings-secondary,
-.settings-icon-button {
+.model-detail-actions-right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-danger-ghost {
   @include inline-center;
-  height: 30px;
+  height: 32px;
   gap: 6px;
   border: 0;
   border-radius: var(--radius-icon-button);
-  padding: 0 10px;
+  padding: 0 12px;
+  color: var(--color-danger-text);
+  background: transparent;
+  font-size: var(--font-size-ui);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--color-bg-danger-soft);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  &:focus-visible {
+    @include focus-ring;
+  }
+}
+
+.settings-primary,
+.settings-secondary {
+  @include inline-center;
+  height: 32px;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--radius-icon-button);
+  padding: 0 14px;
+  font-size: var(--font-size-ui);
+}
+
+.settings-icon-button {
+  @include inline-center;
+  height: 32px;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--radius-icon-button);
+  padding: 0 8px;
   font-size: var(--font-size-ui);
 }
 
@@ -674,7 +812,7 @@
   background: var(--color-primary);
 
   &:hover {
-    background: var(--color-primary);
+    background: var(--color-primary-hover);
   }
 
   &:disabled {
@@ -745,13 +883,38 @@
 }
 
 .model-disclosure-heading {
+  display: flex;
   width: 100%;
-  border-top: 0;
-  border-right: 0;
-  border-left: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 0;
+  padding: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
+
+  > div:first-child {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  h3 {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-ui);
+    font-weight: 620;
+  }
+
+  span {
+    overflow: hidden;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   > svg {
     flex: 0 0 auto;
@@ -769,6 +932,14 @@
 
   &:focus-visible {
     @include focus-ring;
+  }
+}
+
+.model-disclosure-body {
+  border-top: 1px solid var(--color-border-subtle);
+
+  > .settings-row:first-child {
+    border-top: 0;
   }
 }
 
@@ -992,8 +1163,8 @@
 }
 
 .settings-icon-button {
-  min-width: 30px;
-  width: 30px;
+  min-width: 32px;
+  width: 32px;
   padding: 0;
 }
 
@@ -1279,9 +1450,9 @@
 input[type='checkbox'].skill-toggle,
 input[type='checkbox'].settings-switch {
   position: relative;
-  width: 32px;
-  height: 18px;
-  min-height: 18px;
+  width: 38px;
+  height: 22px;
+  min-height: 22px;
   flex: 0 0 auto;
   appearance: none;
   border: 0;
@@ -1296,8 +1467,8 @@ input[type='checkbox'].settings-switch {
     position: absolute;
     top: 3px;
     left: 3px;
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: var(--color-bg-content);
     box-shadow: var(--shadow-control);
@@ -1309,7 +1480,7 @@ input[type='checkbox'].settings-switch {
   }
 
   &:checked::before {
-    transform: translateX(14px);
+    transform: translateX(16px);
   }
 
   &:focus-visible {
@@ -1352,4 +1523,141 @@ input[type='checkbox'].settings-switch {
   }
 }
 
+// macOS-style segmented control
+.settings-segmented {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+  justify-self: start;
+  border-radius: var(--radius-md);
+  padding: 2px;
+  background: var(--color-secondary);
+
+  > button {
+    @include inline-center;
+    height: 28px;
+    min-width: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    padding: 0 12px;
+    color: var(--color-text-secondary);
+    background: transparent;
+    font-size: var(--font-size-ui);
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover:not(.active) {
+      color: var(--color-text-primary);
+    }
+
+    &.active {
+      color: var(--color-text-primary);
+      background: var(--color-bg-content);
+      box-shadow: var(--shadow-control);
+      font-weight: 560;
+    }
+
+    &:focus-visible {
+      @include focus-ring;
+    }
+  }
+}
+
+// macOS-style stepper
+.settings-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  justify-self: start;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: 7px;
+  background: var(--color-bg-input);
+
+  &:focus-within {
+    @include focus-ring;
+  }
+
+  > button {
+    @include inline-center;
+    width: 30px;
+    border: 0;
+    padding: 0;
+    color: var(--color-text-secondary);
+    background: transparent;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      color: var(--color-text-primary);
+      background: var(--color-secondary-hover);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+  }
+
+  > input {
+    width: 64px;
+    height: 32px;
+    border: 0;
+    border-right: 1px solid var(--color-border-subtle);
+    border-left: 1px solid var(--color-border-subtle);
+    outline: 0;
+    padding: 0 4px;
+    color: var(--color-text-primary);
+    background: transparent;
+    font-size: var(--font-size-ui);
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      margin: 0;
+      -webkit-appearance: none;
+    }
+  }
+}
+
+// inline status pill (connection test feedback)
+.model-test-pill {
+  display: inline-flex;
+  max-width: 100%;
+  height: 20px;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  padding: 0 9px;
+  color: var(--color-text-muted);
+  background: var(--color-secondary);
+  font-size: var(--font-size-caption-plus);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.success {
+    color: var(--color-success-text);
+    background: var(--color-success-soft);
+  }
+
+  &.error {
+    color: var(--color-danger-text);
+    background: var(--color-danger-soft);
+  }
+}
+
+.model-add-provider {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--color-primary);
+  background: transparent;
+
+  &:hover:not(:disabled) {
+    color: var(--color-primary-hover);
+    background: var(--color-primary-soft);
+  }
+}
 
