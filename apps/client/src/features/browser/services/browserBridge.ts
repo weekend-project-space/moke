@@ -3,15 +3,16 @@ import { waitForBrowserLayoutFrame } from './browserLayout'
 import { createSerialTaskQueue } from './serialTaskQueue'
 import { apiFetch, apiUrl } from '../../../services/apiAccess'
 
-type BrowserBridgeRequest = {
+export type BrowserBridgeRequest = {
   id: string
   method: string
   params?: Record<string, unknown>
 }
 
-type BrowserBridgeOptions = {
+export type BrowserBridgeOptions = {
   apiBase: string
   showBrowserPanel: () => void | Promise<void>
+  hideBrowserPanel: () => void | Promise<void>
   getBrowserBounds?: () => BrowserBounds | null
 }
 
@@ -46,7 +47,7 @@ async function executeAfterReveal<T>(
   return action(await revealBrowserPanel(options))
 }
 
-async function executeBrowserRequest(
+export async function executeBrowserRequest(
   request: BrowserBridgeRequest,
   options: BrowserBridgeOptions,
 ): Promise<BrowserResult> {
@@ -58,9 +59,16 @@ async function executeBrowserRequest(
     case 'list_pages':
       return browserApi.state()
     case 'create_page': {
+      const visible = readBool(params, 'visible') ?? true
+      if (!visible) {
+        return browserApi.open({
+          url: readString(params, 'url'),
+          visible,
+        })
+      }
       return executeAfterReveal(options, (bounds) => browserApi.open({
         url: readString(params, 'url'),
-        visible: readBool(params, 'visible') ?? true,
+        visible,
         bounds,
       }))
     }
@@ -126,8 +134,11 @@ async function executeBrowserRequest(
       if (!state.activePageId) return state
       return browserApi.show(state.activePageId, bounds)
     }
-    case 'hide_browser':
-      return browserApi.hide()
+    case 'hide_browser': {
+      const result = await browserApi.hide()
+      await options.hideBrowserPanel()
+      return result
+    }
     default:
       throw new Error(`Unknown browser method: ${request.method}`)
   }

@@ -46,6 +46,7 @@ let runtimeTimer: number | undefined
 let chatRouteReady = false
 const {
   closeSidebar,
+  closeWorkspace,
   closeTransientPanels,
   desktopLayout,
   handleGlobalKeydown,
@@ -171,6 +172,7 @@ const {
     await browserPanel.value.openUrl(url, mode)
   },
   openWorkspace,
+  closeWorkspace,
 })
 const {
   archiveSelectedSession,

@@ -58,15 +58,19 @@ export function useWorkspacePanels() {
     localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'false')
   }
 
+  function closeWorkspace() {
+    workspaceMaximized.value = false
+    traceCollapsed.value = true
+    localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+  }
+
   function toggleWorkspace() {
     if (traceCollapsed.value) {
       openWorkspace()
       return
     }
 
-    workspaceMaximized.value = false
-    traceCollapsed.value = true
-    localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+    closeWorkspace()
   }
 
   function toggleWorkspaceMaximized() {
@@ -93,8 +97,7 @@ export function useWorkspacePanels() {
     }
 
     if (!traceCollapsed.value) {
-      traceCollapsed.value = true
-      localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
+      closeWorkspace()
     }
   }
 
@@ -112,6 +115,7 @@ export function useWorkspacePanels() {
 
   return {
     closeSidebar,
+    closeWorkspace,
     closeTransientPanels,
     desktopLayout,
     handleGlobalKeydown,

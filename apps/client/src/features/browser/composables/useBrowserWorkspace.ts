@@ -7,6 +7,7 @@ type UseBrowserWorkspaceOptions = {
   getBrowserBounds?: () => BrowserBounds | null
   openUrl?: (url: string, mode: BrowserLinkOpenMode) => Promise<void>
   openWorkspace: () => void
+  closeWorkspace: () => void
 }
 
 export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
@@ -61,6 +62,7 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
       apiBase: options.apiBase,
       getBrowserBounds: options.getBrowserBounds,
       showBrowserPanel: options.openWorkspace,
+      hideBrowserPanel: options.closeWorkspace,
     })
   }
 
