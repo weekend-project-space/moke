@@ -156,7 +156,7 @@ onMounted(() => { void loadSkills() })
       </div>
     </header>
 
-    <div class="skill-filter" role="tablist" :aria-label="uiText.skills.filterLabel">
+    <div class="skill-filter segmented-filter" role="tablist" :aria-label="uiText.skills.filterLabel">
       <button v-for="option in (['all', 'enabled', 'disabled', 'invalid'] as const)" :key="option" type="button" role="tab" :aria-selected="filter === option" :class="{ active: filter === option }" @click="filter = option">
         {{ uiText.skills[option] }}
       </button>

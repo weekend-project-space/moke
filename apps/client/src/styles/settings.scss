@@ -1323,36 +1323,10 @@ input[type='checkbox'].settings-switch {
 }
 
 .settings-toolbar,
-.skill-list-actions,
-.skill-filter {
+.skill-list-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.skill-filter {
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding-bottom: 10px;
-
-  button {
-    height: 28px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    padding: 0 9px;
-    color: var(--color-text-muted);
-    background: transparent;
-    font-size: var(--font-size-meta);
-
-    &:hover,
-    &.active {
-      color: var(--color-text-primary);
-      background: var(--color-secondary-hover);
-    }
-
-    &:focus-visible {
-      @include focus-ring;
-    }
-  }
 }
 
 .skill-list-simple {

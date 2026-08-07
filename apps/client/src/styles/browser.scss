@@ -150,7 +150,7 @@
     align-items: center;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
     color: var(--color-text-muted);
     background: transparent;
 

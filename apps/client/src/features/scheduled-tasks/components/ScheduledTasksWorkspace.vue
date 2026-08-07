@@ -233,7 +233,7 @@ onMounted(loadTasks)
 
     <div class="scheduled-tasks-scroll">
       <div class="scheduled-tasks-content">
-        <div class="scheduled-task-filters" aria-label="Filter scheduled tasks">
+        <div class="scheduled-task-filters segmented-filter" aria-label="Filter scheduled tasks">
           <button v-for="option in (['all', 'enabled', 'paused'] as const)" :key="option" type="button"
             :class="{ active: filter === option }" :aria-pressed="filter === option" @click="filter = option">
             {{ option === 'all' ? 'All' : option === 'enabled' ? 'Enabled' : 'Paused' }}
