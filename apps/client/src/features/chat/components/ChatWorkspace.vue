@@ -391,8 +391,8 @@ onMounted(async () => {
   window.addEventListener('keydown', handleChatKeydown)
   window.addEventListener('resize', handleWindowResize)
   loadComposerReasoningEffort()
-  await initBrowserWorkspace()
   initWorkspacePanels()
+  await initBrowserWorkspace()
 
   if (await checkServer()) {
     await loadReasoningCapability()

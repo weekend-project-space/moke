@@ -4,11 +4,17 @@ const SIDEBAR_COLLAPSED_KEY = 'moke.sidebar.collapsed'
 const WORKSPACE_COLLAPSED_KEY = 'moke.workspace.collapsed'
 const DESKTOP_BREAKPOINT = 980
 
+function readCollapsedState(key: string, fallback: boolean) {
+  const stored = localStorage.getItem(key)
+  return stored === null ? fallback : stored === 'true'
+}
+
 export function useWorkspacePanels() {
-  const traceCollapsed = ref(true)
+  // Read persisted layout before the first render so refresh does not animate from defaults.
+  const traceCollapsed = ref(readCollapsedState(WORKSPACE_COLLAPSED_KEY, true))
   const desktopLayout = ref(false)
   const sidebarOpen = ref(false)
-  const sidebarCollapsed = ref(false)
+  const sidebarCollapsed = ref(readCollapsedState(SIDEBAR_COLLAPSED_KEY, false))
   const workspaceMaximized = ref(false)
 
   function isDesktopLayout() {
@@ -107,10 +113,6 @@ export function useWorkspacePanels() {
 
   function initWorkspacePanels() {
     refreshLayoutMode()
-    sidebarCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
-
-    const savedWorkspaceCollapsed = localStorage.getItem(WORKSPACE_COLLAPSED_KEY)
-    if (savedWorkspaceCollapsed !== null) traceCollapsed.value = savedWorkspaceCollapsed === 'true'
   }
 
   return {

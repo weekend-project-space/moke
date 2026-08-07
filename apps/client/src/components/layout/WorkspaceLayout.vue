@@ -67,6 +67,7 @@ const layoutRoot = ref<HTMLElement | null>(null)
 const auxiliaryPanel = ref<HTMLElement | null>(null)
 const sidebarResizing = ref(false)
 const auxiliaryResizing = ref(false)
+const layoutReady = ref(false)
 const layoutTransitioning = ref(false)
 const sidebarMaximum = ref(SIDEBAR_MAX_WIDTH)
 const auxiliaryMaximum = ref(AUXILIARY_MAX_WIDTH)
@@ -237,6 +238,7 @@ watch(
   () => [props.sidebarCollapsed, props.auxiliaryVisible],
   () => {
     if (!isDesktopLayout()) return
+    if (!layoutReady.value) return
     layoutTransitioning.value = true
     if (layoutTransitionTimer !== undefined) window.clearTimeout(layoutTransitionTimer)
     layoutTransitionTimer = window.setTimeout(() => {
@@ -252,6 +254,7 @@ onMounted(() => {
   if (layoutRoot.value) resizeObserver.observe(layoutRoot.value)
   observeAuxiliaryPanel()
   fitPanelWidths()
+  layoutReady.value = true
 })
 
 onBeforeUnmount(() => {
