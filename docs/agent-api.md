@@ -865,3 +865,69 @@ max_steps       default 99
 max_tool_calls  default 99
 timeout_ms      default 120000
 ```
+## 11. Composer Discovery Resources
+
+These endpoints serve composer autocomplete. They are deterministic query APIs, not Agent tools, and should support request cancellation through the client's `AbortSignal`.
+
+### Workspace entries
+
+```txt
+POST /api/workspace/contexts
+GET  /api/workspace/entries?session_id=:id&query=:query&path=:path&limit=:limit
+```
+
+Draft clients create a short-lived workspace context before a Session exists:
+
+```json
+{ "root": "E:\\work\\project-a", "ttl_ms": 600000 }
+```
+
+The public entry shape is intentionally small:
+
+```json
+[
+  { "name": "ChatWorkspace.vue", "path": "src/features/chat/ChatWorkspace.vue" }
+]
+```
+
+When `session_id` is provided, the server resolves the immutable workspace from that Session and rejects paths outside it. Before a Session exists, choosing a workspace creates an opaque, short-lived draft context. The context grants discovery only within that selected root and expires automatically.
+
+### Workspace skills
+
+```txt
+GET /api/workspace/skills?session_id=:id&enabled_only=true
+```
+
+Response:
+
+```json
+[
+  { "name": "research", "description": "Research across sources" }
+]
+```
+
+The list is built from the Session workspace, not the server default workspace. Skill selection is a message/Run command and must be revalidated when the Run starts.
+
+`SendMessageInput` intentionally does not define separate `references` or `skills` fields. File selections use the existing `files` field, while a skill selection is translated by the Composer into the message/Run command flow and is validated against the Session workspace at Run start. This keeps the message contract small and avoids exposing discovery UI state as arbitrary Run input.
+
+### Provider models
+
+```txt
+GET /api/settings/model/capabilities?provider_id=:id&refresh=true
+```
+
+Response:
+
+```json
+[
+  {
+    "provider": "Local",
+    "models": [
+      { "name": "reasoning-model", "supports_reasoning": true },
+      { "name": "chat-model" }
+    ]
+  }
+]
+```
+
+Model discovery is application/provider scoped. Model selection and reasoning effort remain Session environment fields and are frozen into a Run at start. `supports_reasoning` is optional because OpenAI-compatible model lists often do not expose capability metadata.

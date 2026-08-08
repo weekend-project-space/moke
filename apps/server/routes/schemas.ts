@@ -13,6 +13,31 @@ export const listSessionsQuerySchema = z.object({
   include_hidden: z.enum(['true', 'false']).optional(),
 }).strict();
 
+export const workspaceContextSchema = z.object({
+  root: nonEmptyText.max(4000),
+  ttl_ms: z.number().int().positive().max(60 * 60 * 1000).optional(),
+}).strict();
+
+export const workspaceEntriesQuerySchema = z.object({
+  context_id: nonEmptyText.max(200).optional(),
+  session_id: safeId.optional(),
+  path: z.string().max(4000).optional(),
+  query: z.string().max(500).optional(),
+  include_directories: z.enum(['true', 'false']).optional().default('true'),
+  limit: z.coerce.number().int().positive().max(500).optional().default(100),
+}).strict();
+
+export const workspaceSkillsQuerySchema = z.object({
+  context_id: nonEmptyText.max(200).optional(),
+  session_id: safeId.optional(),
+  enabled_only: z.enum(['true', 'false']).optional().default('true'),
+}).strict();
+
+export const modelCapabilitiesQuerySchema = z.object({
+  provider_id: safeId.optional(),
+  refresh: z.enum(['true', 'false']).optional().default('false'),
+}).strict();
+
 const approvalModeSchema = z.enum(['manual', 'ai_review', 'auto_approve']);
 const scheduledTaskStatusSchema = z.enum(['enabled', 'paused']);
 const modelSelectionSchema = z.object({

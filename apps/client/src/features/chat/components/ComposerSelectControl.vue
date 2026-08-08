@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
+
 const props = withDefaults(defineProps<{
   align?: 'start' | 'end'
   menuClass?: string
@@ -14,6 +16,17 @@ const emit = defineEmits<{
   select: [value: string]
   'update:open': [value: boolean]
 }>()
+
+const optionsEl = ref<HTMLElement | null>(null)
+
+watch(() => props.open, (open) => {
+  if (!open) return
+  void nextTick(() => {
+    optionsEl.value
+      ?.querySelector<HTMLElement>('button.active')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  })
+})
 
 function toggle() {
   emit('update:open', !props.open)
@@ -35,22 +48,24 @@ function select(value: string) {
       <div v-if="$slots['menu-header']" class="composer-select-menu-header">
         <slot name="menu-header" />
       </div>
-      <button
-        v-for="option in options"
-        :key="option"
-        type="button"
-        :aria-pressed="selected === undefined ? undefined : option === selected"
-        :class="{ active: option === selected }"
-        @click="select(option)"
-      >
-        <span class="composer-option-icon">
-          <slot name="option-icon" :option="option" />
-        </span>
-        <span class="composer-option-label"><slot name="option-label" :option="option">{{ option }}</slot></span>
-        <span v-if="option === selected" class="composer-option-check">
-          <slot name="option-selected" :option="option" />
-        </span>
-      </button>
+      <div ref="optionsEl" class="composer-select-options">
+        <button
+          v-for="option in options"
+          :key="option"
+          type="button"
+          :aria-pressed="selected === undefined ? undefined : option === selected"
+          :class="{ active: option === selected }"
+          @click="select(option)"
+        >
+          <span class="composer-option-icon">
+            <slot name="option-icon" :option="option" />
+          </span>
+          <span class="composer-option-label"><slot name="option-label" :option="option">{{ option }}</slot></span>
+          <span v-if="option === selected" class="composer-option-check">
+            <slot name="option-selected" :option="option" />
+          </span>
+        </button>
+      </div>
       <div v-if="$slots['menu-footer']" class="composer-select-menu-footer">
         <slot name="menu-footer" />
       </div>

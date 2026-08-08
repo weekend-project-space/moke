@@ -1,5 +1,6 @@
 export type ActiveModelInfo = {
   model: string
+  providerId: string
   providerName: string
 }
 
@@ -20,6 +21,7 @@ export function activeModelFromSettings(value: unknown): ActiveModelInfo | null 
 
   return {
     model: provider.model.trim(),
+    providerId: typeof provider.id === 'string' ? provider.id : '',
     providerName: typeof provider.name === 'string' ? provider.name.trim() : '',
   }
 }

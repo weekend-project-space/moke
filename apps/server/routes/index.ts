@@ -12,6 +12,7 @@ import { registerWeixinRoutes } from './weixin.js';
 import { registerFeishuRoutes } from './feishu.js';
 import { registerDingTalkRoutes } from './dingtalk.js';
 import { registerScheduledTaskRoutes } from './scheduled-tasks.js';
+import { registerDiscoveryRoutes } from './discovery.js';
 
 export function createRoutes(context: RoutesContext, security?: RouterSecurityOptions) {
   const router = createRouter<RoutesContext>(security);
@@ -28,6 +29,7 @@ export function createRoutes(context: RoutesContext, security?: RouterSecurityOp
   registerFeishuRoutes(router);
   registerDingTalkRoutes(router);
   registerScheduledTaskRoutes(router);
+  registerDiscoveryRoutes(router);
 
   return router.handler(context);
 }

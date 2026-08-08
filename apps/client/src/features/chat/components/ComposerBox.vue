@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, FileText, FolderOpen, FolderPlus, Hand, Paperclip, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { ArrowUp, Box, Brain, Check, ChevronDown, Cpu, FileText, FolderOpen, FolderPlus, Hand, Paperclip, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
 import type { ApprovalMode, FileAttachmentInput, ImageAttachment, ReasoningEffort } from '../model/conversation'
 import ComposerSelectControl from './ComposerSelectControl.vue'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
+type ComposerModel = ModelSummary & { provider: string; providerName?: string }
 
 const props = defineProps<{
   attachments: ImageAttachment[]
@@ -13,6 +15,7 @@ const props = defineProps<{
   inputValue: string
   modelName: string
   modelProvider: string
+  modelProviderId?: string
   primaryDisabled: boolean
   primaryIsStop: boolean
   reasoningEffort: ComposerReasoningEffort
@@ -21,6 +24,9 @@ const props = defineProps<{
   nativeWorkspacePicker?: boolean
   workspaceRoot?: string
   workspaceSuggestions?: string[]
+  workspaceEntries?: WorkspaceEntry[]
+  skills?: SkillSummary[]
+  modelOptions?: ComposerModel[]
 }>()
 
 const emit = defineEmits<{
@@ -36,20 +42,126 @@ const emit = defineEmits<{
   'update:approvalMode': [value: ApprovalMode]
   'update:workspaceRoot': [value: string]
   'update:inputValue': [value: string]
+  chooseWorkspaceEntry: [entry: WorkspaceEntry]
+  selectModel: [model: ComposerModel]
 }>()
 
 const addMenuOpen = ref(false)
 const attachmentError = ref('')
 const composerEl = ref<HTMLFormElement | null>(null)
+const discoveryMenu = ref<HTMLElement | null>(null)
 const dragDepth = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
-const thinkingMenuOpen = ref(false)
+const modelMenuOpen = ref(false)
 const approvalMenuOpen = ref(false)
 const workspaceMenuOpen = ref(false)
 const workspaceCustomOpen = ref(false)
 const workspaceDraft = ref('')
 const isDraggingImage = ref(false)
+const discoverySelectedIndex = ref(0)
+const dismissedDiscoveryKey = ref('')
+const activeDiscovery = computed(() => {
+  const match = props.inputValue.match(/(?:^|\s)([@/])([^\s]*)$/)
+  if (!match) return null
+  return { trigger: match[1], query: match[2] }
+})
+
+const discoveryKey = computed(() => {
+  const discovery = activeDiscovery.value
+  return discovery ? `${discovery.trigger}:${discovery.query}` : ''
+})
+
+const discoveryItems = computed(() => {
+  if (dismissedDiscoveryKey.value === discoveryKey.value) return []
+  if (activeDiscovery.value?.trigger === '@') {
+    return (props.workspaceEntries || []).map((entry) => ({
+      key: entry.path,
+      name: entry.name,
+      detail: entry.path,
+      kind: 'file' as const,
+      entry,
+    }))
+  }
+  if (activeDiscovery.value?.trigger === '/') {
+    return (props.skills || []).map((skill) => ({
+      key: skill.name,
+      name: skill.name,
+      detail: skill.description,
+      kind: 'skill' as const,
+      skill,
+    }))
+  }
+  return []
+})
+const modelsByKey = computed(() => new Map(
+  (props.modelOptions || []).map((model) => [modelKey(model), model]),
+))
+
+watch(() => props.inputValue, () => {
+  if (dismissedDiscoveryKey.value && dismissedDiscoveryKey.value !== discoveryKey.value) {
+    dismissedDiscoveryKey.value = ''
+  }
+  discoverySelectedIndex.value = 0
+})
+
+watch(() => discoveryItems.value.length, (length) => {
+  discoverySelectedIndex.value = length ? Math.min(discoverySelectedIndex.value, length - 1) : 0
+})
+
+const selectedModelKey = computed(() => {
+  const key = `${props.modelProviderId || props.modelProvider}\u0000${props.modelName}`
+  return modelsByKey.value.has(key) ? key : undefined
+})
+
+function chooseDiscoveryItem(item: (typeof discoveryItems.value)[number]) {
+  const discovery = activeDiscovery.value
+  if (!discovery) return
+  if (discovery.trigger === '@' && item.kind === 'file') {
+    emit('chooseWorkspaceEntry', item.entry)
+    emit('update:inputValue', props.inputValue.replace(/(?:^|\s)@[^\s]*$/, ' ').trimStart())
+  } else if (discovery.trigger === '/' && item.kind === 'skill') {
+    emit('update:inputValue', props.inputValue.replace(/(?:^|\s)\/[^\s]*$/, ` /${item.skill.name} `).trimStart())
+  }
+}
+
+function scrollSelectedDiscoveryItemIntoView() {
+  void nextTick(() => {
+    discoveryMenu.value
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  })
+}
+
+function handleTextareaKeydown(event: KeyboardEvent) {
+  if (discoveryItems.value.length) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      discoverySelectedIndex.value = (discoverySelectedIndex.value + 1) % discoveryItems.value.length
+      scrollSelectedDiscoveryItemIntoView()
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      discoverySelectedIndex.value = (discoverySelectedIndex.value - 1 + discoveryItems.value.length) % discoveryItems.value.length
+      scrollSelectedDiscoveryItemIntoView()
+      return
+    }
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault()
+      const item = discoveryItems.value[discoverySelectedIndex.value]
+      if (item) chooseDiscoveryItem(item)
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      dismissedDiscoveryKey.value = discoveryKey.value
+      return
+    }
+  }
+
+  if (event.key === 'Enter') emit('enter', event)
+}
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
@@ -89,12 +201,17 @@ function reasoningLabel(value: ComposerReasoningEffort) {
   return value === 'default' ? uiText.composer.thinkingAuto : uiText.composer.thinkingOption(value)
 }
 
-function thinkingOptions() {
-  return ['default' as const, ...props.reasoningOptions]
-}
-
 function chooseReasoning(value: string) {
   emit('update:reasoningEffort', value as ComposerReasoningEffort)
+}
+
+function toggleAutoReasoning() {
+  if (props.reasoningEffort !== 'default') {
+    chooseReasoning('default')
+    return
+  }
+  const manualEffort = props.reasoningOptions.includes('medium') ? 'medium' : props.reasoningOptions[0]
+  if (manualEffort) chooseReasoning(manualEffort)
 }
 
 function imageId() {
@@ -217,17 +334,25 @@ function chooseAddAction(value: string) {
 }
 
 function updateAddMenu(value: boolean) {
-  thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
+  modelMenuOpen.value = false
   addMenuOpen.value = value
 }
 
-function updateThinkingMenu(value: boolean) {
+function updateModelMenu(value: boolean) {
   addMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
-  thinkingMenuOpen.value = value
+  modelMenuOpen.value = value
+}
+
+function modelKey(model: ComposerModel) {
+  return `${model.provider}\u0000${model.name}`
+}
+
+function modelFromKey(value: string) {
+  return modelsByKey.value.get(value)
 }
 
 function approvalModeLabel(value: ApprovalMode) {
@@ -236,8 +361,8 @@ function approvalModeLabel(value: ApprovalMode) {
 
 function updateApprovalMenu(value: boolean) {
   addMenuOpen.value = false
-  thinkingMenuOpen.value = false
   workspaceMenuOpen.value = false
+  modelMenuOpen.value = false
   approvalMenuOpen.value = value
 }
 
@@ -247,7 +372,6 @@ function chooseApprovalMode(value: string) {
 
 function updateWorkspaceMenu(value: boolean) {
   addMenuOpen.value = false
-  thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = value
   workspaceCustomOpen.value = false
@@ -290,13 +414,13 @@ function applyWorkspace() {
 }
 
 function closeAddMenuOnOutsideClick(event: PointerEvent) {
-  if (!addMenuOpen.value && !thinkingMenuOpen.value && !approvalMenuOpen.value && !workspaceMenuOpen.value) return
+  if (!addMenuOpen.value && !approvalMenuOpen.value && !workspaceMenuOpen.value && !modelMenuOpen.value) return
   const target = event.target
   if (target instanceof Node && composerEl.value?.contains(target)) return
   addMenuOpen.value = false
-  thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
+  modelMenuOpen.value = false
 }
 
 onMounted(() => {
@@ -328,7 +452,6 @@ function handleDragEnter(event: DragEvent) {
   dragDepth.value += 1
   isDraggingImage.value = true
   addMenuOpen.value = false
-  thinkingMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
 }
@@ -390,7 +513,6 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
         <template #menu-footer>
           <div v-if="workspaceCustomOpen" class="composer-workspace-editor">
             <input
-              id="composer-workspace-input"
               v-model="workspaceDraft"
               :aria-label="uiText.composer.workspace"
               type="text"
@@ -463,9 +585,26 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
             rows="1"
             :placeholder="uiText.composer.placeholder"
             @input="handleInput"
-            @keydown.enter="$emit('enter', $event)"
+            @keydown="handleTextareaKeydown"
             @paste="handlePaste"
           ></textarea>
+          <div v-if="discoveryItems.length" ref="discoveryMenu" class="composer-discovery-menu" role="listbox">
+            <button
+              v-for="(item, index) in discoveryItems"
+              :key="item.key"
+              type="button"
+              class="composer-discovery-item"
+              :aria-selected="index === discoverySelectedIndex"
+              :class="{ selected: index === discoverySelectedIndex }"
+              @mouseenter="discoverySelectedIndex = index"
+              @click="chooseDiscoveryItem(item)"
+            >
+              <FileText v-if="item.kind === 'file'" :size="14" stroke-width="2" />
+              <Box v-else :size="14" stroke-width="2" />
+              <span>{{ item.name }}</span>
+              <small>{{ item.detail }}</small>
+            </button>
+          </div>
         </div>
         <div class="composer-footer">
           <div class="composer-footer-left">
@@ -529,47 +668,88 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
           </ComposerSelectControl>
           </div>
           <div class="composer-footer-right">
-          <div v-if="props.modelName || props.reasoningOptions.length" class="composer-model-context">
-            <div
-              v-if="props.modelName"
-              class="composer-model"
-              :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
-            >
-              <Box :size="14" stroke-width="1.9" />
-              <span>{{ props.modelName }}</span>
-            </div>
+          <div v-if="props.modelName || props.reasoningOptions.length || props.modelOptions?.length" class="composer-model-context">
             <ComposerSelectControl
-              v-if="props.reasoningOptions.length"
+              v-if="props.modelOptions?.length"
+              :open="modelMenuOpen"
+              :options="props.modelOptions.map(modelKey)"
+              :selected="selectedModelKey"
               align="end"
-              :open="thinkingMenuOpen"
-              :options="thinkingOptions()"
-              :selected="props.reasoningEffort"
-              menu-class="composer-thinking-menu"
-              @select="chooseReasoning"
-              @update:open="updateThinkingMenu"
+              menu-class="composer-model-menu"
+              @select="(value) => { const model = modelFromKey(value); if (model) emit('selectModel', model) }"
+              @update:open="updateModelMenu"
             >
-              <template #option-icon>
-                <Brain :size="14" stroke-width="2.1" />
+              <template #menu-header>Model</template>
+              <template #option-icon><Cpu :size="15" stroke-width="1.8" /></template>
+              <template #option-label="{ option }">
+                <span class="composer-model-option-copy">
+                  <strong>{{ modelFromKey(option)?.name || option }}</strong>
+                  <small>{{ modelFromKey(option)?.providerName || modelFromKey(option)?.provider }}</small>
+                </span>
               </template>
-              <template #option-selected>
-                <Check :size="14" stroke-width="2.2" />
+              <template #option-selected><Check :size="14" stroke-width="2.2" /></template>
+              <template v-if="props.reasoningOptions.length" #menu-footer>
+                <div class="composer-thinking-section" role="group" :aria-label="uiText.composer.thinking">
+                  <div class="composer-thinking-section-label">
+                    <Brain :size="13" stroke-width="2" />
+                    <span>{{ uiText.composer.thinking }}</span>
+                  </div>
+                  <div class="composer-thinking-auto-row">
+                    <span>{{ reasoningLabel('default') }}</span>
+                    <button
+                      type="button"
+                      class="composer-thinking-auto-switch"
+                      :class="{ active: props.reasoningEffort === 'default' }"
+                      role="switch"
+                      :aria-checked="props.reasoningEffort === 'default'"
+                      :aria-label="reasoningLabel('default')"
+                      @click="toggleAutoReasoning"
+                    >
+                      <span class="composer-thinking-auto-thumb"></span>
+                    </button>
+                  </div>
+                  <div class="composer-thinking-manual-label">Manual</div>
+                  <div class="composer-thinking-options" role="group" aria-label="Manual thinking effort">
+                    <button
+                      v-for="option in props.reasoningOptions"
+                      :key="option"
+                      type="button"
+                      class="composer-thinking-option"
+                      :class="{ active: option === props.reasoningEffort }"
+                      :aria-pressed="option === props.reasoningEffort"
+                      @click="chooseReasoning(option)"
+                    >
+                      {{ reasoningLabel(option) }}
+                    </button>
+                  </div>
+                </div>
               </template>
-              <template #option-label="{ option }">{{ reasoningLabel(option as ComposerReasoningEffort) }}</template>
               <template #trigger="{ open, toggle }">
                 <button
-                  class="composer-thinking-action"
+                  class="composer-model-action"
                   type="button"
-                  :aria-label="uiText.composer.thinking"
-                  :title="uiText.composer.thinking"
+                  :aria-label="uiText.composer.currentModel(props.modelName, props.modelProvider)"
+                  :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
                   :class="{ active: open }"
                   @click="toggle"
                 >
-                  <Brain :size="14" stroke-width="2.1" />
-                  <span>{{ reasoningLabel(props.reasoningEffort) }}</span>
-                  <ChevronDown :size="13" stroke-width="2.2" />
+                  <Cpu :size="14" stroke-width="1.8" />
+                  <span class="composer-model-name">{{ props.modelName || 'Select model' }}</span>
+                  <span v-if="props.reasoningOptions.length" class="composer-model-effort">
+                    {{ reasoningLabel(props.reasoningEffort) }}
+                  </span>
+                  <ChevronDown :size="12" stroke-width="2.1" />
                 </button>
               </template>
             </ComposerSelectControl>
+            <div
+              v-else-if="props.modelName"
+              class="composer-model"
+              :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
+            >
+              <Cpu :size="14" stroke-width="1.8" />
+              <span>{{ props.modelName }}</span>
+            </div>
           </div>
           <input
             ref="fileInput"

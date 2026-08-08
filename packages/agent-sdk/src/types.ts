@@ -32,6 +32,62 @@ export type ListSessionsOptions = RequestOptions & {
   includeHidden?: boolean;
 };
 
+export type WorkspaceEntry = {
+  path: string;
+  name: string;
+};
+
+export type WorkspaceEntriesInput = RequestOptions & {
+  /** Existing Session whose immutable workspace should be used. */
+  sessionId?: string;
+  /** Temporary workspace context returned by `workspace.createContext()`. */
+  contextId?: string;
+  path?: string;
+  query?: string;
+  includeDirectories?: boolean;
+  limit?: number;
+};
+
+export type CreateWorkspaceContextInput = {
+  workspaceRoot: string;
+  ttlMs?: number;
+};
+
+export type WorkspaceContext = {
+  id: string;
+  root: string;
+  expiresAt?: string;
+};
+
+export type ListSkillsInput = RequestOptions & {
+  /** Existing Session whose workspace skill catalog should be used. */
+  sessionId?: string;
+  /** Temporary workspace context returned by `workspace.createContext()`. */
+  contextId?: string;
+  enabledOnly?: boolean;
+};
+
+export type SkillSummary = {
+  name: string;
+  description: string;
+};
+
+export type ModelSummary = {
+  name: string;
+  supportsReasoning?: boolean;
+};
+
+export type ModelProviderModels = {
+  provider: string;
+  providerName?: string;
+  models: ModelSummary[];
+};
+
+export type ListModelsOptions = RequestOptions & {
+  providerId?: string;
+  refresh?: boolean;
+};
+
 export type CreateSessionInput = {
   title?: string;
   metadata?: Record<string, unknown>;

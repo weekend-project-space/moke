@@ -42,11 +42,22 @@ import type {
   SendMessageInput,
   UpdateSessionInput,
   UpdateSessionEnvironmentInput,
+  CreateWorkspaceContextInput,
+  ListSkillsInput,
+  ListModelsOptions,
+  ModelProviderModels,
+  SkillSummary,
+  WorkspaceContext,
+  WorkspaceEntriesInput,
+  WorkspaceEntry,
 } from './types.js';
 
 export class MokeClient {
   readonly sessions: SessionsResource;
   readonly runs: RunsResource;
+  readonly workspace: WorkspaceResource;
+  readonly skills: SkillsResource;
+  readonly models: ModelsResource;
   private readonly http: HttpClient;
   private readonly runLifecycle: RunLifecycleSubscription;
 
@@ -55,6 +66,9 @@ export class MokeClient {
     this.runLifecycle = new RunLifecycleSubscription(this.http);
     this.sessions = new SessionsResource(this, this.http);
     this.runs = new RunsResource(this.http);
+    this.workspace = new WorkspaceResource(this.http);
+    this.skills = new SkillsResource(this.http);
+    this.models = new ModelsResource(this.http);
   }
 
   session(id: string) { return new SessionHandle(this, id); }
@@ -152,7 +166,13 @@ class SessionsResource {
 }
 
 export class SessionHandle {
-  constructor(protected readonly client: MokeClient, readonly id: string) {}
+  readonly workspace: SessionWorkspaceResource;
+  readonly skills: SessionSkillsResource;
+
+  constructor(protected readonly client: MokeClient, readonly id: string) {
+    this.workspace = new SessionWorkspaceResource(client.workspace, id);
+    this.skills = new SessionSkillsResource(client.skills, id);
+  }
 
   get(options?: RequestOptions) { return this.client.sessions.get(this.id, options); }
   async messages(options?: RequestOptions) { return (await this.get(options)).messages; }
@@ -176,6 +196,81 @@ export class SessionHandle {
   async prompt(input: SendMessageInput, options: PromptOptions = {}) {
     const run = await this.send(input, options);
     return run.consume(options);
+  }
+}
+
+class WorkspaceResource {
+  constructor(private readonly http: HttpClient) {}
+
+  async createContext(input: CreateWorkspaceContextInput, options?: RequestOptions): Promise<WorkspaceContext> {
+    const data = await this.http.request<unknown>(
+      '/api/workspace/contexts',
+      this.http.json('POST', { root: input.workspaceRoot, ttl_ms: input.ttlMs }),
+      options,
+    );
+    return requireWorkspaceContext(data);
+  }
+
+  async entries(input: WorkspaceEntriesInput = {}): Promise<WorkspaceEntry[]> {
+    const search = new URLSearchParams();
+    if (input.sessionId) search.set('session_id', input.sessionId);
+    if (input.contextId) search.set('context_id', input.contextId);
+    if (input.path) search.set('path', input.path);
+    if (input.query) search.set('query', input.query);
+    if (input.includeDirectories !== undefined) search.set('include_directories', String(input.includeDirectories));
+    if (input.limit !== undefined) search.set('limit', String(input.limit));
+    const query = search.size ? `?${search}` : '';
+    const data = await this.http.request<unknown>(`/api/workspace/entries${query}`, {}, input);
+    return requireWorkspaceEntries(data);
+  }
+}
+
+class SessionWorkspaceResource {
+  constructor(
+    private readonly resource: WorkspaceResource,
+    private readonly sessionId: string,
+  ) {}
+
+  entries(input: Omit<WorkspaceEntriesInput, 'sessionId' | 'contextId'> = {}) {
+    return this.resource.entries({ ...input, sessionId: this.sessionId });
+  }
+}
+
+class SkillsResource {
+  constructor(private readonly http: HttpClient) {}
+
+  async list(input: ListSkillsInput = {}): Promise<SkillSummary[]> {
+    const search = new URLSearchParams();
+    if (input.sessionId) search.set('session_id', input.sessionId);
+    if (input.contextId) search.set('context_id', input.contextId);
+    if (input.enabledOnly !== undefined) search.set('enabled_only', String(input.enabledOnly));
+    const query = search.size ? `?${search}` : '';
+    const data = await this.http.request<unknown>(`/api/workspace/skills${query}`, {}, input);
+    return requireSkills(data);
+  }
+}
+
+class SessionSkillsResource {
+  constructor(
+    private readonly resource: SkillsResource,
+    private readonly sessionId: string,
+  ) {}
+
+  list(input: Omit<ListSkillsInput, 'sessionId' | 'contextId'> = {}) {
+    return this.resource.list({ ...input, sessionId: this.sessionId });
+  }
+}
+
+class ModelsResource {
+  constructor(private readonly http: HttpClient) {}
+
+  async list(options: ListModelsOptions = {}): Promise<ModelProviderModels[]> {
+    const search = new URLSearchParams();
+    if (options.providerId) search.set('provider_id', options.providerId);
+    if (options.refresh) search.set('refresh', 'true');
+    const query = search.size ? `?${search}` : '';
+    const data = await this.http.request<unknown>(`/api/settings/model/capabilities${query}`, {}, options);
+    return requireModelProviderModels(data);
   }
 }
 
@@ -415,6 +510,103 @@ function requireObjectWithId(value: unknown, label: string) {
     throw new MokeProtocolError(`${label} response is invalid`);
   }
   return value as { id: string } & Record<string, unknown>;
+}
+
+function requireWorkspaceContext(value: unknown): WorkspaceContext {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new MokeProtocolError('Workspace context response is invalid');
+  }
+  const data = value as Record<string, unknown>;
+  if (typeof data.id !== 'string' || typeof data.root !== 'string') {
+    throw new MokeProtocolError('Workspace context response is invalid');
+  }
+  return {
+    id: data.id,
+    root: data.root,
+    ...(typeof data.expires_at === 'string' ? { expiresAt: data.expires_at } : {}),
+  };
+}
+
+function requireWorkspaceEntries(value: unknown): WorkspaceEntry[] {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as Record<string, unknown>).entries
+      : undefined;
+  if (!Array.isArray(entries)) throw new MokeProtocolError('Workspace entries response is invalid');
+
+  return entries.map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new MokeProtocolError('Workspace entry response is invalid');
+    }
+    const data = entry as Record<string, unknown>;
+    if (typeof data.path !== 'string' || typeof data.name !== 'string') {
+      throw new MokeProtocolError('Workspace entry response is invalid');
+    }
+    return {
+      path: data.path,
+      name: data.name,
+    };
+  });
+}
+
+function requireSkills(value: unknown): SkillSummary[] {
+  const skills = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as Record<string, unknown>).skills
+      : undefined;
+  if (!Array.isArray(skills)) throw new MokeProtocolError('Skills response is invalid');
+
+  return skills.map((skill) => {
+    if (!skill || typeof skill !== 'object' || Array.isArray(skill)) {
+      throw new MokeProtocolError('Skill response is invalid');
+    }
+    const data = skill as Record<string, unknown>;
+    if (typeof data.name !== 'string' || typeof data.description !== 'string') {
+      throw new MokeProtocolError('Skill response is invalid');
+    }
+    return {
+      name: data.name,
+      description: data.description,
+    };
+  });
+}
+
+function requireModelProviderModels(value: unknown): ModelProviderModels[] {
+  const groups = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>).providers
+      : undefined;
+  if (!Array.isArray(groups)) throw new MokeProtocolError('Models response is invalid');
+
+  return groups.map((group) => {
+    if (!group || typeof group !== 'object' || Array.isArray(group)) {
+      throw new MokeProtocolError('Model provider response is invalid');
+    }
+    const data = group as Record<string, unknown>;
+    if (typeof data.provider !== 'string' || !Array.isArray(data.models)) {
+      throw new MokeProtocolError('Model provider response is invalid');
+    }
+    return {
+      provider: data.provider,
+      ...(typeof data.provider_name === 'string' ? { providerName: data.provider_name } : {}),
+      models: data.models.map((model) => {
+        if (!model || typeof model !== 'object' || Array.isArray(model)) {
+          throw new MokeProtocolError('Model response is invalid');
+        }
+        const item = model as Record<string, unknown>;
+        if (typeof item.name !== 'string') throw new MokeProtocolError('Model response is invalid');
+        return {
+          name: item.name,
+          ...(typeof item.supports_reasoning === 'boolean'
+            ? { supportsReasoning: item.supports_reasoning }
+            : {}),
+        };
+      }),
+    };
+  });
 }
 
 function requireRun(value: unknown): RunSnapshot {

@@ -1,12 +1,20 @@
 import { MokeApiError, MokeClient } from '@moke/agent-sdk'
 import type {
   CreateSessionEnvironmentInput,
+  CreateWorkspaceContextInput,
+  ListModelsOptions,
+  ListSkillsInput,
+  ModelProviderModels,
   RunLifecycleListener,
   RunLifecycleOptions,
   SendMessageEnvironmentInput,
   SessionRunEventListener,
   SessionRunEventOptions,
+  SkillSummary,
   UpdateSessionEnvironmentInput,
+  WorkspaceContext,
+  WorkspaceEntriesInput,
+  WorkspaceEntry,
 } from '@moke/agent-sdk'
 import type { FileAttachmentInput, ImageAttachment, Message, SessionSummary } from '../model/conversation'
 import { apiFetch, getApiToken } from '../../../services/apiAccess'
@@ -24,6 +32,27 @@ export function createAgentApi(apiBase: string, fetcher: typeof fetch = apiFetch
   const client = new MokeClient({ baseUrl: apiBase, fetch: fetcher, token: getApiToken() })
 
   return {
+    workspace: {
+      createContext(input: CreateWorkspaceContextInput): Promise<WorkspaceContext> {
+        return client.workspace.createContext(input)
+      },
+      entries(input: WorkspaceEntriesInput = {}): Promise<WorkspaceEntry[]> {
+        return client.workspace.entries(input)
+      },
+    },
+
+    skills: {
+      list(input: ListSkillsInput = {}): Promise<SkillSummary[]> {
+        return client.skills.list(input)
+      },
+    },
+
+    models: {
+      list(input: ListModelsOptions = {}): Promise<ModelProviderModels[]> {
+        return client.models.list(input)
+      },
+    },
+
     async checkHealth() {
       try {
         await client.health()

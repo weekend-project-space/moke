@@ -2,6 +2,7 @@
 import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import type { SkillSummary, WorkspaceContext, WorkspaceEntry } from '@moke/agent-sdk'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { BrowserPanel, useBrowserWorkspace } from '../../browser'
 import { ScheduledTasksWorkspace } from '../../scheduled-tasks'
@@ -20,6 +21,7 @@ import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
 import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
+import { createAgentApi } from '../api/agentApi'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
 import type { TaskTemplate } from '../presentation/types'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
@@ -38,6 +40,9 @@ const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
+const workspaceEntries = ref<WorkspaceEntry[]>([])
+const workspaceSkills = ref<SkillSummary[]>([])
+const draftWorkspaceContext = ref<WorkspaceContext | null>(null)
 const route = useRoute()
 const router = useRouter()
 const workspaceActive = computed(() => route.name === 'chat' || route.name === 'tasks')
@@ -64,6 +69,7 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
+const discoveryApi = createAgentApi(apiBase)
 let sendNextQueuedMessage: () => Promise<void> = async () => undefined
 const {
   cancelRun,
@@ -88,6 +94,7 @@ const {
   runningSessionIds,
   selectAskOption,
   setDraftWorkspace,
+  setModel,
   setApprovalMode,
   selectSession: selectAgentSession,
   sendMessage,
@@ -110,14 +117,20 @@ const {
     void router.replace({ name: 'chat', params: id ? { sessionId: id } : {} })
   },
 })
+const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
+const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
+const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
+const selectedModel = computed(() => sessionId.value ? currentSession.value?.env?.model : newSessionDraft.model)
 const {
   activeModel,
+  composerModelOptions,
   composerReasoningEffort,
   composerReasoningOptions,
   currentRunEnvironment,
   loadCapability: loadReasoningCapability,
   loadStoredSelection: loadComposerReasoningEffort,
-} = useComposerReasoning({ apiBase, serverStatus })
+  selectModel,
+} = useComposerReasoning({ apiBase, serverStatus, selectedModel, setModel })
 const {
   recentWorkspaces,
   rememberWorkspace,
@@ -211,8 +224,63 @@ async function updateApprovalMode(mode: ApprovalMode) {
 }
 
 function updateDraftWorkspace(root: string) {
-  if (setDraftWorkspace(root)) rememberWorkspace(root)
+  const previousRoot = newSessionDraft.workspace?.root
+  if (setDraftWorkspace(root)) {
+    if (newSessionDraft.workspace?.root !== previousRoot) draftWorkspaceContext.value = null
+    rememberWorkspace(root)
+  }
 }
+
+let discoveryTimer: number | undefined
+let discoveryRequestVersion = 0
+
+async function discoveryContext() {
+  if (sessionId.value) return { sessionId: sessionId.value }
+  const root = newSessionDraft.workspace?.root
+  if (!root) return null
+  const current = draftWorkspaceContext.value
+  if (current?.root === root && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())) {
+    return { contextId: current.id }
+  }
+  const context = await discoveryApi.workspace.createContext({ workspaceRoot: root })
+  if (newSessionDraft.workspace?.root !== root || sessionId.value) return null
+  draftWorkspaceContext.value = context
+  return { contextId: context.id }
+}
+
+watch([input, sessionId, currentWorkspaceRoot], () => {
+  if (discoveryTimer) window.clearTimeout(discoveryTimer)
+  const requestVersion = ++discoveryRequestVersion
+  workspaceEntries.value = []
+  workspaceSkills.value = []
+  const match = input.value.match(/(?:^|\s)([@/])([^\s]*)$/)
+  if (!match || !currentWorkspaceRoot.value) return
+  discoveryTimer = window.setTimeout(async () => {
+    discoveryTimer = undefined
+    try {
+      const context = await discoveryContext()
+      if (!context || requestVersion !== discoveryRequestVersion) return
+      if (match[1] === '@') {
+        const entries = await discoveryApi.workspace.entries({
+          ...context,
+          query: match[2],
+          includeDirectories: false,
+        })
+        if (requestVersion !== discoveryRequestVersion) return
+        workspaceEntries.value = entries
+      } else {
+        const skills = await discoveryApi.skills.list({
+          ...context,
+          enabledOnly: true,
+        })
+        if (requestVersion !== discoveryRequestVersion) return
+        workspaceSkills.value = skills
+      }
+    } catch {
+      // Results were cleared before this request started.
+    }
+  }, 120)
+})
 
 async function chooseDraftWorkspaceDirectory() {
   try {
@@ -244,11 +312,8 @@ async function chooseFiles() {
   }
 }
 
-const currentSession = computed(() => sessions.value.find((session) => session.id === sessionId.value))
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
-const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
-const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
 const taskTemplates = computed<TaskTemplate[]>(() => (currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters).map((starter) => ({
   title: starter.title,
   description: '',
@@ -412,6 +477,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (discoveryTimer) window.clearTimeout(discoveryTimer)
   window.clearInterval(runtimeTimer)
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)
@@ -567,18 +633,24 @@ defineExpose({
         <ComposerBox ref="composerBox" :input-value="input" :primary-disabled="primaryDisabled"
           :primary-is-stop="primaryIsStop" :attachments="attachments" :files="files"
           :model-name="activeModel?.model || ''" :model-provider="activeModel?.providerName || ''"
+          :model-provider-id="activeModel?.providerId || ''"
+          :model-options="composerModelOptions"
           :reasoning-effort="composerReasoningEffort"
           :reasoning-options="composerReasoningOptions"
           :approval-mode="currentApprovalMode"
           :native-workspace-picker="nativeWorkspacePicker"
           :workspace-root="draftWorkspaceRoot"
           :workspace-suggestions="recentWorkspaces"
+          :workspace-entries="workspaceEntries"
+          :skills="workspaceSkills"
           @update:input-value="input = $event"
           @update:reasoning-effort="composerReasoningEffort = $event"
           @update:approval-mode="updateApprovalMode"
+          @select-model="selectModel"
           @update:workspace-root="updateDraftWorkspace"
           @choose-workspace-directory="chooseDraftWorkspaceDirectory"
           @choose-files="chooseFiles"
+          @choose-workspace-entry="addFiles([$event])"
           @input="handleInput"
           @add-attachments="addAttachments" @remove-attachment="removeAttachment" @remove-file="removeFile"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />

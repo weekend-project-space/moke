@@ -11,6 +11,7 @@ import type { WeixinLoginService } from '../services/messaging/weixin-login-serv
 import type { FeishuLoginService } from '../services/messaging/feishu-login-service.js';
 import type { DingTalkLoginService } from '../services/messaging/dingtalk-login-service.js';
 import type { ScheduledTaskService } from '../services/scheduled-task-service.js';
+import type { DiscoveryService } from '../services/discovery-service.js';
 
 export type RoutesContext = {
   sessionStore: SessionRepository;
@@ -29,4 +30,5 @@ export type RoutesContext = {
   dingtalkLoginService: DingTalkLoginService;
   scheduledTaskService: ScheduledTaskService;
   defaultWorkspaceRoot: string;
+  discoveryService: DiscoveryService;
 };

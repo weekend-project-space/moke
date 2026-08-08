@@ -12,6 +12,7 @@ test('activeModelFromSettings selects the active provider', () => {
     ],
   }), {
     model: 'gpt-test',
+    providerId: 'provider_2',
     providerName: 'Cloud',
   })
 })

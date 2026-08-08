@@ -91,3 +91,45 @@ test('agentApi updates the mutable session approval environment', async () => {
     approval_mode: 'ai_review',
   })
 })
+
+test('agentApi exposes composer discovery through the SDK resources', async () => {
+  const calls: string[] = []
+  const fetcher = (async (input: URL | RequestInfo) => {
+    const url = String(input)
+    calls.push(url)
+    const body = url.includes('/workspace/entries')
+      ? [{ name: 'README.md', path: '/workspace/README.md' }]
+      : [{ name: 'research', description: 'Research sources' }]
+    return new Response(JSON.stringify(body), { status: 200 })
+  }) as typeof fetch
+  const api = createAgentApi('http://localhost:4010', fetcher)
+
+  assert.deepEqual(await api.workspace.entries({ sessionId: 'session_1', query: 'read', includeDirectories: false }), [
+    { name: 'README.md', path: '/workspace/README.md' },
+  ])
+  assert.deepEqual(await api.skills.list({ sessionId: 'session_1', enabledOnly: true }), [
+    { name: 'research', description: 'Research sources' },
+  ])
+  assert.match(calls[0] || '', /session_id=session_1/)
+  assert.match(calls[0] || '', /include_directories=false/)
+  assert.match(calls[1] || '', /enabled_only=true/)
+})
+
+test('agentApi creates a draft workspace context before a session exists', async () => {
+  let requestBody: unknown
+  const api = createAgentApi('http://localhost:4010', (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({
+      id: 'context_1',
+      root: 'E:\\work\\draft',
+      expires_at: '2026-08-08T01:00:00.000Z',
+    }), { status: 201 })
+  }) as typeof fetch)
+
+  assert.deepEqual(await api.workspace.createContext({ workspaceRoot: 'E:\\work\\draft' }), {
+    id: 'context_1',
+    root: 'E:\\work\\draft',
+    expiresAt: '2026-08-08T01:00:00.000Z',
+  })
+  assert.deepEqual(requestBody, { root: 'E:\\work\\draft' })
+})

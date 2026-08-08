@@ -33,6 +33,7 @@ import { WeixinAdapter } from '@moke/messaging-weixin';
 import { DingTalkAdapter } from '@moke/messaging-dingtalk';
 import { FeishuAdapter } from '@moke/messaging-feishu';
 import { ScheduledTaskService } from './services/scheduled-task-service.js';
+import { DiscoveryService } from './services/discovery-service.js';
 
 export {
   normalizeWindowsDrivePath,
@@ -79,11 +80,6 @@ export async function createApp(): Promise<ServerApp> {
   const runs = new Map<string, RuntimeRun>();
   const browserBridge = new BrowserBridge();
   const settingsService = new SettingsService(settingsPath);
-  const skillSettingsService = new SkillSettingsService(defaultWorkspaceRoot);
-  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
-  const attachmentStore = new AttachmentStore(storePath);
-  const messagingStore = new JsonMessagingStore(storePath);
-  const scheduledTaskStore = new ScheduledTaskStore(storePath);
   const { system, toolRegistry, createSkillContentManager } = createToolRegistry({
     defaultWorkspaceRoot,
     browserBridge,
@@ -91,6 +87,15 @@ export async function createApp(): Promise<ServerApp> {
   const permissionsService = new PermissionsService(permissionsPath, {
     revokeWorkspaceRoot: (root) => system.revokeWorkspaceRoot(root),
   });
+  const discoveryService = new DiscoveryService(settingsService, () => [
+    defaultWorkspaceRoot,
+    ...permissionsService.listWorkspaceRoots().map((permission) => permission.path),
+  ]);
+  const skillSettingsService = new SkillSettingsService(defaultWorkspaceRoot);
+  const sessionStore = new JsonSessionStore({ storePath, legacyStatePath: statePath, summarizeSession, workspace: defaultWorkspaceRoot });
+  const attachmentStore = new AttachmentStore(storePath);
+  const messagingStore = new JsonMessagingStore(storePath);
+  const scheduledTaskStore = new ScheduledTaskStore(storePath);
   const mcpSettingsService = new McpSettingsService(mcpConfigPath, permissionsService);
   const approvedMessagingRoots = new Set([defaultWorkspaceRoot]);
   const sessionWorkspaceRoots = new Map<string, Set<string>>();
@@ -207,6 +212,7 @@ export async function createApp(): Promise<ServerApp> {
       dingtalkLoginService,
       scheduledTaskService,
        defaultWorkspaceRoot,
+       discoveryService,
      }, {
        apiToken: process.env.MOKE_API_TOKEN,
      }),

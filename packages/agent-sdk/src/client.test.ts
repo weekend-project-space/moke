@@ -552,6 +552,107 @@ test('RunHandle.result reads a completed run snapshot', async () => {
   });
 });
 
+test('workspace.createContext creates a temporary draft workspace context', async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new MokeClient({
+    baseUrl: 'http://127.0.0.1:4010',
+    fetch: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return json({ id: 'ctx_1', root: 'E:\\work\\project-a', expires_at: '2026-08-08T00:10:00.000Z' });
+    }) as typeof fetch,
+  });
+
+  const context = await client.workspace.createContext({
+    workspaceRoot: 'E:\\work\\project-a',
+    ttlMs: 600_000,
+  });
+
+  assert.deepEqual(context, {
+    id: 'ctx_1', root: 'E:\\work\\project-a', expiresAt: '2026-08-08T00:10:00.000Z',
+  });
+  assert.equal(calls[0]?.url, 'http://127.0.0.1:4010/api/workspace/contexts');
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+    root: 'E:\\work\\project-a', ttl_ms: 600_000,
+  });
+});
+
+test('session.workspace.entries returns simple name and path records', async () => {
+  let requestUrl = '';
+  const client = new MokeClient({
+    baseUrl: 'http://127.0.0.1:4010',
+    fetch: (async (input: URL | RequestInfo) => {
+      requestUrl = String(input);
+      return json([
+        { name: 'src', path: 'src', kind: 'directory' },
+        { name: 'README.md', path: 'README.md', kind: 'file', size: 42 },
+      ]);
+    }) as typeof fetch,
+  });
+
+  const entries = await client.session('sess_1').workspace.entries({ query: 'read', limit: 20 });
+
+  assert.equal(requestUrl, 'http://127.0.0.1:4010/api/workspace/entries?session_id=sess_1&query=read&limit=20');
+  assert.deepEqual(entries, [
+    { name: 'src', path: 'src' },
+    { name: 'README.md', path: 'README.md' },
+  ]);
+});
+
+test('session.skills.list returns simple name and description records', async () => {
+  let requestUrl = '';
+  const client = new MokeClient({
+    baseUrl: 'http://127.0.0.1:4010',
+    fetch: (async (input: URL | RequestInfo) => {
+      requestUrl = String(input);
+      return json([{ name: 'research', description: 'Research across sources', enabled: true }]);
+    }) as typeof fetch,
+  });
+
+  const skills = await client.session('sess_1').skills.list({ enabledOnly: true });
+
+  assert.equal(requestUrl, 'http://127.0.0.1:4010/api/workspace/skills?session_id=sess_1&enabled_only=true');
+  assert.deepEqual(skills, [{ name: 'research', description: 'Research across sources' }]);
+});
+
+test('models.list groups simple model records by provider', async () => {
+  let requestUrl = '';
+  const client = new MokeClient({
+    baseUrl: 'http://127.0.0.1:4010',
+    fetch: (async (input: URL | RequestInfo) => {
+      requestUrl = String(input);
+      return json([{
+        provider: 'provider_local',
+        provider_name: 'Local',
+        models: [
+          { name: 'reasoning-model', supports_reasoning: true },
+          { name: 'chat-model' },
+        ],
+      }]);
+    }) as typeof fetch,
+  });
+
+  const providers = await client.models.list({ providerId: 'provider_1', refresh: true });
+
+  assert.equal(requestUrl, 'http://127.0.0.1:4010/api/settings/model/capabilities?provider_id=provider_1&refresh=true');
+  assert.deepEqual(providers, [{
+    provider: 'provider_local',
+    providerName: 'Local',
+    models: [
+      { name: 'reasoning-model', supportsReasoning: true },
+      { name: 'chat-model' },
+    ],
+  }]);
+});
+
+test('resource methods reject malformed response records', async () => {
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async () => json([{ name: 'missing path' }])) as typeof fetch,
+  });
+
+  await assert.rejects(client.workspace.entries({ contextId: 'ctx_1' }), MokeProtocolError);
+});
+
 test('withHandlers creates an immutable session policy and prompt overrides bound handlers', async () => {
   const approval = event({
     seq: 1,

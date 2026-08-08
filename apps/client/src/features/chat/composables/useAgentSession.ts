@@ -1,5 +1,5 @@
 import { computed, nextTick, reactive, ref, shallowRef } from 'vue'
-import type { RunHandle, RunLifecycleEvent, SendMessageEnvironmentInput } from '@moke/agent-sdk'
+import type { ModelSelection, RunHandle, RunLifecycleEvent, SendMessageEnvironmentInput } from '@moke/agent-sdk'
 import { createLatestRequestGuard } from '../services/latestRequest'
 import type { AgentEvent, ApprovalMode, AskOption, FileAttachmentInput, ImageAttachment, Message } from '../model/conversation'
 import { uiText } from '../../../text/uiText'
@@ -34,6 +34,7 @@ type UseAgentSessionOptions = {
 export type NewSessionDraft = {
   approval_mode: ApprovalMode
   workspace?: { root: string }
+  model?: ModelSelection
 }
 
 export type MessageSubmissionError = {
@@ -148,6 +149,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   function resetNewSessionDraft() {
     newSessionDraft.approval_mode = 'manual'
     delete newSessionDraft.workspace
+    delete newSessionDraft.model
   }
 
   function startNewSession() {
@@ -165,6 +167,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const env = {
       approval_mode: newSessionDraft.approval_mode,
       ...(newSessionDraft.workspace ? { workspace: { ...newSessionDraft.workspace } } : {}),
+      ...(newSessionDraft.model ? { model: { ...newSessionDraft.model } } : {}),
     }
     const nextSessionId = await api.createSession(uiText.app.newChat, env)
 
@@ -204,6 +207,23 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       delete newSessionDraft.workspace
     }
     return true
+  }
+
+  async function setModel(model: ModelSelection) {
+    const targetSessionId = sessionId.value
+    if (!targetSessionId) {
+      newSessionDraft.model = { ...model }
+      submissionError.value = null
+      return true
+    }
+    if (serverStatus.value !== 'online') return false
+    try {
+      await api.updateSessionEnvironment(targetSessionId, { model })
+      await loadSessions()
+      return true
+    } catch {
+      return false
+    }
   }
 
   async function archiveSession(id: string) {
@@ -536,6 +556,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     runningSessionIds,
     selectAskOption,
     setDraftWorkspace,
+    setModel,
     setApprovalMode,
     selectSession,
     sendMessage,
