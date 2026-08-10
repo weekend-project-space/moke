@@ -442,7 +442,10 @@ const sidebar = {
   newChat: 'New chat',
   noResultsDescription: 'Try a different keyword.',
   noResultsTitle: 'No results',
+  noProject: 'No project',
   pin: 'Pin',
+  projectsView: 'Projects',
+  recentView: 'Recent',
   rename: 'Rename',
   running: 'Running',
   scheduledSessionOrigin: 'Created by a scheduled task',
@@ -450,6 +453,7 @@ const sidebar = {
   search: 'Search chats',
   settings: 'Settings',
   title: 'Moke',
+  viewMode: 'Group chats',
   unpin: 'Unpin',
 } as const
 

@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { Archive, CalendarClock, Clock3, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { Archive, CalendarClock, Clock3, FolderClosed, FolderOpen, Folders, List, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, SquarePen, X } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { SessionSummary } from '../model/conversation'
+import { groupSessionsByProject } from '../presentation/sessionProjects'
 import { uiText } from '../../../text/uiText'
+
+type SessionViewMode = 'recent' | 'projects'
+
+const SESSION_VIEW_STORAGE_KEY = 'moke.sidebar.session-view'
 
 const props = defineProps<{
   sessions: SessionSummary[]
@@ -41,6 +46,8 @@ const editingInput = ref<HTMLInputElement | null>(null)
 const editingSession = ref<SessionSummary | null>(null)
 const menuEl = ref<HTMLElement | null>(null)
 const runningSessionIdSet = computed(() => new Set(props.runningSessionIds))
+const viewMode = ref<SessionViewMode>(readSessionViewMode())
+const collapsedProjects = ref(new Set<string>())
 
 const filteredSessions = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -52,6 +59,49 @@ const filteredSessions = computed(() => {
     return label.includes(query) || preview.includes(query)
   })
 })
+
+const projectGroups = computed(() => groupSessionsByProject(filteredSessions.value, uiText.sidebar.noProject))
+const allProjectGroups = computed(() => groupSessionsByProject(props.sessions, uiText.sidebar.noProject))
+
+function readSessionViewMode(): SessionViewMode {
+  try {
+    return window.localStorage.getItem(SESSION_VIEW_STORAGE_KEY) === 'projects' ? 'projects' : 'recent'
+  } catch {
+    return 'recent'
+  }
+}
+
+function setViewMode(mode: SessionViewMode) {
+  viewMode.value = mode
+  try {
+    window.localStorage.setItem(SESSION_VIEW_STORAGE_KEY, mode)
+  } catch {
+    // The view still works when browser storage is unavailable.
+  }
+}
+
+function toggleProject(key: string) {
+  const next = new Set(collapsedProjects.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsedProjects.value = next
+}
+
+function isProjectCollapsed(key: string) {
+  return !searchQuery.value.trim() && collapsedProjects.value.has(key)
+}
+
+watch(() => props.activeSessionId, (activeSessionId) => {
+  if (!activeSessionId) return
+  const activeGroup = allProjectGroups.value.find((group) =>
+    group.sessions.some((session) => session.id === activeSessionId),
+  )
+  if (!activeGroup || !collapsedProjects.value.has(activeGroup.key)) return
+
+  const next = new Set(collapsedProjects.value)
+  next.delete(activeGroup.key)
+  collapsedProjects.value = next
+}, { immediate: true })
 
 function clearSearch() {
   searchQuery.value = ''
@@ -211,7 +261,31 @@ onUnmounted(() => {
     </nav>
 
     <section class="sidebar-chat-browser">
-      <span class="sidebar-section-title">{{ uiText.sidebar.chats }}</span>
+      <div class="sidebar-chat-heading">
+        <span class="sidebar-section-title">{{ uiText.sidebar.chats }}</span>
+        <div class="session-view-switch" role="group" :aria-label="uiText.sidebar.viewMode">
+          <button
+            type="button"
+            :class="{ active: viewMode === 'recent' }"
+            :aria-pressed="viewMode === 'recent'"
+            :aria-label="uiText.sidebar.recentView"
+            :title="uiText.sidebar.recentView"
+            @click="setViewMode('recent')"
+          >
+            <List :size="14" stroke-width="2.1" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            :class="{ active: viewMode === 'projects' }"
+            :aria-pressed="viewMode === 'projects'"
+            :aria-label="uiText.sidebar.projectsView"
+            :title="uiText.sidebar.projectsView"
+            @click="setViewMode('projects')"
+          >
+            <Folders :size="14" stroke-width="2.1" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
       <div class="session-search">
         <Search :size="14" stroke-width="2.2" />
         <input
@@ -243,90 +317,113 @@ onUnmounted(() => {
         <strong>{{ uiText.sidebar.noResultsTitle }}</strong>
         <span>{{ uiText.sidebar.noResultsDescription }}</span>
       </div>
-      <article
-        v-for="session in filteredSessions"
-        v-else
-        :key="session.id"
-        class="session"
-        :class="{
-          active: session.id === activeSessionId,
-          manageable: !disabled && editingSessionId !== session.id,
-        }"
-        @contextmenu="openContextMenu($event, session)"
-      >
-        <button
-          v-if="editingSessionId !== session.id"
-          class="session-main sidebar-navigation-item"
-          :class="{ active: session.id === activeSessionId }"
-          type="button"
-          :disabled="disabled"
-          @click="emit('selectSession', session.id)"
+      <div v-else>
+        <div
+          v-for="group in viewMode === 'projects'
+            ? projectGroups
+            : [{ key: 'recent', label: '', root: '', sessions: filteredSessions }]"
+          :key="group.key"
+          class="session-project-group"
         >
-          <span class="session-line">
-            <small>
-              <span class="session-title-text">{{ sessionLabel(session) }}</span>
-              <span
-                v-if="isScheduledSession(session)"
-                class="session-origin-icon"
-                role="img"
-                :aria-label="uiText.sidebar.scheduledSessionOrigin"
-                :title="uiText.sidebar.scheduledSessionOrigin"
+          <button
+            v-if="viewMode === 'projects'"
+            class="session-project-heading"
+            type="button"
+            :aria-expanded="!isProjectCollapsed(group.key)"
+            :title="group.root || group.label"
+            @click="toggleProject(group.key)"
+          >
+            <FolderOpen v-if="!isProjectCollapsed(group.key)" :size="15" stroke-width="2.1" />
+            <FolderClosed v-else :size="15" stroke-width="2.1" />
+            <span>{{ group.label }}</span>
+          </button>
+          <div v-show="!isProjectCollapsed(group.key)">
+            <article
+              v-for="session in group.sessions"
+              :key="session.id"
+              class="session"
+              :class="{
+                active: session.id === activeSessionId,
+                manageable: !disabled && editingSessionId !== session.id,
+              }"
+              @contextmenu="openContextMenu($event, session)"
+            >
+              <button
+                v-if="editingSessionId !== session.id"
+                class="session-main sidebar-navigation-item"
+                :class="{ active: session.id === activeSessionId }"
+                type="button"
+                :disabled="disabled"
+                @click="emit('selectSession', session.id)"
               >
-                <Clock3 :size="12" stroke-width="2" aria-hidden="true" />
-              </span>
-              <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
-            </small>
-            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
-              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
-              <span
-                v-if="isSessionRunning(session.id)"
-                class="session-running-status"
-                role="status"
-                :aria-label="uiText.sidebar.running"
-                :title="uiText.sidebar.running"
+                <span class="session-line">
+                  <small>
+                    <span class="session-title-text">{{ sessionLabel(session) }}</span>
+                    <span
+                      v-if="isScheduledSession(session)"
+                      class="session-origin-icon"
+                      role="img"
+                      :aria-label="uiText.sidebar.scheduledSessionOrigin"
+                      :title="uiText.sidebar.scheduledSessionOrigin"
+                    >
+                      <Clock3 :size="12" stroke-width="2" aria-hidden="true" />
+                    </span>
+                    <Pin v-if="session.pinned" class="session-pin" :size="11" stroke-width="2.2" aria-hidden="true" />
+                  </small>
+                  <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+                    <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+                    <span
+                      v-if="isSessionRunning(session.id)"
+                      class="session-running-status"
+                      role="status"
+                      :aria-label="uiText.sidebar.running"
+                      :title="uiText.sidebar.running"
+                    >
+                      <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+                    </span>
+                  </span>
+                </span>
+              </button>
+              <form v-else class="session-main session-rename-form" @submit.prevent="submitRename(session)">
+                <span class="session-line">
+                  <input
+                    ref="editingInput"
+                    v-model="editingTitle"
+                    type="text"
+                    :aria-label="uiText.sidebar.chatName"
+                    @blur="submitRename()"
+                    @keydown.esc.prevent="cancelRename"
+                  />
+                  <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
+                    <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
+                    <span
+                      v-if="isSessionRunning(session.id)"
+                      class="session-running-status"
+                      role="status"
+                      :aria-label="uiText.sidebar.running"
+                      :title="uiText.sidebar.running"
+                    >
+                      <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
+                    </span>
+                  </span>
+                </span>
+              </form>
+              <button
+                v-if="!disabled && editingSessionId !== session.id"
+                class="session-menu-trigger"
+                type="button"
+                aria-haspopup="menu"
+                :aria-expanded="contextMenu?.session.id === session.id"
+                :aria-label="uiText.sidebar.chatActions"
+                :title="uiText.sidebar.chatActions"
+                @click.stop="openSessionMenu($event, session)"
               >
-                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
-              </span>
-            </span>
-          </span>
-        </button>
-        <form v-else class="session-main session-rename-form" @submit.prevent="submitRename(session)">
-          <span class="session-line">
-            <input
-              ref="editingInput"
-              v-model="editingTitle"
-              type="text"
-              :aria-label="uiText.sidebar.chatName"
-              @blur="submitRename()"
-              @keydown.esc.prevent="cancelRename"
-            />
-            <span class="session-meta" :class="{ 'is-running': isSessionRunning(session.id) }">
-              <time :aria-hidden="isSessionRunning(session.id)">{{ sessionMeta(session) }}</time>
-              <span
-                v-if="isSessionRunning(session.id)"
-                class="session-running-status"
-                role="status"
-                :aria-label="uiText.sidebar.running"
-                :title="uiText.sidebar.running"
-              >
-                <LoaderCircle :size="15" stroke-width="2.2" aria-hidden="true" />
-              </span>
-            </span>
-          </span>
-        </form>
-        <button
-          v-if="!disabled && editingSessionId !== session.id"
-          class="session-menu-trigger"
-          type="button"
-          aria-haspopup="menu"
-          :aria-expanded="contextMenu?.session.id === session.id"
-          :aria-label="uiText.sidebar.chatActions"
-          :title="uiText.sidebar.chatActions"
-          @click.stop="openSessionMenu($event, session)"
-        >
-          <MoreHorizontal :size="15" stroke-width="2.1" />
-        </button>
-      </article>
+                <MoreHorizontal :size="15" stroke-width="2.1" />
+              </button>
+            </article>
+          </div>
+        </div>
+      </div>
     </section>
 
     <footer class="sidebar-footer">
