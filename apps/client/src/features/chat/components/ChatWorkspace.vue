@@ -19,7 +19,7 @@ import { useChatComposer } from '../composables/useChatComposer'
 import { useComposerReasoning } from '../composables/useComposerReasoning'
 import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
-import type { ApprovalMode, Message, SessionSummary } from '../model/conversation'
+import type { ApprovalMode, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
 import { createAgentApi } from '../api/agentApi'
 import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
@@ -121,6 +121,10 @@ const currentSession = computed(() => sessions.value.find((session) => session.i
 const currentWorkspaceRoot = computed(() => currentSession.value?.env?.workspace.root || newSessionDraft.workspace?.root || '')
 const draftWorkspaceRoot = computed(() => sessionId.value ? undefined : newSessionDraft.workspace?.root || '')
 const selectedModel = computed(() => sessionId.value ? currentSession.value?.env?.model : newSessionDraft.model)
+const backendReasoningEffort = computed<ReasoningEffort | null | undefined>(() => {
+  if (!sessionId.value || !currentSession.value) return undefined
+  return currentSession.value.env?.reasoningEffort || null
+})
 const {
   activeModel,
   composerModelOptions,
@@ -130,7 +134,7 @@ const {
   loadCapability: loadReasoningCapability,
   loadStoredSelection: loadComposerReasoningEffort,
   selectModel,
-} = useComposerReasoning({ apiBase, serverStatus, selectedModel, setModel })
+} = useComposerReasoning({ apiBase, backendReasoningEffort, serverStatus, selectedModel, setModel })
 const {
   recentWorkspaces,
   rememberWorkspace,

@@ -16,6 +16,7 @@ type UseComposerReasoningOptions = {
   apiBase: string
   serverStatus: Readonly<Ref<'checking' | 'online' | 'offline'>>
   selectedModel: Readonly<Ref<ModelSelection | undefined>>
+  backendReasoningEffort: Readonly<Ref<ReasoningEffort | null | undefined>>
   setModel: (model: ModelSelection) => Promise<boolean>
 }
 
@@ -135,6 +136,11 @@ export function useComposerReasoning(options: UseComposerReasoningOptions) {
   })
 
   watch(composerReasoningOptions, normalizeSelection)
+
+  watch(options.backendReasoningEffort, (effort) => {
+    if (effort === undefined) return
+    composerReasoningEffort.value = effort && isReasoningEffort(effort) ? effort : 'default'
+  }, { immediate: true })
 
   return {
     activeModel,
