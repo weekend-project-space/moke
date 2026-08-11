@@ -41,8 +41,15 @@ const activeSettingsTab = computed(() => {
   return typeof tab === 'string' && settingsNavigationItems.some((item) => item.id === tab) ? tab as SettingsTab : 'model'
 })
 const activeSettingsItem = computed(() => settingsNavigationItems.find((item) => item.id === activeSettingsTab.value) || settingsNavigationItems[0])
-const modelSettingsDirty = ref(false)
-const settingsDirty = computed(() => modelSettingsDirty.value)
+const settingsDirtyByTab = reactive<Record<SettingsTab, boolean>>({
+  model: false,
+  mcp: false,
+  skills: false,
+  messaging: false,
+  permissions: false,
+  browser: false,
+})
+const settingsDirty = computed(() => settingsDirtyByTab[activeSettingsTab.value])
 const pendingSettingsTab = ref<SettingsTab | null>(null)
 const browserSettings = reactive<BrowserPreferences>({ ...DEFAULT_BROWSER_PREFERENCES })
 const browserDataAvailable = isNativeBrowserAvailable()
@@ -157,7 +164,7 @@ async function clearBrowserData(kind: BrowserDataKind) {
 
 function selectSettingsTab(tab: SettingsTab) {
   if (tab === activeSettingsTab.value) return
-  if (activeSettingsTab.value === 'model' && modelSettingsDirty.value) {
+  if (settingsDirty.value) {
     pendingSettingsTab.value = tab
     return
   }
@@ -172,7 +179,7 @@ function confirmSettingsTabChange() {
   const tab = pendingSettingsTab.value
   if (!tab) return
   pendingSettingsTab.value = null
-  if (activeSettingsTab.value === 'model') modelSettingsDirty.value = false
+  settingsDirtyByTab[activeSettingsTab.value] = false
   void router.push({ name: 'settings', params: { tab } })
 }
 
@@ -180,8 +187,8 @@ function closeSettings() {
   emit('close')
 }
 
-function updateModelSettingsDirty(dirty: boolean) {
-  modelSettingsDirty.value = dirty
+function updateSettingsDirty(tab: SettingsTab, dirty: boolean) {
+  settingsDirtyByTab[tab] = dirty
 }
 
 watch(settingsDirty, (dirty) => emit('dirtyChange', dirty), { immediate: true })
@@ -209,15 +216,20 @@ onMounted(() => {
           </div>
         </header>
 
-        <div class="settings-content-scroll" :class="{ 'model-settings-scroll': activeSettingsTab === 'model' }">
+        <div
+          class="settings-content-scroll"
+          :class="{
+            'record-settings-scroll': activeSettingsTab === 'model' || activeSettingsTab === 'mcp' || activeSettingsTab === 'messaging',
+          }"
+        >
           <div class="settings-content-frame">
-          <ModelSettingsPanel v-if="activeSettingsTab === 'model'" :api-base="apiBase" @dirty-change="updateModelSettingsDirty" />
+          <ModelSettingsPanel v-if="activeSettingsTab === 'model'" :api-base="apiBase" @dirty-change="updateSettingsDirty('model', $event)" />
 
-    <McpSettingsPanel v-else-if="activeSettingsTab === 'mcp'" :api-base="apiBase" />
+    <McpSettingsPanel v-else-if="activeSettingsTab === 'mcp'" :api-base="apiBase" @dirty-change="updateSettingsDirty('mcp', $event)" />
 
     <SkillSettingsPanel v-else-if="activeSettingsTab === 'skills'" :api-base="apiBase" />
 
-    <MessagingSettingsPanel v-else-if="activeSettingsTab === 'messaging'" :api-base="apiBase" />
+    <MessagingSettingsPanel v-else-if="activeSettingsTab === 'messaging'" :api-base="apiBase" @dirty-change="updateSettingsDirty('messaging', $event)" />
 
     <div v-else-if="activeSettingsTab === 'permissions'" class="settings-section permissions-settings">
       <div class="settings-group">
@@ -343,9 +355,9 @@ onMounted(() => {
 
   <SettingsConfirmSheet
     :open="Boolean(pendingSettingsTab)"
-    dialog-id="model-tab-discard-confirm"
+    dialog-id="settings-tab-discard-confirm"
     :title="uiText.settings.confirmDiscardChangesTitle"
-    :description="uiText.settings.confirmDiscardModelChanges"
+    :description="uiText.settings.confirmDiscardSettingsChanges"
     :confirm-label="uiText.settings.confirmDiscardModelChangesAction"
     :cancel-label="uiText.settings.cancel"
     tone="neutral"

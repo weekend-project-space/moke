@@ -189,11 +189,13 @@ export const mcpServerCreateSchema = z.object({
   id: safeId,
   command: nonEmptyText.max(2000),
   args: z.array(z.string().max(4000)).max(100).default([]),
+  timeout_ms: z.number().int().positive().max(60 * 60 * 1000).optional(),
 }).strict();
 
 export const mcpServerUpdateSchema = z.object({
   command: nonEmptyText.max(2000).optional(),
   args: z.array(z.string().max(4000)).max(100).optional(),
+  timeout_ms: z.number().int().positive().max(60 * 60 * 1000).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, {
   message: 'At least one MCP server field is required',
 });

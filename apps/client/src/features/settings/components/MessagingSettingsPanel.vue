@@ -7,12 +7,14 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Save,
   Settings2,
   Square,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import dingTalkIcon from '../../../assets/dingtalk.svg'
 import feishuIcon from '../../../assets/feishu.svg'
 import weChatIcon from '../../../assets/wechat.svg'
@@ -63,10 +65,14 @@ const channelIcons: Record<MessagingConnection['platform'], string> = {
 }
 
 const props = defineProps<{ apiBase: string }>()
+const emit = defineEmits<{
+  dirtyChange: [dirty: boolean]
+}>()
 
 const connections = ref<MessagingConnection[]>([])
 const setupChannel = ref<'weixin' | 'dingtalk' | 'feishu' | null>(null)
 const channelPickerOpen = ref(false)
+const selectedConnectionId = ref('')
 const loginConnectionId = ref<string>()
 const dingtalkClientId = ref('')
 const dingtalkClientSecret = ref('')
@@ -91,6 +97,9 @@ const busyConnectionId = ref('')
 const error = ref('')
 const deleteConfirmationOpen = ref(false)
 const deleteTarget = ref<MessagingConnection | null>(null)
+const savedDingTalkDraft = ref('')
+const savedFeishuDraft = ref('')
+const pendingChannelAction = ref<(() => void) | null>(null)
 let pollTimer: number | undefined
 let registrationPollTimer: number | undefined
 let loginRequest = 0
@@ -102,6 +111,91 @@ const registrationLoginStatusText = computed(() => registrationLogin.value ? reg
 const hasActiveRegistrationLogin = computed(() => registrationLogin.value && !isTerminalRegistrationLogin(registrationLogin.value.status))
 const currentRegistrationSetupMode = computed(() => setupChannel.value === 'dingtalk' ? dingtalkSetupMode.value : feishuSetupMode.value)
 const registrationLoginHasError = computed(() => Boolean(error.value) || ['failed', 'expired', 'denied'].includes(registrationLogin.value?.status ?? ''))
+const selectedConnection = computed(() => connections.value.find((connection) => connection.id === selectedConnectionId.value) || null)
+const dingtalkDraftDirty = computed(() => dingtalkDraftSnapshot() !== savedDingTalkDraft.value)
+const feishuDraftDirty = computed(() => feishuDraftSnapshot() !== savedFeishuDraft.value)
+const manualDraftDirty = computed(() => {
+  if (currentRegistrationSetupMode.value !== 'manual') return false
+  if (setupChannel.value === 'dingtalk') return dingtalkDraftDirty.value
+  return setupChannel.value === 'feishu' && feishuDraftDirty.value
+})
+
+function dingtalkDraftSnapshot() {
+  return JSON.stringify({
+    clientId: dingtalkClientId.value,
+    clientSecret: dingtalkClientSecret.value,
+    allowedUsers: dingtalkAllowedUsers.value,
+    cardTemplateId: dingtalkCardTemplateId.value,
+  })
+}
+
+function feishuDraftSnapshot() {
+  return JSON.stringify({
+    appId: feishuAppId.value,
+    appSecret: feishuAppSecret.value,
+    domain: feishuDomain.value,
+  })
+}
+
+function saveDingTalkDraftSnapshot() {
+  savedDingTalkDraft.value = dingtalkDraftSnapshot()
+}
+
+function saveFeishuDraftSnapshot() {
+  savedFeishuDraft.value = feishuDraftSnapshot()
+}
+
+function revertDingTalkDraft() {
+  if (!editingDingTalkId.value || savingDingTalk.value) return
+  restoreDingTalkDraft()
+  error.value = ''
+}
+
+function restoreDingTalkDraft() {
+  const saved = JSON.parse(savedDingTalkDraft.value) as {
+    clientId: string
+    clientSecret: string
+    allowedUsers: string
+    cardTemplateId: string
+  }
+  dingtalkClientId.value = saved.clientId
+  dingtalkClientSecret.value = saved.clientSecret
+  dingtalkAllowedUsers.value = saved.allowedUsers
+  dingtalkCardTemplateId.value = saved.cardTemplateId
+}
+
+function restoreFeishuDraft() {
+  const saved = JSON.parse(savedFeishuDraft.value) as {
+    appId: string
+    appSecret: string
+    domain: 'feishu' | 'lark'
+  }
+  feishuAppId.value = saved.appId
+  feishuAppSecret.value = saved.appSecret
+  feishuDomain.value = saved.domain
+}
+
+function discardManualDraft() {
+  if (setupChannel.value === 'dingtalk') restoreDingTalkDraft()
+  else if (setupChannel.value === 'feishu') restoreFeishuDraft()
+}
+
+function runAfterDraftDiscard(action: () => void) {
+  if (manualDraftDirty.value) pendingChannelAction.value = action
+  else action()
+}
+
+function cancelPendingChannelAction() {
+  pendingChannelAction.value = null
+}
+
+function confirmPendingChannelAction() {
+  const action = pendingChannelAction.value
+  if (!action) return
+  pendingChannelAction.value = null
+  discardManualDraft()
+  action()
+}
 
 function requestJson<T>(path: string, init?: RequestInit) {
   return apiFetch(`${props.apiBase}${path}`, init).then(async (response) => {
@@ -117,6 +211,9 @@ async function loadConnections() {
   try {
     const data = await requestJson<{ connections?: MessagingConnection[] }>('/api/messaging/connections')
     connections.value = Array.isArray(data.connections) ? data.connections : []
+    if (!connections.value.some((connection) => connection.id === selectedConnectionId.value)) {
+      selectedConnectionId.value = connections.value[0]?.id || ''
+    }
   } catch (reason) {
     error.value = messageFrom(reason, uiText.messaging.loadFailed)
   } finally {
@@ -316,6 +413,7 @@ async function submitVerifyCode() {
 function openWeixinSetup(connectionId?: string) {
   channelPickerOpen.value = false
   setupChannel.value = 'weixin'
+  selectedConnectionId.value = connectionId || ''
   loginConnectionId.value = connectionId
   login.value = null
   verifyCode.value = ''
@@ -326,7 +424,14 @@ function openWeixinSetup(connectionId?: string) {
 function openDingTalkSetup() {
   channelPickerOpen.value = false
   setupChannel.value = 'dingtalk'
+  selectedConnectionId.value = ''
   dingtalkSetupMode.value = 'quick'
+  dingtalkClientId.value = ''
+  dingtalkClientSecret.value = ''
+  dingtalkAllowedUsers.value = ''
+  dingtalkCardTemplateId.value = ''
+  editingDingTalkId.value = ''
+  saveDingTalkDraftSnapshot()
   error.value = ''
   void beginRegistrationLogin('dingtalk')
 }
@@ -336,21 +441,34 @@ function editDingTalk(connection: MessagingConnection) {
   dingtalkAllowedUsers.value = connection.allowed_user_ids?.join(', ') || ''
   dingtalkCardTemplateId.value = connection.card_template_id || ''
   setupChannel.value = 'dingtalk'
+  channelPickerOpen.value = false
+  selectedConnectionId.value = connection.id
   dingtalkSetupMode.value = 'manual'
+  saveDingTalkDraftSnapshot()
   error.value = ''
 }
 
 function openFeishuSetup() {
   channelPickerOpen.value = false
   setupChannel.value = 'feishu'
+  selectedConnectionId.value = ''
   feishuSetupMode.value = 'quick'
+  feishuAppId.value = ''
+  feishuAppSecret.value = ''
+  feishuDomain.value = 'feishu'
+  saveFeishuDraftSnapshot()
   error.value = ''
   void beginRegistrationLogin('feishu')
 }
 
-async function setRegistrationSetupMode(platform: RegistrationPlatform, mode: 'quick' | 'manual') {
+function setRegistrationSetupMode(platform: RegistrationPlatform, mode: 'quick' | 'manual') {
   const setupMode = platform === 'dingtalk' ? dingtalkSetupMode : feishuSetupMode
   if (mode === setupMode.value) return
+  runAfterDraftDiscard(() => { void commitRegistrationSetupMode(platform, mode) })
+}
+
+async function commitRegistrationSetupMode(platform: RegistrationPlatform, mode: 'quick' | 'manual') {
+  const setupMode = platform === 'dingtalk' ? dingtalkSetupMode : feishuSetupMode
   await cancelRegistrationLogin()
   setupMode.value = mode
   error.value = ''
@@ -393,23 +511,69 @@ async function closeSetup() {
   feishuSetupMode.value = 'quick'
   registrationLogin.value = null
   registrationLoginPlatform.value = null
+  saveDingTalkDraftSnapshot()
+  saveFeishuDraftSnapshot()
   error.value = ''
   setupChannel.value = null
+  channelPickerOpen.value = false
+  if (!connections.value.some((connection) => connection.id === selectedConnectionId.value)) {
+    selectedConnectionId.value = connections.value[0]?.id || ''
+  }
 
   if (shouldCancelLogin) {
     try {
       await requestJson(`/api/messaging/weixin/logins/${encodeURIComponent(current.id)}`, { method: 'DELETE' })
     } catch {
-      // The local dialog can close after the server has expired the authorization.
+      // The local setup flow can close after the server has expired the authorization.
     }
   }
   if (shouldCancelRegistrationLogin) {
     try {
       await requestJson(`/api/messaging/${currentRegistrationPlatform}/logins/${encodeURIComponent(currentRegistrationLogin.id)}`, { method: 'DELETE' })
     } catch {
-      // The local dialog can close after the server has expired the authorization.
+      // The local setup flow can close after the server has expired the authorization.
     }
   }
+}
+
+function closeChannelPicker() {
+  channelPickerOpen.value = false
+  if (!connections.value.some((connection) => connection.id === selectedConnectionId.value)) {
+    selectedConnectionId.value = connections.value[0]?.id || ''
+  }
+}
+
+function commitSelectConnection(connection: MessagingConnection) {
+  if (setupChannel.value) {
+    void closeSetup().then(() => {
+      selectedConnectionId.value = connection.id
+    })
+    return
+  }
+  channelPickerOpen.value = false
+  selectedConnectionId.value = connection.id
+  error.value = ''
+}
+
+function selectConnection(connection: MessagingConnection) {
+  if (!setupChannel.value && connection.id === selectedConnectionId.value) return
+  runAfterDraftDiscard(() => commitSelectConnection(connection))
+}
+
+async function beginAddChannel() {
+  if (hasActiveLogin.value || hasActiveRegistrationLogin.value || savingDingTalk.value || savingFeishu.value) return
+  if (setupChannel.value) await closeSetup()
+  selectedConnectionId.value = ''
+  channelPickerOpen.value = true
+  error.value = ''
+}
+
+function startAddChannel() {
+  runAfterDraftDiscard(() => { void beginAddChannel() })
+}
+
+function requestCloseSetup() {
+  runAfterDraftDiscard(() => { void closeSetup() })
 }
 
 function requestDeleteConnection(connection: MessagingConnection) {
@@ -587,7 +751,9 @@ function messageFrom(reason: unknown, fallback: string) {
 }
 
 onMounted(() => { void loadConnections() })
+watch(manualDraftDirty, (dirty) => emit('dirtyChange', dirty), { immediate: true })
 onBeforeUnmount(() => {
+  emit('dirtyChange', false)
   stopPolling()
   stopRegistrationPolling()
   void cancelRegistrationLogin()
@@ -595,30 +761,37 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="settings-section messaging-settings">
-    <div class="settings-group">
-    <header class="settings-group-heading">
-      <div>
+  <section class="settings-section settings-record-page">
+    <div class="settings-record-layout">
+      <aside class="settings-record-source" :aria-label="uiText.messaging.yourChannels">
+        <header class="settings-record-heading">
+          <div class="settings-record-heading-text">
         <h3>{{ uiText.messaging.yourChannels }}</h3>
         <span>{{ connections.length ? uiText.messaging.channelCount(connections.length) : uiText.messaging.noChannels }}</span>
-      </div>
-      <div class="messaging-header-actions">
+          </div>
+          <div class="settings-record-heading-actions">
         <button type="button" class="settings-icon-button" :title="uiText.messaging.refreshChannels" :aria-label="uiText.messaging.refreshChannels" :disabled="loading" @click="loadConnections">
           <RefreshCw :size="14" :class="{ spinning: loading }" />
         </button>
-        <button type="button" class="settings-secondary" :disabled="Boolean(hasActiveLogin)" @click="channelPickerOpen = true"><Plus :size="14" />{{ uiText.messaging.add }}</button>
-      </div>
-    </header>
-
-    <p v-if="error" class="messaging-feedback error" role="alert">{{ error }}</p>
-
-    <div v-if="loading && connections.length === 0" class="settings-note">{{ uiText.messaging.loading }}</div>
-    <div v-else-if="connections.length === 0" class="messaging-empty">
+          </div>
+        </header>
+    <div v-if="connections.length === 0" class="settings-record-empty messaging-empty">
       <Link2 :size="18" stroke-width="1.7" />
-      <span>{{ uiText.messaging.noChannels }}</span>
+      <span>{{ loading ? uiText.messaging.loading : uiText.messaging.noChannels }}</span>
     </div>
-    <div v-else class="messaging-connection-list">
-      <article v-for="connection in connections" :key="connection.id" class="settings-list-row messaging-connection-row">
+    <div v-else class="settings-record-source-list" role="listbox" :aria-label="uiText.messaging.yourChannels">
+      <div
+        v-for="connection in connections"
+        :key="connection.id"
+        class="settings-record-source-row settings-list-row messaging-connection-row"
+        role="option"
+        tabindex="0"
+        :aria-selected="connection.id === selectedConnectionId"
+        :class="{ active: connection.id === selectedConnectionId }"
+        @click="selectConnection(connection)"
+        @keydown.enter.prevent="selectConnection(connection)"
+        @keydown.space.prevent="selectConnection(connection)"
+      >
         <div class="settings-list-main messaging-connection-main">
           <div class="messaging-connection-icon" aria-hidden="true">
             <img class="messaging-brand-icon" :src="channelIcons[connection.platform]" alt="" />
@@ -630,67 +803,22 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <span class="messaging-state" :class="`is-${connection.state}`">{{ connectionStateLabel(connection.state) }}</span>
-        <div class="messaging-connection-actions">
-          <button
-            v-if="connection.platform === 'dingtalk'"
-            type="button"
-            class="settings-icon-button"
-            :title="uiText.messaging.configureChannel"
-            :aria-label="uiText.messaging.configureChannel"
-            :disabled="busyConnectionId === connection.id"
-            @click="editDingTalk(connection)"
-          >
-            <Settings2 :size="14" />
-          </button>
-          <button
-            v-if="connection.state === 'connected' || connection.state === 'starting' || connection.state === 'reconnecting'"
-            type="button"
-            class="settings-icon-button"
-            :title="uiText.messaging.stopChannel"
-            :aria-label="uiText.messaging.stopChannel"
-            :disabled="busyConnectionId === connection.id"
-            @click="connectionAction(connection, 'stop')"
-          >
-            <Square :size="13" fill="currentColor" />
-          </button>
-          <button
-            v-else
-            type="button"
-            class="settings-icon-button"
-            :title="uiText.messaging.startChannel"
-            :aria-label="uiText.messaging.startChannel"
-            :disabled="busyConnectionId === connection.id"
-            @click="connectionAction(connection, 'start')"
-          >
-            <RefreshCw :size="14" :class="{ spinning: busyConnectionId === connection.id }" />
-          </button>
-          <button
-            v-if="connection.platform === 'weixin'"
-            type="button"
-            class="settings-icon-button"
-            :title="uiText.messaging.reauthorizeWeChat"
-            :aria-label="uiText.messaging.reauthorizeWeChat"
-            :disabled="busyConnectionId === connection.id || Boolean(hasActiveLogin)"
-            @click="connectionAction(connection, 'reauthorize')"
-          >
-            <Link2 :size="14" />
-          </button>
-          <button type="button" class="settings-icon-button messaging-delete-button" :title="uiText.messaging.removeChannel" :aria-label="uiText.messaging.removeChannel" :disabled="busyConnectionId === connection.id" @click="requestDeleteConnection(connection)">
-            <Trash2 :size="14" />
-          </button>
-        </div>
-      </article>
+      </div>
     </div>
-    </div>
+          <footer class="settings-record-source-footer">
+            <button type="button" class="settings-secondary settings-record-add" :disabled="Boolean(hasActiveLogin) || Boolean(hasActiveRegistrationLogin)" @click="startAddChannel">
+              <Plus :size="14" />{{ uiText.messaging.addChannel }}
+            </button>
+          </footer>
+        </aside>
 
-  </section>
-
-  <Teleport to="body">
-    <div v-if="channelPickerOpen" class="messaging-modal-backdrop" @click.self="channelPickerOpen = false" @keydown.esc="channelPickerOpen = false">
-      <section class="messaging-modal messaging-channel-picker" role="dialog" aria-modal="true" aria-labelledby="channel-picker-title">
-        <div class="messaging-modal-heading">
-          <div class="messaging-modal-title"><div><h3 id="channel-picker-title">{{ uiText.messaging.addChannel }}</h3><span>{{ uiText.messaging.availableChannelsDescription }}</span></div></div>
-          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" @click="channelPickerOpen = false"><X :size="14" /></button>
+        <section class="settings-record-detail" :aria-label="uiText.messaging.availableChannels">
+    <p v-if="error && !setupChannel" class="messaging-feedback error" role="alert">{{ error }}</p>
+    <div v-if="channelPickerOpen" class="settings-record-detail-view">
+      <section class="messaging-detail-panel" aria-labelledby="channel-picker-title">
+        <div class="settings-record-heading">
+          <div class="settings-record-heading-copy"><div class="settings-record-heading-text"><h3 id="channel-picker-title">{{ uiText.messaging.addChannel }}</h3><span>{{ uiText.messaging.availableChannelsDescription }}</span></div></div>
+          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" @click="closeChannelPicker"><X :size="14" /></button>
         </div>
         <div class="messaging-channel-list">
           <button type="button" class="settings-list-row messaging-channel-row" :disabled="creatingLogin || Boolean(hasActiveLogin)" @click="openWeixinSetup()"><span class="settings-list-main messaging-connection-main"><span class="messaging-connection-icon" aria-hidden="true"><img class="messaging-brand-icon" :src="channelIcons.weixin" alt="" /></span><span class="settings-list-copy messaging-connection-copy"><strong>{{ uiText.messaging.weChat }}</strong><span>{{ uiText.messaging.personalWeChat }}</span></span></span><ChevronRight class="messaging-channel-enter" :size="15" aria-hidden="true" /></button>
@@ -700,25 +828,29 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="setupChannel" class="messaging-modal-backdrop" @click.self="closeSetup" @keydown.esc="closeSetup">
+    <div v-else-if="setupChannel" class="settings-record-detail-view">
       <section
-        class="messaging-modal"
-        :class="`is-${setupChannel}`"
-        role="dialog"
-        aria-modal="true"
+        class="messaging-detail-panel"
+        :class="[
+          `is-${setupChannel}`,
+          { 'has-setup-modes': setupChannel !== 'weixin' && !editingDingTalkId },
+        ]"
         aria-labelledby="messaging-setup-title"
       >
-        <div class="messaging-modal-heading">
-          <div class="messaging-modal-title">
-            <div class="messaging-modal-icon" aria-hidden="true">
+        <div class="settings-record-heading">
+          <div class="settings-record-heading-copy">
+            <div class="settings-record-icon messaging-panel-icon" aria-hidden="true">
               <img class="messaging-brand-icon" :src="channelIcons[setupChannel]" alt="" />
             </div>
-            <div>
+            <div class="settings-record-heading-text">
               <h3 id="messaging-setup-title">{{ setupTitle(setupChannel) }}</h3>
               <span>{{ setupDescription(setupChannel) }}</span>
             </div>
           </div>
-          <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" :disabled="savingDingTalk || savingFeishu" @click="closeSetup"><X :size="14" /></button>
+          <div class="settings-record-heading-actions">
+            <span v-if="manualDraftDirty" class="settings-dirty-status">{{ uiText.settings.unsaved }}</span>
+            <button type="button" class="settings-icon-button" :title="uiText.messaging.close" :aria-label="uiText.messaging.close" :disabled="savingDingTalk || savingFeishu" @click="requestCloseSetup"><X :size="14" /></button>
+          </div>
         </div>
 
         <template v-if="setupChannel === 'weixin'">
@@ -741,14 +873,14 @@ onBeforeUnmount(() => {
               <button type="submit" class="settings-primary" :disabled="!/^\d{1,12}$/.test(verifyCode)">{{ uiText.messaging.confirm }}</button>
             </form>
           </div>
-          <div class="messaging-modal-actions">
+          <div class="settings-record-detail-actions messaging-panel-actions">
             <button v-if="error || login?.status === 'failed' || login?.status === 'expired'" type="button" class="settings-secondary" :disabled="creatingLogin" @click="beginLogin(loginConnectionId)">{{ uiText.messaging.tryAgain }}</button>
             <button type="button" class="settings-secondary" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
           </div>
         </template>
 
         <template v-else>
-          <div v-if="!editingDingTalkId" class="messaging-setup-modes" role="tablist" :aria-label="uiText.messaging.setupMethod">
+          <div v-if="!editingDingTalkId" class="settings-segmented messaging-setup-modes" role="tablist" :aria-label="uiText.messaging.setupMethod">
             <button type="button" role="tab" :aria-selected="currentRegistrationSetupMode === 'quick'" :class="{ active: currentRegistrationSetupMode === 'quick' }" @click="setRegistrationSetupMode(setupChannel, 'quick')">{{ uiText.messaging.quickSetup }}</button>
             <button type="button" role="tab" :aria-selected="currentRegistrationSetupMode === 'manual'" :class="{ active: currentRegistrationSetupMode === 'manual' }" @click="setRegistrationSetupMode(setupChannel, 'manual')">{{ uiText.messaging.manualSetup }}</button>
           </div>
@@ -773,28 +905,29 @@ onBeforeUnmount(() => {
                 <time v-if="registrationLogin && hasActiveRegistrationLogin">{{ new Date(registrationLogin.expires_at).toLocaleTimeString() }}</time>
               </div>
             </div>
-            <div class="messaging-modal-actions">
+            <div class="settings-record-detail-actions messaging-panel-actions">
               <button v-if="registrationLoginHasError" type="button" class="settings-secondary" :disabled="creatingRegistrationLogin" @click="beginRegistrationLogin(setupChannel)">{{ uiText.messaging.tryAgain }}</button>
               <button type="button" class="settings-secondary" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
             </div>
           </template>
 
           <form v-else-if="setupChannel === 'dingtalk'" class="messaging-credentials-form" @submit.prevent="saveDingTalkConnection">
-            <div class="messaging-modal-fields">
+            <div class="settings-record-detail-scroll messaging-panel-fields">
               <label v-if="!editingDingTalkId">{{ uiText.messaging.clientId }}<input v-model="dingtalkClientId" required maxlength="200" autocomplete="off" /></label>
               <label v-if="!editingDingTalkId">{{ uiText.messaging.clientSecret }}<input v-model="dingtalkClientSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
               <label>{{ uiText.messaging.allowedUsers }}<input v-model="dingtalkAllowedUsers" maxlength="4000" :placeholder="uiText.messaging.allowedUsersPlaceholder" autocomplete="off" /></label>
               <label>{{ uiText.messaging.cardTemplateId }}<input v-model="dingtalkCardTemplateId" maxlength="300" :placeholder="uiText.messaging.optional" autocomplete="off" /></label>
-              <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+              <p v-if="error" class="messaging-panel-error" role="alert">{{ error }}</p>
             </div>
-            <div class="messaging-modal-actions">
-              <button type="button" class="settings-secondary" :disabled="savingDingTalk" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
-              <button type="submit" class="settings-primary" :disabled="savingDingTalk || (!editingDingTalkId && (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()))">{{ editingDingTalkId ? uiText.messaging.saveChanges : uiText.messaging.saveAndConnect }}</button>
+            <div class="settings-record-detail-actions messaging-panel-actions">
+              <button v-if="editingDingTalkId" type="button" class="settings-secondary" :disabled="savingDingTalk || !dingtalkDraftDirty" @click="revertDingTalkDraft"><Undo2 :size="14" />{{ uiText.settings.revert }}</button>
+              <button v-else type="button" class="settings-secondary" :disabled="savingDingTalk" @click="closeSetup">{{ uiText.settings.cancel }}</button>
+              <button type="submit" class="settings-primary" :disabled="savingDingTalk || !dingtalkDraftDirty || (!editingDingTalkId && (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()))"><Save :size="14" />{{ editingDingTalkId ? uiText.settings.save : uiText.messaging.saveAndConnect }}</button>
             </div>
           </form>
 
           <form v-else class="messaging-credentials-form" @submit.prevent="saveFeishuConnection">
-            <div class="messaging-modal-fields">
+            <div class="settings-record-detail-scroll messaging-panel-fields">
               <label>{{ uiText.messaging.appId }}<input v-model="feishuAppId" required maxlength="200" autocomplete="off" /></label>
               <label>{{ uiText.messaging.appSecret }}<input v-model="feishuAppSecret" required type="password" maxlength="2000" autocomplete="new-password" /></label>
               <label>
@@ -804,17 +937,92 @@ onBeforeUnmount(() => {
                   <option value="lark">{{ uiText.messaging.larkGlobal }}</option>
                 </select>
               </label>
-              <p v-if="error" class="messaging-modal-error" role="alert">{{ error }}</p>
+              <p v-if="error" class="messaging-panel-error" role="alert">{{ error }}</p>
             </div>
-            <div class="messaging-modal-actions">
-              <button type="button" class="settings-secondary" :disabled="savingFeishu" @click="closeSetup">{{ uiText.messaging.cancel }}</button>
-              <button type="submit" class="settings-primary" :disabled="savingFeishu || !feishuAppId.trim() || !feishuAppSecret.trim()">{{ uiText.messaging.saveAndConnect }}</button>
+            <div class="settings-record-detail-actions messaging-panel-actions">
+              <button type="button" class="settings-secondary" :disabled="savingFeishu" @click="closeSetup">{{ uiText.settings.cancel }}</button>
+              <button type="submit" class="settings-primary" :disabled="savingFeishu || !feishuDraftDirty || !feishuAppId.trim() || !feishuAppSecret.trim()"><Save :size="14" />{{ uiText.messaging.saveAndConnect }}</button>
             </div>
           </form>
         </template>
       </section>
     </div>
-  </Teleport>
+
+    <div v-else-if="selectedConnection" class="settings-record-detail-view">
+      <section class="messaging-detail-panel" aria-labelledby="messaging-connection-title">
+        <div class="settings-record-heading">
+          <div class="settings-record-heading-copy">
+            <div class="settings-record-icon messaging-panel-icon" aria-hidden="true">
+              <img class="messaging-brand-icon" :src="channelIcons[selectedConnection.platform]" alt="" />
+            </div>
+            <div class="settings-record-heading-text">
+              <h3 id="messaging-connection-title">{{ selectedConnection.bot_name || platformLabel(selectedConnection.platform) }}</h3>
+              <span>{{ selectedConnection.name }}</span>
+            </div>
+          </div>
+          <span class="messaging-state" :class="`is-${selectedConnection.state}`">{{ connectionStateLabel(selectedConnection.state) }}</span>
+        </div>
+
+        <div class="settings-record-detail-scroll messaging-connection-detail">
+          <div class="messaging-detail-fact">
+            <span>{{ uiText.messaging.platform }}</span>
+            <strong>{{ platformLabel(selectedConnection.platform) }}</strong>
+          </div>
+          <div class="messaging-detail-fact">
+            <span>{{ uiText.messaging.status }}</span>
+            <strong>{{ connectionStateLabel(selectedConnection.state) }}</strong>
+          </div>
+          <div class="messaging-detail-fact">
+            <span>{{ uiText.messaging.lastActivity }}</span>
+            <strong>{{ connectionTime(selectedConnection) }}</strong>
+          </div>
+          <div v-if="selectedConnection.platform === 'dingtalk' && selectedConnection.allowed_user_ids?.length" class="messaging-detail-fact">
+            <span>{{ uiText.messaging.allowedUsers }}</span>
+            <strong>{{ selectedConnection.allowed_user_ids.join(', ') }}</strong>
+          </div>
+          <div v-if="selectedConnection.platform === 'dingtalk' && selectedConnection.card_template_id" class="messaging-detail-fact">
+            <span>{{ uiText.messaging.cardTemplateId }}</span>
+            <strong>{{ selectedConnection.card_template_id }}</strong>
+          </div>
+          <div v-if="selectedConnection.last_error" class="messaging-detail-error" role="alert">
+            <CircleAlert :size="15" />
+            <span>{{ selectedConnection.last_error.message }}</span>
+          </div>
+        </div>
+
+        <div class="settings-record-detail-actions messaging-panel-actions messaging-detail-actions">
+          <button type="button" class="settings-danger-ghost" :disabled="busyConnectionId === selectedConnection.id" @click="requestDeleteConnection(selectedConnection)"><Trash2 :size="14" />{{ uiText.messaging.removeChannel }}</button>
+          <div class="settings-record-actions-right">
+            <button v-if="selectedConnection.platform === 'dingtalk'" type="button" class="settings-secondary" :disabled="busyConnectionId === selectedConnection.id" @click="editDingTalk(selectedConnection)"><Settings2 :size="14" />{{ uiText.messaging.configureChannel }}</button>
+            <button v-if="selectedConnection.state === 'connected' || selectedConnection.state === 'starting' || selectedConnection.state === 'reconnecting'" type="button" class="settings-secondary" :disabled="busyConnectionId === selectedConnection.id" @click="connectionAction(selectedConnection, 'stop')"><Square :size="13" fill="currentColor" />{{ uiText.messaging.stopChannel }}</button>
+            <button v-else type="button" class="settings-secondary" :disabled="busyConnectionId === selectedConnection.id" @click="connectionAction(selectedConnection, 'start')"><RefreshCw :size="14" :class="{ spinning: busyConnectionId === selectedConnection.id }" />{{ uiText.messaging.startChannel }}</button>
+            <button v-if="selectedConnection.platform === 'weixin'" type="button" class="settings-secondary" :disabled="busyConnectionId === selectedConnection.id || Boolean(hasActiveLogin)" @click="connectionAction(selectedConnection, 'reauthorize')"><Link2 :size="14" />{{ uiText.messaging.reauthorizeWeChat }}</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-else class="settings-record-empty messaging-detail-empty">
+      <Link2 :size="20" stroke-width="1.7" />
+      <strong>{{ uiText.messaging.noChannels }}</strong>
+      <span>{{ uiText.messaging.empty }}</span>
+      <button type="button" class="settings-primary" :disabled="Boolean(hasActiveLogin) || Boolean(hasActiveRegistrationLogin)" @click="startAddChannel"><Plus :size="14" />{{ uiText.messaging.addChannel }}</button>
+    </div>
+        </section>
+      </div>
+  </section>
+
+  <SettingsConfirmSheet
+    :open="Boolean(pendingChannelAction)"
+    dialog-id="messaging-discard-confirm"
+    :title="uiText.settings.confirmDiscardChangesTitle"
+    :description="uiText.settings.confirmDiscardSettingsChanges"
+    :confirm-label="uiText.settings.confirmDiscardModelChangesAction"
+    :cancel-label="uiText.settings.cancel"
+    tone="neutral"
+    @cancel="cancelPendingChannelAction"
+    @confirm="confirmPendingChannelAction"
+  />
 
   <SettingsConfirmSheet
     :open="deleteConfirmationOpen"
@@ -830,34 +1038,69 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.messaging-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
+.messaging-connection-row {
   display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgb(31 35 40 / 18%);
-  backdrop-filter: blur(2px);
+  min-height: 56px;
+  grid-template-columns: minmax(0, 1fr) 8px;
+  gap: 8px;
+  padding: 7px 8px;
+  outline: none;
 }
 
-.messaging-modal {
-  display: grid;
-  width: min(400px, 100%);
+.messaging-connection-row.active .settings-list-copy > :first-child {
+  color: var(--color-primary-foreground);
+}
+
+.messaging-connection-row.active .settings-list-copy > :last-child {
+  color: rgb(255 255 255 / 74%);
+}
+
+.messaging-connection-copy span,
+.messaging-connection-copy small {
+  font-size: var(--font-size-caption);
+}
+
+.messaging-connection-row > .messaging-state {
+  width: 8px;
+  min-width: 8px;
   overflow: hidden;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  color: transparent;
+  font-size: 0;
+}
+
+.messaging-connection-row > .messaging-state::before {
+  margin: 0;
+}
+
+.messaging-detail-panel {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.messaging-detail-panel.has-setup-modes {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.messaging-detail-empty {
+  place-content: center;
+}
+
+.messaging-detail-empty strong {
   color: var(--color-text-primary);
-  background: var(--color-bg-content);
-  box-shadow: 0 16px 44px rgb(31 35 40 / 16%), 0 2px 8px rgb(31 35 40 / 8%);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
 }
 
-.messaging-channel-picker .messaging-channel-row {
-  padding-right: 16px;
-  padding-left: 16px;
+.messaging-detail-empty span {
+  margin-bottom: 5px;
+  font-size: var(--font-size-meta);
 }
 
-.messaging-channel-picker .messaging-channel-row:first-child {
+.messaging-channel-list .messaging-channel-row:first-child {
   border-top: 0;
 }
 
@@ -872,74 +1115,74 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.messaging-modal-heading {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px 16px 14px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.messaging-modal-title {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.messaging-modal-title > div:last-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.messaging-modal-icon {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
+.messaging-panel-icon {
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   background: var(--color-zinc-50);
 }
 
-.messaging-modal-icon .messaging-brand-icon {
+.messaging-panel-icon .messaging-brand-icon {
   width: 18px;
   height: 18px;
 }
 
-.messaging-modal-heading h3 {
-  margin: 0;
-  font-size: var(--font-size-emphasis);
-  font-weight: 620;
-  letter-spacing: 0;
+.messaging-connection-detail {
+  display: grid;
+  align-content: start;
+  padding: 6px 8px 16px 0;
 }
 
-.messaging-modal-heading span {
+.messaging-detail-fact {
+  display: grid;
+  min-width: 0;
+  min-height: 52px;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-ui);
+}
+
+.messaging-detail-fact span {
   color: var(--color-text-muted);
+}
+
+.messaging-detail-fact strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 520;
+}
+
+.messaging-detail-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  color: var(--color-danger-text);
+  background: var(--color-bg-danger-soft);
   font-size: var(--font-size-meta);
-  line-height: 1.4;
+  line-height: 1.45;
+}
+
+.messaging-detail-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 .messaging-credentials-form {
   display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .messaging-setup-modes {
   display: grid;
+  width: 100%;
   grid-template-columns: 1fr 1fr;
-  gap: 2px;
-  margin: 12px 16px 0;
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  background: var(--color-zinc-50);
+  margin: 12px 0 0;
 }
 
-.messaging-setup-modes button,
 .feishu-region-choice button {
   min-width: 0;
   border: 0;
@@ -951,72 +1194,65 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.messaging-setup-modes button {
-  height: 30px;
-}
-
-.messaging-setup-modes button.active,
 .feishu-region-choice button.active {
   color: var(--color-text-primary);
   background: var(--color-bg-content);
   box-shadow: 0 0 0 1px var(--color-border-default), 0 1px 2px rgb(31 35 40 / 8%);
 }
 
-.messaging-setup-modes button:focus-visible,
 .feishu-region-choice button:focus-visible {
   outline: 2px solid var(--color-focus-border);
   outline-offset: 1px;
 }
 
-.messaging-modal-fields {
+.messaging-panel-fields {
   display: grid;
+  align-content: start;
   gap: 12px;
-  padding: 16px;
+  padding: 18px 8px 18px 0;
 }
 
-.messaging-modal label {
+.messaging-detail-panel label {
   display: grid;
   gap: 6px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-meta);
 }
 
-.messaging-modal input,
-.messaging-modal select {
+.messaging-detail-panel input,
+.messaging-detail-panel select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  height: 36px;
+  height: 32px;
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
-  padding: 0 10px;
+  padding: 0 9px;
   color: var(--color-text-primary);
   font: inherit;
   background: var(--color-bg-input);
   outline: none;
 }
 
-.messaging-modal input:focus,
-.messaging-modal select:focus {
+.messaging-detail-panel input:focus,
+.messaging-detail-panel select:focus {
   border-color: var(--color-focus-border);
   box-shadow: 0 0 0 3px var(--color-focus-ring-soft);
 }
 
-.messaging-modal-error {
+.messaging-panel-error {
   margin: 0;
   color: var(--color-danger-text);
   font-size: var(--font-size-meta);
 }
 
-.messaging-modal-actions {
-  display: flex;
-  min-height: 54px;
-  align-items: center;
+.messaging-panel-actions {
   justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-zinc-50);
+}
+
+.messaging-detail-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .weixin-setup-body {
@@ -1165,27 +1401,4 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
 }
 
-@media (max-width: 520px) {
-  .messaging-modal-backdrop {
-    padding: 16px;
-  }
-
-  .messaging-modal-heading,
-  .messaging-modal-fields,
-  .weixin-setup-body,
-  .registration-setup-body {
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-
-  .messaging-modal-actions {
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-
-  .messaging-setup-modes {
-    margin-right: 14px;
-    margin-left: 14px;
-  }
-}
 </style>

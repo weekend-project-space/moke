@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Pencil, Plus, RotateCw, Save, Server, ShieldCheck, Trash2, X } from 'lucide-vue-next'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { Plus, RotateCw, Save, Server, ShieldCheck, Trash2, Undo2 } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { uiText } from '../../../text/uiText'
 import { apiFetch } from '../../../services/apiAccess'
 import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
@@ -17,6 +17,13 @@ type McpServerSummary = {
 const props = defineProps<{
   apiBase: string
 }>()
+const emit = defineEmits<{
+  dirtyChange: [dirty: boolean]
+}>()
+
+type PendingNavigation =
+  | { kind: 'add' }
+  | { kind: 'server'; id: string }
 
 const configPath = ref('')
 const rawConfig = ref('')
@@ -30,13 +37,31 @@ const trustUpdatingServerId = ref('')
 const message = ref('')
 const error = ref('')
 const restartRequired = ref(false)
+const loaded = ref(false)
 const hasUnsavedConfig = computed(() => rawConfig.value !== savedRawConfig.value)
-const serverEditorOpen = ref(false)
-const editingServerId = ref<string | null>(null)
+const selectedServerId = ref('')
+const addingServer = ref(false)
+const detailView = ref<'form' | 'json'>('form')
 const serverSaving = ref(false)
 const serverDeleteTarget = ref<McpServerSummary | null>(null)
 const serverDeleting = ref(false)
-const serverDraft = reactive({ id: '', command: '', args: '' })
+const serverDraft = reactive({ id: '', command: '', args: '', timeoutMs: '30000' })
+const savedServerDraft = ref('')
+const returnServerId = ref('')
+const pendingNavigation = ref<PendingNavigation | null>(null)
+savedServerDraft.value = draftSnapshot()
+
+const selectedServer = computed(() => servers.value.find((server) => server.id === selectedServerId.value) || null)
+const serverDraftDirty = computed(() => draftSnapshot() !== savedServerDraft.value)
+const hasUnsavedChanges = computed(() => loaded.value && (hasUnsavedConfig.value || serverDraftDirty.value))
+const serverDraftValid = computed(() => {
+  const timeoutMs = Number(serverDraft.timeoutMs)
+  return Boolean(serverDraft.command.trim())
+    && Boolean(addingServer.value ? serverDraft.id.trim() : selectedServerId.value)
+    && Number.isInteger(timeoutMs)
+    && timeoutMs > 0
+})
+const serverDraftCanSave = computed(() => serverDraftValid.value && (addingServer.value || serverDraftDirty.value))
 
 const statusText = computed(() => {
   if (loading.value) return uiText.settings.loading
@@ -71,6 +96,23 @@ function serverStatus(server: McpServerSummary) {
   return server.enabled ? uiText.mcp.ready : uiText.mcp.paused
 }
 
+function draftSnapshot() {
+  return JSON.stringify({
+    id: serverDraft.id,
+    command: serverDraft.command,
+    args: serverDraft.args,
+    timeoutMs: serverDraft.timeoutMs,
+  })
+}
+
+function hydrateDraft(server: McpServerSummary | null) {
+  serverDraft.id = server?.id || ''
+  serverDraft.command = server?.command || ''
+  serverDraft.args = server?.args.join('\n') || ''
+  serverDraft.timeoutMs = String(server?.timeout_ms || 30_000)
+  savedServerDraft.value = draftSnapshot()
+}
+
 function applyResult(data: unknown) {
   const result = toRecord(data)
   configPath.value = typeof result.path === 'string' ? result.path : configPath.value
@@ -98,10 +140,12 @@ async function loadMcpSettings() {
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applyResult(data)
     savedRawConfig.value = rawConfig.value
+    if (!addingServer.value) syncSelectedServer()
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.loadFailed
   } finally {
     loading.value = false
+    loaded.value = true
   }
 }
 
@@ -120,7 +164,13 @@ async function saveMcpSettings() {
     const result = applyResult(data)
     if (!result.valid) return
     savedRawConfig.value = rawConfig.value
-    message.value = uiText.mcp.savedRestart
+    if (addingServer.value) {
+      addingServer.value = false
+      pendingNavigation.value = null
+      selectedServerId.value = servers.value[0]?.id || ''
+    }
+    syncSelectedServer()
+    message.value = uiText.mcp.restartRequired
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.saveFailed
   } finally {
@@ -129,6 +179,7 @@ async function saveMcpSettings() {
 }
 
 async function setServerTrust(server: McpServerSummary) {
+  if (hasUnsavedChanges.value) return
   trustUpdatingServerId.value = server.id
   error.value = ''
   message.value = ''
@@ -139,6 +190,7 @@ async function setServerTrust(server: McpServerSummary) {
     const data = await response.json() as unknown
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
+    syncSelectedServer()
     message.value = uiText.mcp.trustGranted
   } catch (err) {
     error.value = err instanceof Error ? err.message : uiText.mcp.trustFailed
@@ -147,27 +199,90 @@ async function setServerTrust(server: McpServerSummary) {
   }
 }
 
+function beginAddServer() {
+  returnServerId.value = selectedServerId.value
+  selectedServerId.value = ''
+  addingServer.value = true
+  detailView.value = 'form'
+  hydrateDraft(null)
+  error.value = ''
+}
+
+function beginSelectServer(server: McpServerSummary) {
+  selectedServerId.value = server.id
+  addingServer.value = false
+  detailView.value = 'form'
+  hydrateDraft(server)
+  error.value = ''
+}
+
+function syncSelectedServer() {
+  if (addingServer.value) return
+  const server = selectedServer.value || servers.value[0]
+  if (server) beginSelectServer(server)
+  else {
+    selectedServerId.value = ''
+    hydrateDraft(null)
+  }
+}
+
+function requestNavigation(next: PendingNavigation) {
+  if (hasUnsavedChanges.value) {
+    pendingNavigation.value = next
+    return
+  }
+  commitNavigation(next)
+}
+
+function commitNavigation(next: PendingNavigation) {
+  pendingNavigation.value = null
+  if (next.kind === 'add') {
+    beginAddServer()
+    return
+  }
+  const server = servers.value.find((candidate) => candidate.id === next.id)
+  if (server) beginSelectServer(server)
+}
+
+async function discardPendingNavigation() {
+  const next = pendingNavigation.value
+  pendingNavigation.value = null
+  if (hasUnsavedConfig.value) await loadMcpSettings()
+  if (next) commitNavigation(next)
+}
+
+function cancelPendingNavigation() {
+  pendingNavigation.value = null
+}
+
 function openAddServer() {
-  editingServerId.value = null
-  serverDraft.id = ''
-  serverDraft.command = ''
-  serverDraft.args = ''
-  serverEditorOpen.value = true
-  error.value = ''
+  requestNavigation({ kind: 'add' })
 }
 
-function openEditServer(server: McpServerSummary) {
-  editingServerId.value = server.id
-  serverDraft.id = server.id
-  serverDraft.command = server.command
-  serverDraft.args = server.args.join('\n')
-  serverEditorOpen.value = true
-  error.value = ''
+function selectServer(server: McpServerSummary) {
+  requestNavigation({ kind: 'server', id: server.id })
 }
 
-function closeServerEditor() {
+function cancelServerDraft() {
   if (serverSaving.value) return
-  serverEditorOpen.value = false
+  pendingNavigation.value = null
+  if (addingServer.value) {
+    const server = servers.value.find((candidate) => candidate.id === returnServerId.value)
+    if (server) beginSelectServer(server)
+    else {
+      addingServer.value = false
+      selectedServerId.value = ''
+      hydrateDraft(null)
+    }
+    return
+  }
+  if (selectedServer.value) hydrateDraft(selectedServer.value)
+}
+
+function revertRawConfig() {
+  if (saving.value) return
+  rawConfig.value = savedRawConfig.value
+  error.value = ''
 }
 
 function serverArgs() {
@@ -175,24 +290,29 @@ function serverArgs() {
 }
 
 async function saveServer() {
-  if (serverSaving.value || !serverDraft.command.trim() || (!editingServerId.value && !serverDraft.id.trim())) return
+  const timeoutMs = Number(serverDraft.timeoutMs)
+  if (serverSaving.value || !serverDraft.command.trim() || (!addingServer.value && !selectedServerId.value) || (addingServer.value && !serverDraft.id.trim()) || !Number.isInteger(timeoutMs) || timeoutMs <= 0) return
   serverSaving.value = true
   error.value = ''
   message.value = ''
   try {
-    const isEditing = Boolean(editingServerId.value)
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/servers${isEditing ? `/${encodeURIComponent(editingServerId.value!)}` : ''}`, {
-      method: isEditing ? 'PATCH' : 'POST',
+    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/servers${addingServer.value ? '' : `/${encodeURIComponent(selectedServerId.value)}`}`, {
+      method: addingServer.value ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isEditing
-        ? { command: serverDraft.command.trim(), args: serverArgs() }
-        : { id: serverDraft.id.trim(), command: serverDraft.command.trim(), args: serverArgs() }),
+      body: JSON.stringify({
+        ...(addingServer.value ? { id: serverDraft.id.trim() } : {}),
+        command: serverDraft.command.trim(),
+        args: serverArgs(),
+        timeout_ms: timeoutMs,
+      }),
     })
     const data = await response.json() as unknown
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
-    serverEditorOpen.value = false
-    message.value = uiText.mcp.savedRestart
+    addingServer.value = false
+    selectedServerId.value = serverDraft.id.trim()
+    syncSelectedServer()
+    message.value = uiText.mcp.restartRequired
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : uiText.mcp.saveFailed
   } finally {
@@ -201,7 +321,7 @@ async function saveServer() {
 }
 
 async function toggleServer(server: McpServerSummary) {
-  if (serverSaving.value || !server.trusted) return
+  if (serverSaving.value || !server.trusted || hasUnsavedChanges.value) return
   serverSaving.value = true
   error.value = ''
   try {
@@ -213,7 +333,8 @@ async function toggleServer(server: McpServerSummary) {
     const data = await response.json() as unknown
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
-    message.value = uiText.mcp.savedRestart
+    syncSelectedServer()
+    message.value = uiText.mcp.restartRequired
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : uiText.mcp.saveFailed
   } finally {
@@ -242,6 +363,9 @@ async function confirmDeleteServer() {
     if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
     serverDeleteTarget.value = null
+    addingServer.value = false
+    selectedServerId.value = ''
+    syncSelectedServer()
     message.value = uiText.mcp.removed
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : uiText.mcp.removeFailed
@@ -253,95 +377,160 @@ async function confirmDeleteServer() {
 onMounted(() => {
   void loadMcpSettings()
 })
+watch(hasUnsavedChanges, (dirty) => emit('dirtyChange', dirty), { immediate: true })
+onBeforeUnmount(() => emit('dirtyChange', false))
 </script>
 
 <template>
-  <div class="settings-section mcp-settings">
-    <section class="settings-group mcp-servers-group">
-      <header class="settings-group-heading">
-        <div>
-          <h3>{{ uiText.mcp.servers }}</h3>
-          <span>{{ servers.length ? uiText.mcp.serverCount(servers.length) : uiText.mcp.serversDescription }}</span>
-        </div>
-        <div class="mcp-heading-actions">
-          <button type="button" class="settings-icon-button" :title="uiText.mcp.reload" :aria-label="uiText.mcp.reload" :disabled="loading" @click="loadMcpSettings"><RotateCw :size="14" :class="{ spinning: loading }" /></button>
-          <button type="button" class="settings-secondary" :disabled="loading" @click="openAddServer"><Plus :size="14" />{{ uiText.mcp.add }}</button>
-        </div>
-      </header>
+  <div class="settings-section settings-record-page">
+    <div class="settings-record-layout">
+        <aside class="settings-record-source" :aria-label="uiText.mcp.servers">
+          <header class="settings-record-heading">
+            <div class="settings-record-heading-text">
+              <h3>{{ uiText.mcp.servers }}</h3>
+              <span>{{ servers.length ? uiText.mcp.serverCount(servers.length) : uiText.mcp.serversDescription }}</span>
+            </div>
+            <button type="button" class="settings-icon-button" :title="uiText.mcp.reload" :aria-label="uiText.mcp.reload" :disabled="loading || hasUnsavedChanges" @click="loadMcpSettings"><RotateCw :size="14" :class="{ spinning: loading }" /></button>
+          </header>
+          <div v-if="servers.length === 0" class="settings-record-empty mcp-source-empty">
+            <Server :size="18" stroke-width="1.7" />
+            <span>{{ loading ? uiText.settings.loading : uiText.mcp.noServers }}</span>
+          </div>
+          <div v-else class="settings-record-source-list" role="listbox" :aria-label="uiText.mcp.servers">
+            <button
+              v-for="server in servers"
+              :key="server.id"
+              type="button"
+              class="settings-record-source-row mcp-server-row"
+              role="option"
+              :aria-selected="server.id === selectedServerId"
+              :class="{ active: server.id === selectedServerId }"
+              @click="selectServer(server)"
+            >
+              <span class="settings-row-icon" aria-hidden="true"><Server :size="16" /></span>
+              <span class="settings-list-copy">
+                <strong>{{ server.id }}</strong>
+                <span>{{ serverStatus(server) }}</span>
+              </span>
+            </button>
+          </div>
 
-      <div v-if="servers.length === 0" class="settings-empty-state">
-        <Server :size="18" stroke-width="1.7" />
-        <span>{{ uiText.mcp.noServers }}</span>
-        <button type="button" class="settings-secondary" @click="openAddServer">{{ uiText.mcp.add }}</button>
-      </div>
-      <div v-else class="mcp-server-list">
-        <div v-for="server in servers" :key="server.id" class="settings-list-row mcp-server-row">
-          <div class="settings-list-main">
-            <span class="settings-row-icon" aria-hidden="true"><Server :size="16" /></span>
-            <div class="settings-list-copy">
-              <strong>{{ server.id }}</strong>
-              <span>{{ uiText.mcp.localTool }}</span>
+          <footer class="settings-record-source-footer">
+            <button type="button" class="settings-secondary settings-record-add" :disabled="loading" @click="openAddServer">
+              <Plus :size="14" />{{ uiText.mcp.add }}
+            </button>
+          </footer>
+        </aside>
+
+        <section class="settings-record-detail" :aria-label="uiText.mcp.serverDetails">
+          <div v-if="addingServer || selectedServer" class="settings-record-detail-view">
+            <header class="settings-record-heading">
+              <div class="settings-record-heading-copy">
+                <span class="settings-record-icon" aria-hidden="true"><Server :size="17" /></span>
+                <div class="settings-record-heading-text">
+                  <h3>{{ addingServer ? uiText.mcp.addServer : selectedServer?.id }}</h3>
+                  <span>{{ addingServer ? uiText.mcp.editorDescription : uiText.mcp.localTool }}</span>
+                </div>
+              </div>
+              <div class="settings-record-heading-actions">
+                <span v-if="hasUnsavedChanges" class="settings-dirty-status">{{ uiText.settings.unsaved }}</span>
+                <span v-if="selectedServer" class="mcp-server-status" :class="{ ready: selectedServer.enabled && selectedServer.trusted, warning: !selectedServer.trusted }">{{ serverStatus(selectedServer) }}</span>
+                <button v-if="selectedServer && !selectedServer.trusted" type="button" class="settings-secondary" :disabled="hasUnsavedChanges || trustUpdatingServerId === selectedServer.id" @click="setServerTrust(selectedServer)"><ShieldCheck :size="14" />{{ uiText.mcp.allow }}</button>
+                <label v-else-if="selectedServer" class="mcp-server-toggle" :title="selectedServer.enabled ? uiText.mcp.pause : uiText.mcp.enable">
+                  <input class="settings-switch" type="checkbox" role="switch" :checked="selectedServer.enabled" :disabled="serverSaving || hasUnsavedChanges" :aria-label="uiText.mcp.toggleLabel(selectedServer.id)" @change="toggleServer(selectedServer)" />
+                </label>
+                <div class="settings-segmented" role="tablist" :aria-label="uiText.mcp.viewMode">
+                  <button type="button" role="tab" :aria-selected="detailView === 'form'" :class="{ active: detailView === 'form' }" @click="detailView = 'form'">{{ uiText.mcp.form }}</button>
+                  <button type="button" role="tab" :aria-selected="detailView === 'json'" :class="{ active: detailView === 'json' }" @click="detailView = 'json'">{{ uiText.mcp.json }}</button>
+                </div>
+              </div>
+            </header>
+
+            <div class="mcp-feedback-slot" :class="{ error: Boolean(error) }" role="status" aria-live="polite">
+              {{ error || message || (restartRequired ? uiText.mcp.restartRequired : '') }}
+            </div>
+
+            <form v-if="detailView === 'form'" class="mcp-server-form" @submit.prevent="saveServer">
+              <div class="settings-record-detail-scroll mcp-server-editor-fields">
+                <div class="mcp-form-row">
+                  <label>
+                    <span>{{ uiText.mcp.name }}</span>
+                    <input v-model="serverDraft.id" :disabled="!addingServer" required pattern="[A-Za-z0-9_-]+" maxlength="200" autocomplete="off" />
+                    <small>{{ uiText.mcp.nameHint }}</small>
+                  </label>
+                  <label>
+                    <span>{{ uiText.mcp.transport }}</span>
+                    <select disabled aria-readonly="true"><option value="stdio">{{ uiText.mcp.stdio }}</option></select>
+                  </label>
+                </div>
+                <div class="mcp-form-row mcp-form-row-narrow">
+                  <label>
+                    <span>{{ uiText.mcp.timeoutMs }}</span>
+                    <input v-model="serverDraft.timeoutMs" type="number" min="1" max="3600000" step="1000" required />
+                    <small>{{ uiText.mcp.timeoutHint }}</small>
+                  </label>
+                </div>
+                <label>
+                  <span>{{ uiText.mcp.command }}</span>
+                  <input v-model="serverDraft.command" required maxlength="2000" spellcheck="false" autocomplete="off" :placeholder="uiText.mcp.commandPlaceholder" />
+                </label>
+                <label>
+                  <span>{{ uiText.mcp.arguments }}</span>
+                  <textarea v-model="serverDraft.args" spellcheck="false" :placeholder="uiText.mcp.argumentsPlaceholder"></textarea>
+                  <small>{{ uiText.mcp.argumentsHint }}</small>
+                </label>
+              </div>
+              <footer class="settings-record-detail-actions">
+                <button v-if="selectedServer" type="button" class="settings-danger-ghost" :disabled="serverSaving || hasUnsavedChanges" @click="requestDeleteServer(selectedServer)"><Trash2 :size="14" />{{ uiText.mcp.remove }}</button>
+                <span v-else></span>
+                <div class="settings-record-actions-right">
+                  <button type="button" class="settings-secondary" :disabled="serverSaving || (!addingServer && !serverDraftDirty)" @click="cancelServerDraft"><Undo2 v-if="!addingServer" :size="14" />{{ addingServer ? uiText.settings.cancel : uiText.settings.revert }}</button>
+                  <button type="submit" class="settings-primary" :disabled="serverSaving || !serverDraftCanSave"><Save :size="14" />{{ serverSaving ? uiText.mcp.saving : uiText.settings.save }}</button>
+                </div>
+              </footer>
+            </form>
+
+            <div v-else class="mcp-json-view">
+              <div class="mcp-config-path">
+                <span>{{ uiText.mcp.configFile }}</span>
+                <code :title="configPath">{{ configPath }}</code>
+              </div>
+              <label class="mcp-editor-field">
+                <span>{{ uiText.mcp.configurationJson }}</span>
+                <textarea v-model="rawConfig" class="mcp-config-editor" spellcheck="false" :disabled="loading || saving"></textarea>
+              </label>
+              <footer class="settings-record-detail-actions">
+                <button v-if="selectedServer" type="button" class="settings-danger-ghost" :disabled="saving || hasUnsavedConfig" @click="requestDeleteServer(selectedServer)"><Trash2 :size="14" />{{ uiText.mcp.remove }}</button>
+                <span v-else class="mcp-json-status">{{ statusText }}</span>
+                <div class="settings-record-actions-right">
+                  <button type="button" class="settings-secondary" :disabled="saving || !hasUnsavedConfig" @click="revertRawConfig"><Undo2 :size="14" />{{ uiText.settings.revert }}</button>
+                  <button type="button" class="settings-primary" :disabled="saving || loading || !hasUnsavedConfig" @click="saveMcpSettings"><Save :size="14" />{{ saving ? uiText.mcp.saving : uiText.settings.save }}</button>
+                </div>
+              </footer>
             </div>
           </div>
-          <span class="mcp-server-status" :class="{ ready: server.enabled && server.trusted, warning: !server.trusted }">{{ serverStatus(server) }}</span>
-          <div class="mcp-server-actions">
-            <button v-if="!server.trusted" type="button" class="settings-secondary" :disabled="hasUnsavedConfig || trustUpdatingServerId === server.id" @click="setServerTrust(server)"><ShieldCheck :size="14" />{{ uiText.mcp.allow }}</button>
-            <label v-else class="mcp-server-toggle" :title="server.enabled ? uiText.mcp.pause : uiText.mcp.enable">
-              <input class="settings-switch" type="checkbox" role="switch" :checked="server.enabled" :disabled="serverSaving" :aria-label="uiText.mcp.toggleLabel(server.id)" @change="toggleServer(server)" />
-            </label>
-            <button type="button" class="settings-icon-button" :title="uiText.mcp.edit" :aria-label="uiText.mcp.editLabel(server.id)" :disabled="serverSaving" @click="openEditServer(server)"><Pencil :size="14" /></button>
-            <button type="button" class="settings-icon-button mcp-remove-button" :title="uiText.mcp.remove" :aria-label="uiText.mcp.removeLabel(server.id)" :disabled="serverSaving" @click="requestDeleteServer(server)"><Trash2 :size="14" /></button>
-          </div>
-        </div>
-      </div>
-      <div class="mcp-feedback-slot" :class="{ error: Boolean(error) }" role="status" aria-live="polite">
-        {{ error || message || (restartRequired ? uiText.mcp.restartRequired : '') }}
-      </div>
-    </section>
 
-    <details class="settings-group mcp-advanced-config">
-      <summary>
-        <span>{{ uiText.mcp.configuration }}</span>
-        <small>{{ statusText }}</small>
-      </summary>
-      <div class="mcp-advanced-config-body">
-        <div class="mcp-config-path">
-          <span>{{ uiText.mcp.configFile }}</span>
-          <code :title="configPath">{{ configPath }}</code>
-        </div>
-        <label class="mcp-editor-field">
-          <span>{{ uiText.mcp.configurationJson }}</span>
-          <textarea v-model="rawConfig" class="mcp-config-editor" spellcheck="false" :disabled="loading || saving"></textarea>
-        </label>
-        <div class="settings-actions">
-          <button type="button" class="settings-primary" :disabled="saving || loading || !hasUnsavedConfig" @click="saveMcpSettings">
-            <Save :size="14" />
-            {{ saving ? uiText.mcp.saving : uiText.mcp.save }}
-          </button>
-        </div>
+          <div v-else class="settings-record-empty">
+            <Server :size="20" stroke-width="1.7" />
+            <strong>{{ uiText.mcp.noServerSelected }}</strong>
+            <span>{{ uiText.mcp.empty }}</span>
+            <button type="button" class="settings-primary" @click="openAddServer"><Plus :size="14" />{{ uiText.mcp.add }}</button>
+          </div>
+        </section>
       </div>
-    </details>
   </div>
 
-  <Teleport to="body">
-    <div v-if="serverEditorOpen" class="mcp-editor-backdrop" @click.self="closeServerEditor" @keydown.esc="closeServerEditor">
-      <form class="mcp-server-editor" role="dialog" aria-modal="true" aria-labelledby="mcp-server-editor-title" @submit.prevent="saveServer">
-        <header class="mcp-server-editor-heading">
-          <div><h3 id="mcp-server-editor-title">{{ editingServerId ? uiText.mcp.editServer : uiText.mcp.addServer }}</h3><span>{{ uiText.mcp.editorDescription }}</span></div>
-          <button type="button" class="settings-icon-button" :title="uiText.mcp.close" :aria-label="uiText.mcp.close" :disabled="serverSaving" @click="closeServerEditor"><X :size="14" /></button>
-        </header>
-        <div class="mcp-server-editor-fields">
-          <label><span>{{ uiText.mcp.name }}</span><input v-model="serverDraft.id" :disabled="Boolean(editingServerId)" required pattern="[A-Za-z0-9_-]+" maxlength="200" autocomplete="off" /><small>{{ uiText.mcp.nameHint }}</small></label>
-          <label><span>{{ uiText.mcp.command }}</span><input v-model="serverDraft.command" required maxlength="2000" spellcheck="false" autocomplete="off" :placeholder="uiText.mcp.commandPlaceholder" /></label>
-          <label><span>{{ uiText.mcp.arguments }}</span><textarea v-model="serverDraft.args" spellcheck="false" :placeholder="uiText.mcp.argumentsPlaceholder"></textarea><small>{{ uiText.mcp.argumentsHint }}</small></label>
-        </div>
-        <footer class="mcp-server-editor-actions">
-          <button type="button" class="settings-secondary" :disabled="serverSaving" @click="closeServerEditor">{{ uiText.mcp.cancel }}</button>
-          <button type="submit" class="settings-primary" :disabled="serverSaving || !serverDraft.command.trim() || (!editingServerId && !serverDraft.id.trim())">{{ serverSaving ? uiText.mcp.saving : uiText.mcp.saveServer }}</button>
-        </footer>
-      </form>
-    </div>
-  </Teleport>
+  <SettingsConfirmSheet
+    :open="Boolean(pendingNavigation)"
+    dialog-id="mcp-discard-confirm"
+    :title="uiText.settings.confirmDiscardChangesTitle"
+    :description="uiText.settings.confirmDiscardSettingsChanges"
+    :confirm-label="uiText.settings.confirmDiscardModelChangesAction"
+    :cancel-label="uiText.settings.cancel"
+    tone="neutral"
+    @cancel="cancelPendingNavigation"
+    @confirm="discardPendingNavigation"
+  />
 
   <SettingsConfirmSheet
     :open="Boolean(serverDeleteTarget)"

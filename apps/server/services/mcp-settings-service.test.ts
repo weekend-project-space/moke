@@ -56,10 +56,11 @@ test('MCP settings manage servers without requiring raw JSON edits', () => {
     });
     const service = new McpSettingsService(configPath, permissions);
 
-    const added = service.addServer({ id: 'files', command: 'node', args: ['server.js'] });
+    const added = service.addServer({ id: 'files', command: 'node', args: ['server.js'], timeout_ms: 45_000 });
     assert.equal(added.servers[0]?.enabled, true);
     assert.equal(added.servers[0]?.trusted, false);
     assert.deepEqual(added.servers[0]?.args, ['server.js']);
+    assert.equal(added.servers[0]?.timeout_ms, 45_000);
     assert.throws(
       () => service.addServer({ id: 'files', command: 'node', args: [] }),
       (error: unknown) => error instanceof McpSettingsError && error.code === 'MCP_SERVER_EXISTS',
@@ -67,8 +68,9 @@ test('MCP settings manage servers without requiring raw JSON edits', () => {
 
     assert.equal(service.trust('files'), true);
     assert.equal(service.get().servers[0]?.trusted, true);
-    const updated = service.updateServer('files', { command: 'npx', args: ['-y', 'server-package'] });
+    const updated = service.updateServer('files', { command: 'npx', args: ['-y', 'server-package'], timeout_ms: 60_000 });
     assert.equal(updated.servers[0]?.command, 'npx');
+    assert.equal(updated.servers[0]?.timeout_ms, 60_000);
     assert.equal(updated.servers[0]?.trusted, false);
 
     assert.equal(service.setServerEnabled('files', false).servers[0]?.enabled, false);

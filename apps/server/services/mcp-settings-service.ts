@@ -109,7 +109,7 @@ export class McpSettingsService {
     };
   }
 
-  addServer(input: { id: string; command: string; args: string[] }) {
+  addServer(input: { id: string; command: string; args: string[]; timeout_ms?: number }) {
     const config = this.currentConfig();
     if (config.servers.some((server) => server.id === input.id)) {
       throw new McpSettingsError('MCP_SERVER_EXISTS', `MCP server already exists: ${input.id}`);
@@ -120,7 +120,7 @@ export class McpSettingsService {
       command: input.command,
       args: input.args,
       enabled: true,
-      timeout_ms: 30_000,
+      timeout_ms: input.timeout_ms ?? 30_000,
       max_output_chars: 20_000,
       disabled_tools: [],
       read_only_tools: [],
@@ -128,12 +128,13 @@ export class McpSettingsService {
     return this.saveConfig(config);
   }
 
-  updateServer(serverId: string, input: { command?: string; args?: string[] }) {
+  updateServer(serverId: string, input: { command?: string; args?: string[]; timeout_ms?: number }) {
     const config = this.currentConfig();
     const server = config.servers.find((candidate) => candidate.id === serverId);
     if (!server) throw new McpSettingsError('MCP_SERVER_NOT_FOUND', `MCP server not found: ${serverId}`);
     if (input.command !== undefined) server.command = input.command;
     if (input.args !== undefined) server.args = input.args;
+    if (input.timeout_ms !== undefined) server.timeout_ms = input.timeout_ms;
     return this.saveConfig(config);
   }
 

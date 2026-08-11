@@ -357,20 +357,21 @@ onBeforeUnmount(() => emit('dirtyChange', false))
 </script>
 
 <template>
-  <div class="settings-section model-settings">
-    <div class="model-provider-layout">
-      <aside class="model-provider-source" :aria-label="uiText.settings.providers">
-        <header class="model-source-heading">
-          <div>
+  <div class="settings-section settings-record-page model-settings">
+    <div class="settings-record-layout">
+      <aside class="settings-record-source" :aria-label="uiText.settings.providers">
+        <header class="settings-record-heading">
+          <div class="settings-record-heading-text">
             <h3>{{ uiText.settings.providers }}</h3>
             <span>{{ uiText.settings.providerCount(providers.length) }}</span>
           </div>
         </header>
-        <div class="model-source-list" role="listbox" :aria-label="uiText.settings.providers">
+        <div class="settings-record-source-list model-source-list" role="listbox" :aria-label="uiText.settings.providers">
           <button
             v-for="provider in providers"
             :key="provider.id"
             type="button"
+            class="settings-record-source-row"
             role="option"
             :aria-selected="provider.id === selectedProviderId"
             :class="{ active: provider.id === selectedProviderId }"
@@ -383,19 +384,19 @@ onBeforeUnmount(() => emit('dirtyChange', false))
             <small :title="provider.model || provider.type">{{ provider.model || provider.type }}</small>
           </button>
         </div>
-        <footer class="model-source-actions">
-          <button type="button" class="settings-secondary model-add-provider" :disabled="saving" @click="addProvider"><Plus :size="14" />{{ uiText.settings.addProvider }}</button>
+        <footer class="settings-record-source-footer">
+          <button type="button" class="settings-secondary settings-record-add" :disabled="saving" @click="addProvider"><Plus :size="14" />{{ uiText.settings.addProvider }}</button>
         </footer>
       </aside>
 
-      <div class="model-provider-detail">
-        <header class="model-detail-heading">
-          <div>
+      <div class="settings-record-detail">
+        <header class="settings-record-heading">
+          <div class="settings-record-heading-text">
             <h3>{{ editingProvider.name }}</h3>
             <span>{{ editingProvider.type === 'openai-responses' ? 'OpenAI Responses' : 'OpenAI Compatible' }}</span>
           </div>
           <div class="model-provider-states">
-            <span v-if="isDirty" class="model-dirty-status">{{ uiText.settings.unsaved }}</span>
+            <span v-if="isDirty" class="settings-dirty-status">{{ uiText.settings.unsaved }}</span>
             <button
               v-else
               type="button"
@@ -409,7 +410,7 @@ onBeforeUnmount(() => emit('dirtyChange', false))
           </div>
         </header>
 
-        <div class="model-detail-scroll">
+        <div class="settings-record-detail-scroll">
           <div v-if="modelError" class="settings-note error" role="alert">{{ modelError }}</div>
 
           <div class="model-detail-form">
@@ -532,9 +533,9 @@ onBeforeUnmount(() => emit('dirtyChange', false))
           </div>
         </div>
 
-        <footer class="settings-actions model-detail-actions">
-          <button type="button" class="model-danger-ghost" :disabled="providers.length <= 1 || saving" @click="requestDeleteProvider"><Trash2 :size="14" />{{ uiText.settings.confirmDeleteProviderAction }}</button>
-          <div class="model-detail-actions-right">
+        <footer class="settings-record-detail-actions">
+          <button type="button" class="settings-danger-ghost" :disabled="providers.length <= 1 || saving" @click="requestDeleteProvider"><Trash2 :size="14" />{{ uiText.settings.confirmDeleteProviderAction }}</button>
+          <div class="settings-record-actions-right">
             <button type="button" class="settings-secondary" :disabled="saving || !isDirty" @click="revertProvider"><Undo2 :size="14" />{{ uiText.settings.revert }}</button>
             <button type="button" class="settings-primary" :disabled="saving || !isDirty" @click="saveModelProviders"><Save :size="14" />{{ uiText.settings.save }}</button>
           </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertTriangle, Check, Trash2 } from 'lucide-vue-next'
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -22,12 +22,26 @@ const emit = defineEmits<{
 }>()
 
 const cancelButton = ref<HTMLButtonElement | null>(null)
+let returnFocus: HTMLElement | null = null
+
+function restoreFocus() {
+  const target = returnFocus
+  returnFocus = null
+  if (target?.isConnected) target.focus({ preventScroll: true })
+}
 
 watch(() => props.open, async (open) => {
-  if (!open) return
+  if (!open) {
+    restoreFocus()
+    return
+  }
+
+  returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
   await nextTick()
-  cancelButton.value?.focus()
+  cancelButton.value?.focus({ preventScroll: true })
 })
+
+onBeforeUnmount(restoreFocus)
 
 function cancel() {
   if (!props.busy) emit('cancel')
