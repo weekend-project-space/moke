@@ -60,8 +60,8 @@ const filteredSessions = computed(() => {
   })
 })
 
-const projectGroups = computed(() => groupSessionsByProject(filteredSessions.value, uiText.sidebar.noProject))
-const allProjectGroups = computed(() => groupSessionsByProject(props.sessions, uiText.sidebar.noProject))
+const projectGroups = computed(() => groupSessionsByProject(filteredSessions.value, uiText.sidebar.noProject, uiText.sidebar.quickChats))
+const allProjectGroups = computed(() => groupSessionsByProject(props.sessions, uiText.sidebar.noProject, uiText.sidebar.quickChats))
 
 function readSessionViewMode(): SessionViewMode {
   try {

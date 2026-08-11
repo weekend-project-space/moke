@@ -1,3 +1,6 @@
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+
 import type { RunManager, RunOptions } from '@moke/agent-runtime';
 import type {
   CreateSessionEnvironmentInput,
@@ -25,15 +28,27 @@ export class SessionApplicationService {
     env?: CreateSessionEnvironmentInput;
   }) {
     const createdAt = now();
+    const sessionId = id('sess');
+    const generatedWorkspace = !input.env?.workspace?.root?.trim();
+    const workspaceRoot = generatedWorkspace
+      ? createGeneratedWorkspaceRoot(this.defaultWorkspaceRoot, createdAt, sessionId)
+      : undefined;
+    if (workspaceRoot) mkdirSync(workspaceRoot, { recursive: true });
     const session: Session = {
-      id: id('sess'),
+      id: sessionId,
       title: input.title,
       visibility: input.visibility || 'visible',
       created_at: createdAt,
       updated_at: createdAt,
       messages: [],
-      metadata: input.metadata || {},
-      env: createSessionEnvironment({ defaultWorkspaceRoot: this.defaultWorkspaceRoot, env: input.env }),
+      metadata: {
+        ...(input.metadata || {}),
+        ...(generatedWorkspace ? { generated_workspace: true } : {}),
+      },
+      env: createSessionEnvironment({
+        defaultWorkspaceRoot: this.defaultWorkspaceRoot,
+        env: workspaceRoot ? { ...input.env, workspace: { root: workspaceRoot } } : input.env,
+      }),
     };
     this.sessionStore.save(session);
     return session;
@@ -103,4 +118,14 @@ export class SessionApplicationService {
       throw error;
     }
   }
+}
+
+function createGeneratedWorkspaceRoot(defaultWorkspaceRoot: string, createdAt: string, sessionId: string) {
+  const date = new Date(createdAt);
+  const dateKey = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  return path.join(defaultWorkspaceRoot, '.moke', 'sessions', dateKey, sessionId);
 }

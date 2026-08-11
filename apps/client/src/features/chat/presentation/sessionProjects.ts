@@ -1,6 +1,7 @@
 import type { SessionSummary } from '../model/conversation'
 
 export const UNASSIGNED_PROJECT_KEY = '__unassigned__'
+export const GENERATED_WORKSPACE_KEY = '__generated__'
 
 export type SessionProjectGroup = {
   key: string
@@ -25,12 +26,16 @@ function projectLabel(root: string) {
 export function groupSessionsByProject(
   sessions: SessionSummary[],
   unassignedLabel: string,
+  generatedWorkspaceLabel = unassignedLabel,
 ): SessionProjectGroup[] {
   const groups = new Map<string, SessionProjectGroup>()
 
   for (const session of sessions) {
     const root = session.env?.workspace.root?.trim() || ''
-    const key = normalizedWorkspaceRoot(root) || UNASSIGNED_PROJECT_KEY
+    const generatedWorkspace = session.generated_workspace === true
+    const key = generatedWorkspace
+      ? GENERATED_WORKSPACE_KEY
+      : normalizedWorkspaceRoot(root) || UNASSIGNED_PROJECT_KEY
     const existing = groups.get(key)
     if (existing) {
       existing.sessions.push(session)
@@ -39,8 +44,8 @@ export function groupSessionsByProject(
 
     groups.set(key, {
       key,
-      label: root ? projectLabel(root) : unassignedLabel,
-      root,
+      label: generatedWorkspace ? generatedWorkspaceLabel : (root ? projectLabel(root) : unassignedLabel),
+      root: generatedWorkspace ? '' : root,
       sessions: [session],
     })
   }

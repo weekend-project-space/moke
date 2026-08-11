@@ -446,6 +446,7 @@ const sidebar = {
   noProject: 'No project',
   pin: 'Pin',
   projectsView: 'Projects',
+  quickChats: 'Quick chats',
   recentView: 'Recent',
   rename: 'Rename',
   running: 'Running',

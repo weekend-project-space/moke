@@ -48,6 +48,13 @@ test('applySessionUpdate pins without removing existing metadata', () => {
   assert.equal(summarizeSession(session).pinned, true);
 });
 
+test('summarizeSession exposes generated workspaces without exposing metadata', () => {
+  const session = createSession();
+  session.metadata.generated_workspace = true;
+
+  assert.equal(summarizeSession(session).generated_workspace, true);
+});
+
 test('applySessionUpdate rejects empty title', () => {
   const session = createSession();
   const result = applySessionUpdate(session, { title: '  ' });

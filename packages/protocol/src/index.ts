@@ -202,6 +202,7 @@ export type SessionSummary = Omit<Session, 'messages' | 'metadata'> & {
   pinned: boolean;
   preview: string;
   message_count: number;
+  generated_workspace?: boolean;
 };
 
 export type PendingAsk = {

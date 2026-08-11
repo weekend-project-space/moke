@@ -42,6 +42,7 @@ export function summarizeSession(session: Session) {
   return {
     ...summary,
     archived: metadata?.archived === true,
+    ...(metadata?.generated_workspace === true ? { generated_workspace: true } : {}),
     pinned: metadata?.pinned === true,
     preview: firstUserMessage?.content.slice(0, 42) || (firstUserMessage?.attachments?.length ? 'Image' : ''),
     message_count: messages.length,
