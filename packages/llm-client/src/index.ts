@@ -1,0 +1,28 @@
+export { createLlmClient } from './client.js';
+export { LlmClientError } from './types.js';
+export type {
+  ChatInputItem,
+  ChatOutputItem,
+  ChatRequest,
+  ChatResponse,
+  ChatRun,
+  ChatRunSnapshot,
+  ChatRunStatus,
+  FinishReason,
+  InputContentPart,
+  JsonSchema,
+  LlmClient,
+  LlmClientOptions,
+  LlmDiagnostics,
+  LlmErrorKind,
+  LlmProvider,
+  LlmStreamEvent,
+  OpenAiCompatibleOptions,
+  ProviderEventMetadata,
+  StreamingChatResponseHandler,
+  StreamEventContext,
+  TokenUsage,
+  ToolCall,
+  ToolChoice,
+  ToolDefinition,
+} from './types.js';

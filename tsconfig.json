@@ -13,6 +13,7 @@
     { "path": "./packages/agent-tools" },
     { "path": "./packages/agent-skills" },
     { "path": "./packages/browser-tools" },
-    { "path": "./packages/mcp-client" }
+    { "path": "./packages/mcp-client" },
+    { "path": "./packages/llm-client" }
   ]
 }
