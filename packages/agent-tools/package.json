@@ -17,6 +17,7 @@
   },
   "files": ["dist"],
   "dependencies": {
+    "@moke/agent-protocol": "0.1.0",
     "@moke/agent-runtime": "0.1.0",
     "deepagents": "^1.10.2",
     "zod": "^4.4.3"

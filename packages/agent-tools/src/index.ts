@@ -10,3 +10,5 @@ export type { AgentToolsSystemBackend } from './register-tools.js';
 export { createSearchTool } from './search.js';
 export { createViewImageTool } from './view-image.js';
 export { createWriteFileTool } from './write-file.js';
+export { RegistryToolProvider, ToolProviderError } from './provider.js';
+export type { RegisteredTool } from './provider.js';

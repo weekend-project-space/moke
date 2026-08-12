@@ -11,5 +11,5 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../llm-client" }]
+  "references": [{ "path": "../agent-protocol" }, { "path": "../llm-client" }]
 }

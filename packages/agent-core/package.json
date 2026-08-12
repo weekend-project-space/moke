@@ -18,6 +18,7 @@
   },
   "files": ["dist"],
   "dependencies": {
+    "@moke/agent-protocol": "0.1.0",
     "@moke/llm-client": "0.1.0"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "declaration": true, "declarationMap": true, "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.agent-protocol.tsbuildinfo", "lib": ["ES2022", "DOM", "DOM.Iterable"] },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
