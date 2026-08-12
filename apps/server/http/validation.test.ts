@@ -36,6 +36,11 @@ test('parseParams and parseQuery return typed normalized values', () => {
 
 test('run response schema rejects invalid variants and accepts typed variants', () => {
   assert.equal(runRespondSchema.safeParse({ type: 'choose', request_id: 'ask_1' }).success, false);
+  assert.equal(runRespondSchema.safeParse({ type: 'choose', request_id: 'ask_1', option_id: 'yes' }).success, true);
+  assert.equal(runRespondSchema.safeParse({ type: 'choose', request_id: 'ask_1', custom_text: 'Another answer' }).success, true);
+  assert.equal(runRespondSchema.safeParse({
+    type: 'choose', request_id: 'ask_1', option_id: 'yes', custom_text: 'Another answer',
+  }).success, false);
   assert.equal(runRespondSchema.safeParse({ type: 'approve', request_id: 'approval_1', decision: 'approved' }).success, true);
   assert.equal(runRespondSchema.safeParse({ type: 'cancel', reason: 'User cancelled' }).success, true);
 });

@@ -184,14 +184,6 @@ export class ReActAgent {
         }
 
         if (!isAskUserCall) toolCalls++;
-        const runtimeTool = toolSpecs.get(call.name);
-        eventBus.emit('tool.call', {
-          call_id: callId,
-          tool: call.name,
-          input: call.args || {},
-          source: runtimeTool?.source || { type: 'local' },
-        }, { step: actStep });
-
         const startedAt = Date.now();
         try {
           const rawOutput =
@@ -210,7 +202,7 @@ export class ReActAgent {
           hasObservation = true;
           const approvals = context.consumeApprovals?.(callId) || [];
 
-          eventBus.emit('tool.result', {
+          eventBus.emit('tool.call.completed', {
             call_id: callId,
             status: 'ok',
             duration_ms: Date.now() - startedAt,
@@ -251,7 +243,7 @@ export class ReActAgent {
           throwIfAborted(context.abortSignal);
           const output = createToolErrorOutput(error, call.name);
           const approvals = context.consumeApprovals?.(callId) || [];
-          eventBus.emit('tool.result', {
+          eventBus.emit('tool.call.completed', {
             call_id: callId,
             status: 'error',
             duration_ms: Date.now() - startedAt,

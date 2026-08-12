@@ -136,14 +136,15 @@ function handleChoose(
   run: RuntimeRun,
   body: {
     request_id: string;
-    option_id: string;
+    option_id?: string;
+    custom_text?: string;
   },
   json: (status: number, body: unknown) => void,
 ) {
   const requestId = body.request_id;
   const optionId = body.option_id;
 
-  const result = context.runManager.answer(run.id, requestId, optionId);
+  const result = context.runManager.answer(run.id, requestId, optionId, body.custom_text);
   if (result.status !== 200) {
     throw new HttpError(
       result.status,

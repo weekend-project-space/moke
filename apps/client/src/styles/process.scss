@@ -303,8 +303,7 @@
   line-height: 1.5;
 }
 
-.process-step-caret,
-.tool-detail-raw-caret {
+.process-step-caret {
   display: inline-flex;
   width: 15px;
   height: 15px;
@@ -312,17 +311,11 @@
   justify-content: center;
 }
 
-.tool-detail-raw-caret {
-  color: color-mix(in srgb, var(--color-text-muted), transparent 22%);
-}
-
-.process-item[open] > summary .process-step-caret .when-closed,
-.tool-detail-raw[open] > summary .tool-detail-raw-caret .when-closed {
+.process-item[open] > summary .process-step-caret .when-closed {
   display: none;
 }
 
-.process-item:not([open]) > summary .process-step-caret .when-open,
-.tool-detail-raw:not([open]) > summary .tool-detail-raw-caret .when-open {
+.process-item:not([open]) > summary .process-step-caret .when-open {
   display: none;
 }
 

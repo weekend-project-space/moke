@@ -51,6 +51,7 @@ const browser = {
 } as const
 
 const chat = {
+  askOtherPlaceholder: 'Other...',
   continuePrompt: 'Based on the result above, continue and turn it into a clearer next step.',
   emptyDescription: 'Ask a question, open a page, or work with your files.',
   emptyTitle: 'Where should we go first?',
@@ -488,6 +489,7 @@ const tool = {
   clickCompleted: 'Click completed',
   failedToReadDirectory: 'Failed to read directory',
   fullPage: 'Full page',
+  arguments: 'Arguments',
   input: 'Input',
   inputCompleted: 'Input completed',
   userInput: 'User input',
@@ -495,7 +497,6 @@ const tool = {
   approvalAllowedSession: 'Allowed for chat',
   approvalAllowedAlways: 'Always allowed',
   approvalRejected: 'Rejected',
-  rawDetails: 'Raw details',
   commandNoOutput: 'Command produced no output',
   pageStructureCaptured: 'Page structure captured',
   runCommand: 'Run command',
@@ -511,7 +512,6 @@ const tool = {
   viewImage: 'View image',
   viewPage: 'View page',
   wait: 'Wait',
-  waitingForResult: 'Waiting for result',
 } as const
 
 const approval = {

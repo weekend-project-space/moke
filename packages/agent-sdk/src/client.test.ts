@@ -653,6 +653,24 @@ test('resource methods reject malformed response records', async () => {
   await assert.rejects(client.workspace.entries({ contextId: 'ctx_1' }), MokeProtocolError);
 });
 
+test('RunHandle sends custom ask answers', async () => {
+  const requests: unknown[] = [];
+  const client = new MokeClient({
+    baseUrl: '',
+    fetch: (async (input: URL | RequestInfo, init?: RequestInit) => {
+      if (String(input).endsWith('/respond')) {
+        requests.push(JSON.parse(String(init?.body)));
+        return json({ run_id: 'run_1', request_id: 'ask_1', status: 'running' });
+      }
+      return json({ run: { id: 'run_1', session_id: 'sess_1', status: 'running', seq: 0, events: [] } });
+    }) as typeof fetch,
+  });
+
+  await client.run('run_1').answer({ requestId: 'ask_1', customText: 'Another answer' });
+
+  assert.deepEqual(requests, [{ type: 'choose', request_id: 'ask_1', custom_text: 'Another answer' }]);
+});
+
 test('withHandlers creates an immutable session policy and prompt overrides bound handlers', async () => {
   const approval = event({
     seq: 1,

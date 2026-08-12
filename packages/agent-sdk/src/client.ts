@@ -321,7 +321,11 @@ class RunsResource {
   }
 
   async answer(id: string, input: AnswerRunInput, options?: RequestOptions) {
-    await this.respond(id, { type: 'choose', request_id: input.requestId, option_id: input.optionId }, options);
+    await this.respond(id, {
+      type: 'choose',
+      request_id: input.requestId,
+      ...('optionId' in input ? { option_id: input.optionId } : { custom_text: input.customText }),
+    }, options);
     return this.get(id, options);
   }
 
@@ -375,9 +379,14 @@ export class RunHandle {
       if (event.type === 'ask_user.required') {
         if (!handlers.onAsk) throw new MokeInteractionRequiredError(this.id, event.payload);
         const answer = await handlers.onAsk(event.payload, context);
+        const answerInput = typeof answer === 'string'
+          ? { optionId: answer }
+          : 'customText' in answer
+            ? { customText: answer.customText }
+            : { optionId: answer.optionId };
         await this.answer({
           requestId: event.payload.ask_id,
-          optionId: typeof answer === 'string' ? answer : answer.optionId,
+          ...answerInput,
         }, options);
       } else if (event.type === 'approval.required') {
         if (!handlers.onApproval) throw new MokeInteractionRequiredError(this.id, event.payload);

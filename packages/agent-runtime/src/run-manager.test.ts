@@ -500,6 +500,36 @@ test('RunManager resolves persisted image attachments before sending history to 
   assert.equal(historyDataUrl, 'data:image/png;base64,AA==');
 });
 
+test('RunManager resumes an ask with custom text', async () => {
+  const session = createSession();
+  const runs = new Map();
+  const manager = new RunManager({
+    runs,
+    agent: {
+      async run(input) {
+        const selected = await input.context.askUser?.({
+          callId: 'call_1',
+          question: 'Which option?',
+          options: [{ id: 'one', label: 'One' }, { id: 'two', label: 'Two' }],
+        });
+        return { toolCalls: 1, message: message({ role: 'assistant', content: selected?.label || '' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+  });
+  manager.addObserver((event, run) => {
+    if (event.type === 'ask_user.required') {
+      assert.equal(manager.answer(run.id, event.payload.ask_id, undefined, '  My answer  ').status, 200);
+    }
+  });
+
+  const run = manager.createRun(session, { content: 'start' });
+  await waitFor(() => run.status === 'completed');
+
+  assert.equal(session.messages.at(-1)?.content, 'My answer');
+});
+
 test('RunManager freezes the session environment and uses its workspace for the run', async () => {
   const session = createSession();
   session.env = {

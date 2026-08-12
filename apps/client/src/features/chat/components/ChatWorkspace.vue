@@ -576,6 +576,7 @@ defineExpose({
           />
           <AskInlineBar
             v-if="pendingAsk"
+            :key="pendingAsk.ask_id"
             :ask="pendingAsk"
             :submitting="isSubmittingAsk"
             @select="selectAskOption"

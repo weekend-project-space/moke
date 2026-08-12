@@ -66,6 +66,31 @@ test('run event reducer stores reasoning deltas and enters pending states', () =
   assert.equal(afterApproval.state.events.length, 1)
 })
 
+test('run event reducer stores tool lifecycle events in order', () => {
+  const state = createSessionRunState('run_1')
+  const created = event('tool.call.created', {
+    call_id: 'call_1',
+    tool: 'execute',
+    source: { type: 'local' },
+  }, 'event_tool_created')
+  const ready = event('tool.call.ready', {
+    call_id: 'call_1',
+    input: { command: 'npm test' },
+  }, 'event_tool_ready')
+  const completed = event('tool.call.completed', {
+    call_id: 'call_1',
+    status: 'ok',
+    duration_ms: 42,
+    output: { exit_code: 0 },
+  }, 'event_tool_completed')
+
+  const afterCreated = reduceRunEvent(state, created)
+  const afterReady = reduceRunEvent(afterCreated.state, ready)
+  const afterCompleted = reduceRunEvent(afterReady.state, completed)
+
+  assert.deepEqual(afterCompleted.state.events, [created, ready, completed])
+})
+
 test('run event reducer rebuilds completed interactions from replayed events', () => {
   const state = createSessionRunState('run_1')
   connectRun(state, 'run_1')

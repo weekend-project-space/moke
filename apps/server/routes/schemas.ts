@@ -139,8 +139,11 @@ export const runRespondSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('choose'),
     request_id: safeId,
-    option_id: nonEmptyText.max(200),
-  }).strict(),
+    option_id: nonEmptyText.max(200).optional(),
+    custom_text: nonEmptyText.max(2000).optional(),
+  }).strict().refine((value) => Boolean(value.option_id) !== Boolean(value.custom_text), {
+    message: 'Choose an option or provide custom text',
+  }),
   z.object({
     type: z.literal('approve'),
     request_id: safeId,

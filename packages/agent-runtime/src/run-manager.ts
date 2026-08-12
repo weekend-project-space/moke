@@ -445,25 +445,27 @@ export class RunManager {
     };
     this.setStatus(run, 'awaiting_user');
 
-    eventBus.emit('ask_user.required', run.pending_ask);
-
     return new Promise<{ id: string; label: string }>((resolve, reject) => {
       this.pendingAsks.set(askId, {
         runId: run.id,
         resolve,
         reject,
       });
+      eventBus.emit('ask_user.required', run.pending_ask!);
     });
   }
 
-  answer(runId: string, askId: string, optionId: string) {
+  answer(runId: string, askId: string, optionId?: string, customText?: string) {
     const run = this.config.runs.get(runId);
     if (!run) return { status: 404 as const, error: 'Run not found' };
     if (run.pending_ask?.ask_id !== askId) return { status: 409 as const, error: 'Run is not waiting for this answer' };
 
     const pending = this.pendingAsks.get(askId);
     if (!pending || pending.runId !== runId) return { status: 409 as const, error: 'Ask is no longer pending' };
-    const selected = run.pending_ask.options.find((option) => option.id === optionId);
+    const normalizedCustomText = customText?.trim();
+    const selected = normalizedCustomText
+      ? { id: 'custom', label: normalizedCustomText }
+      : run.pending_ask.options.find((option) => option.id === optionId);
     if (!selected) return { status: 400 as const, error: 'option_id is not valid for this question' };
 
     this.pendingAsks.delete(askId);

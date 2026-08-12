@@ -120,8 +120,7 @@ export type PromptInput = SendMessageInput;
 
 export type AnswerRunInput = {
   requestId: string;
-  optionId: string;
-};
+} & ({ optionId: string } | { customText: string });
 
 export type ApproveRunInput = {
   requestId: string;
@@ -186,7 +185,7 @@ export type ApprovalDecision = {
 
 export type InteractionHandlers = {
   onEvent?: (event: AgentEvent, context: RunContext) => void | Promise<void>;
-  onAsk?: (request: PendingAsk, context: RunContext) => Promise<string | { optionId: string }>;
+  onAsk?: (request: PendingAsk, context: RunContext) => Promise<string | { optionId: string } | { customText: string }>;
   onApproval?: (request: PendingApproval, context: RunContext) => Promise<ApprovalDecision>;
 };
 

@@ -1,7 +1,8 @@
 import { AIMessageChunk, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool } from 'langchain';
+import { randomUUID } from 'node:crypto';
 
-import type { AgentStep, ResolvedImageAttachment, TokenUsage } from '@moke/protocol';
+import type { AgentStep, ResolvedImageAttachment, TokenUsage, ToolCall } from '@moke/protocol';
 import type { AgentRunInput, RuntimeContextItem, RuntimeMessage, RuntimeToolImage } from '@moke/agent-runtime';
 import type { AgentToolSpec } from './control-tools.js';
 import {
@@ -144,6 +145,52 @@ function createResponsesUserContent(content: string, attachments: ResolvedImageA
   ];
 }
 
+function emitToolCreated(input: Pick<ModelStepInput, 'eventBus' | 'runtimeTools' | 'step'>, callId: string, name: string) {
+  const runtimeTool = input.runtimeTools.find((tool) => tool.name === name)
+  input.eventBus.emit('tool.call.created', {
+    call_id: callId,
+    tool: name,
+    source: runtimeTool?.source || { type: 'local' },
+  }, { step: input.step })
+}
+
+function parseToolArguments(value: string | undefined) {
+  if (!value?.trim()) return undefined
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function normalizeStreamToolCalls(calls: Array<{
+  id?: string;
+  name?: string;
+  args?: unknown;
+}>): ToolCall[] {
+  const normalized: ToolCall[] = [];
+
+  for (let index = 0; index < calls.length; index++) {
+    const call = calls[index];
+    if (!call) continue;
+    const name = call.name?.trim() || '';
+    const args = toToolCallArgs(call.args);
+    if (name) {
+      normalized.push({ id: call.id || '', name, args });
+      continue;
+    }
+
+    const previous = normalized.at(-1);
+    const previousRawName = calls[index - 1]?.name?.trim();
+    if (previous && previousRawName && Object.keys(previous.args).length === 0 && Object.keys(args).length > 0) {
+      previous.args = args;
+    }
+  }
+
+  return normalized;
+}
+
 function createResponsesHistoryMessages(history: RuntimeMessage[]): ResponsesInputItem[] {
   const messages: ResponsesInputItem[] = [];
   const knownToolCallIds = new Set<string>();
@@ -216,6 +263,7 @@ type StreamableChatModel = {
 
 async function streamChatModel(input: {
   eventBus: AgentRunInput['eventBus'];
+  runtimeTools: AgentToolSpec[];
   messages: BaseMessage[];
   model: StreamableChatModel;
   showRawReasoning: boolean;
@@ -228,6 +276,41 @@ async function streamChatModel(input: {
   let previousReasoningText = '';
   let reasoning = '';
   let contentStreamed = false;
+  const toolStreams = new Map<string, { callId: string; name: string; args: string; created: boolean; ready: boolean }>();
+
+  function updateToolChunks(chunk: AIMessageChunk) {
+    const chunks = (chunk as AIMessageChunk & { tool_call_chunks?: Array<{ id?: string; name?: string; args?: string; index?: number }> }).tool_call_chunks || []
+    for (const toolChunk of chunks) {
+      const key = `index:${toolChunk.index ?? 0}`
+      const current = toolStreams.get(key) || {
+        callId: toolChunk.id || `call_${randomUUID().slice(0, 8)}`,
+        name: '',
+        args: '',
+        created: false,
+        ready: false,
+      }
+      if (toolChunk.id) current.callId = toolChunk.id
+      if (toolChunk.name?.trim()) {
+        const name = toolChunk.name.trim()
+        if (!current.name) current.name = name
+        else if (!name.startsWith(current.name)) current.name += name
+      }
+      const hasCompleteName = input.runtimeTools.some((tool) => tool.name === current.name)
+      if (!current.created && current.callId && hasCompleteName) {
+        emitToolCreated(input, current.callId, current.name)
+        current.created = true
+      }
+      if (toolChunk.args) current.args += toolChunk.args
+      if (current.created && !current.ready && current.callId) {
+        const args = parseToolArguments(current.args)
+        if (args) {
+          current.ready = true
+          input.eventBus.emit('tool.call.ready', { call_id: current.callId, input: args }, { step: input.step })
+        }
+      }
+      toolStreams.set(key, current)
+    }
+  }
 
   function emitReasoning(content: string) {
     if (!content || !input.showRawReasoning) return;
@@ -242,6 +325,7 @@ async function streamChatModel(input: {
       for await (const chunk of stream) {
         throwIfAborted(input.signal);
         chunks.push(chunk);
+        updateToolChunks(chunk);
 
         const reasoningText = getReasoningText(chunk);
         if (reasoningText && input.showRawReasoning) {
@@ -278,8 +362,18 @@ async function streamChatModel(input: {
   }
 
   const message = chunks.slice(1).reduce((combined, chunk) => combined.concat(chunk), chunks[0]);
+  const calls = isAI(message) ? normalizeStreamToolCalls(message.tool_calls || []) : [];
+  for (const call of calls) {
+    const stream = [...toolStreams.values()].find((item) => item.callId === call.id || item.name === call.name)
+    if (!call.id && stream?.callId) call.id = stream.callId
+    if (call.id && !stream?.created) emitToolCreated(input, call.id, call.name)
+    if (call.id && !stream?.ready) {
+      input.eventBus.emit('tool.call.ready', { call_id: call.id, input: call.args || {} }, { step: input.step })
+    }
+  }
   return {
     contentStreamed,
+    toolCalls: calls,
     message,
     reasoning,
     usage: messageTokenUsage(message),
@@ -343,6 +437,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
     if (!input.messages.langchain) throw new Error('Chat adapter state is missing');
     const stepResult = await streamChatModel({
       eventBus: input.eventBus,
+      runtimeTools: input.runtimeTools,
       messages: input.messages.langchain,
       model: this.modelWithTools,
       showRawReasoning: input.showRawReasoning,
@@ -359,13 +454,7 @@ export class ChatCompletionsAdapter implements ModelAdapter {
       message: aiMessage,
       reasoning: stepResult.reasoning,
       usage: stepResult.usage,
-      toolCalls: isAI(aiMessage)
-        ? (aiMessage.tool_calls || []).map((call) => ({
-            id: call.id || '',
-            name: call.name,
-            args: toToolCallArgs(call.args),
-          }))
-        : [],
+      toolCalls: stepResult.toolCalls,
     };
   }
 }
@@ -431,6 +520,33 @@ export class ResponsesAdapter implements ModelAdapter {
     const outputItems: unknown[] = [];
     const textParts: string[] = [];
     let contentStreamed = false;
+    const responseToolStates = new Map<string, { name: string; args: string; created: boolean; ready: boolean }>();
+    const responseItemCallIds = new Map<string, string>();
+
+    function updateResponseTool(item: Record<string, unknown>, argsDelta = '') {
+      const itemId = typeof item.item_id === 'string' ? item.item_id : typeof item.id === 'string' ? item.id : ''
+      const explicitCallId = typeof item.call_id === 'string' ? item.call_id : ''
+      if (itemId && explicitCallId) responseItemCallIds.set(itemId, explicitCallId)
+      const callId = explicitCallId || responseItemCallIds.get(itemId) || ''
+      const name = typeof item.name === 'string' ? item.name.trim() : ''
+      if (!callId) return
+      const state = responseToolStates.get(callId) || { name: '', args: '', created: false, ready: false }
+      if (name) state.name = name
+      if (argsDelta) state.args += argsDelta
+      else if (typeof item.arguments === 'string') state.args = item.arguments
+      if (!state.created && state.name) {
+        emitToolCreated(input, callId, state.name)
+        state.created = true
+      }
+      if (state.created && !state.ready) {
+        const parsed = parseToolArguments(state.args) ?? (state.args === '' && typeof item.arguments === 'string' ? {} : undefined)
+        if (parsed) {
+          input.eventBus.emit('tool.call.ready', { call_id: callId, input: parsed }, { step: input.step })
+          state.ready = true
+        }
+      }
+      responseToolStates.set(callId, state)
+    }
 
     await withTimeout(
       (async () => {
@@ -468,8 +584,24 @@ export class ResponsesAdapter implements ModelAdapter {
             continue;
           }
 
+          if (event.event === 'response.output_item.added' || event.event.endsWith('.output_item.added')) {
+            const item = (data.item || data.output_item || data) as Record<string, unknown>
+            if (item.type === 'function_call') updateResponseTool(item)
+            continue
+          }
+
+          if (event.event === 'response.function_call_arguments.delta' || event.event.endsWith('.function_call_arguments.delta')) {
+            const callId = typeof data.call_id === 'string' ? data.call_id : ''
+            const itemId = typeof data.item_id === 'string' ? data.item_id : ''
+            const delta = typeof data.delta === 'string' ? data.delta : ''
+            if (callId || itemId) updateResponseTool({ ...(callId ? { call_id: callId } : {}), ...(itemId ? { item_id: itemId } : {}) }, delta)
+            continue
+          }
+
           if (event.event === 'response.output_item.done' || event.event.endsWith('.output_item.done')) {
-            outputItems.push(data.item || data.output_item || data);
+            const item = (data.item || data.output_item || data) as Record<string, unknown>
+            if (item.type === 'function_call') updateResponseTool(item)
+            outputItems.push(item);
             continue;
           }
 

@@ -268,16 +268,19 @@ export type AgentEventPayloadMap = {
   'agent.message.done': {
     message: Message;
   };
-  'tool.call': {
+  'tool.call.created': {
     call_id: string;
     tool: string;
-    input: Record<string, unknown>;
     source?: {
       type: 'local' | 'mcp';
       server_id?: string;
     };
   };
-  'tool.result': {
+  'tool.call.ready': {
+    call_id: string;
+    input: Record<string, unknown>;
+  };
+  'tool.call.completed': {
     call_id: string;
     status: 'ok' | 'error' | string;
     duration_ms: number;
@@ -439,7 +442,10 @@ export type GetRunResponse = {
 };
 
 export type RespondToRunRequest =
-  | { type: 'choose'; request_id: string; option_id: string }
+  | ({ type: 'choose'; request_id: string } & (
+      | { option_id: string; custom_text?: never }
+      | { custom_text: string; option_id?: never }
+    ))
   | {
       type: 'approve';
       request_id: string;

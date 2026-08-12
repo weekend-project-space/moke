@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { computed } from 'vue'
 import type { ToolStepViewItem } from '../presentation/types'
 import { formatBytes, guardToolContent } from '../presentation/toolContentGuard'
@@ -12,12 +11,8 @@ const props = defineProps<{
 
 const doneText = uiText.process.done
 const emptyFileReadText = uiText.process.readEmpty
-const jsonInputLabel = uiText.tool.input
-const jsonOutputLabel = uiText.process.output
 const resultItems = computed(() => props.step.summary.files || [])
 const guardedResultItems = computed(() => guardToolContent(resultItems.value.join('\n')))
-const hasRawData = computed(() => Boolean(props.step.inputRaw || props.step.outputRaw))
-const outputText = computed(() => props.step.outputRaw || uiText.tool.waitingForResult)
 const commandOutput = computed(() => props.step.summary.stdout || props.step.summary.stderr || uiText.tool.commandNoOutput)
 const guardedCommandOutput = computed(() => guardToolContent(commandOutput.value))
 const commandStatusText = computed(() => (isCommandError.value ? uiText.process.failed : uiText.process.success))
@@ -35,7 +30,6 @@ const channelText = computed(() => props.step.summary.preview || doneText)
 const guardedChannelText = computed(() => guardToolContent(channelText.value))
 const guardedFileReadText = computed(() => guardToolContent(props.step.summary.preview || ''))
 const guardedInputRaw = computed(() => guardToolContent(props.step.inputRaw || ''))
-const guardedOutputRaw = computed(() => guardToolContent(outputText.value))
 const fileChangeView = computed(() => createFileChangeResultView(props.step))
 const cliTextView = computed(() => createCliTextResultView(props.step))
 const guardedFileChangeContent = computed(() => guardToolContent(fileChangeView.value.contentText))
@@ -104,6 +98,17 @@ function diffStats(lines: string[]) {
       <span>{{ latestApproval.decision }}</span>
       <span>{{ approvalAuditText }}</span>
     </div>
+    <!-- Arguments are collected for tool summaries but hidden from the UI for now. -->
+    <section v-if="false && step.inputRaw !== undefined" class="tool-stage">
+      <span class="tool-stage-label">{{ uiText.tool.arguments }}</span>
+      <p v-if="guardedInputRaw.isOversize" class="tool-content-oversize">
+        Content is {{ formatBytes(guardedInputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
+      </p>
+      <pre v-else class="tool-stage-json">{{ guardedInputRaw.text }}</pre>
+    </section>
+
+    <section v-if="step.outputRaw !== undefined" class="tool-stage">
+      <!-- <span class="tool-stage-label">{{ uiText.process.output }}</span> -->
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">
@@ -202,31 +207,6 @@ function diffStats(lines: string[]) {
         <pre v-else>{{ guardedCliText.text }}</pre>
       </div>
     </template>
-
-    <details v-if="hasRawData" class="tool-detail-raw">
-      <summary>
-        <span>{{ uiText.tool.rawDetails }}</span>
-        <span class="tool-detail-raw-caret" aria-hidden="true">
-          <ChevronRight class="when-closed" :size="15" stroke-width="2" />
-          <ChevronDown class="when-open" :size="15" stroke-width="2" />
-        </span>
-      </summary>
-      <div class="tool-detail-raw-grid">
-        <div v-if="step.inputRaw" class="process-json-block">
-          <span>{{ jsonInputLabel }}</span>
-          <p v-if="guardedInputRaw.isOversize" class="tool-content-oversize">
-            Content is {{ formatBytes(guardedInputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
-          </p>
-          <pre v-else>{{ guardedInputRaw.text }}</pre>
-        </div>
-        <div class="process-json-block">
-          <span>{{ jsonOutputLabel }}</span>
-          <p v-if="guardedOutputRaw.isOversize" class="tool-content-oversize">
-            Content is {{ formatBytes(guardedOutputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
-          </p>
-          <pre v-else>{{ guardedOutputRaw.text }}</pre>
-        </div>
-      </div>
-    </details>
+    </section>
   </div>
 </template>

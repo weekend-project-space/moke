@@ -6,15 +6,7 @@ export const ASK_USER_TOOL_NAME = 'ask_user';
 
 export const askUserSchema = z.object({
   question: z.string().min(1),
-  options: z
-    .array(
-      z.object({
-        id: z.string().min(1).optional(),
-        label: z.string().min(1),
-      }),
-    )
-    .min(2)
-    .max(5),
+  options: z.array(z.string().min(1)).min(2).max(5),
 });
 
 type RuntimeToolSpec = ReturnType<ToolRegistry['list']>[number];
@@ -37,20 +29,17 @@ export function normalizeAskOptions(value: unknown) {
   }
 
   const options = value
-    .map((item, index) => {
-      if (!item || typeof item !== 'object') return null;
-      const option = item as Record<string, unknown>;
-      const label = typeof option.label === 'string' ? option.label.trim() : '';
-      if (!label) return null;
-      const rawId = typeof option.id === 'string' ? option.id.trim() : '';
-
-      return {
-        id: rawId || `option_${index + 1}`,
-        label,
-      };
+    .map((item) => {
+      const label = typeof item === 'string'
+        ? item.trim()
+        : item && typeof item === 'object' && typeof (item as Record<string, unknown>).label === 'string'
+          ? ((item as Record<string, unknown>).label as string).trim()
+          : '';
+      return label || null;
     })
-    .filter((option): option is { id: string; label: string } => Boolean(option))
-    .slice(0, 5);
+    .filter((label): label is string => Boolean(label))
+    .slice(0, 5)
+    .map((label, index) => ({ id: `option_${index + 1}`, label }));
 
   if (options.length >= 2) return options;
 

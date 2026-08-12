@@ -1046,38 +1046,116 @@
 
 .ask-inline-options {
   display: grid;
-  gap: 6px;
   margin: 0;
 }
 
-.ask-inline-options button {
-  display: flex;
+.ask-inline .ask-inline-options button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
   width: 100%;
   min-width: 0;
   height: auto;
+  min-height: 38px;
   align-items: center;
-  justify-content: flex-start;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-default);
+  gap: 8px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--color-border-default);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
-  background: var(--color-secondary);
+  background: transparent;
   font-size: var(--font-size-body);
   font-weight: 430;
   line-height: 1.35;
   text-align: left;
   overflow-wrap: anywhere;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
 }
 
-.ask-inline-options button:not(:disabled):hover {
+.ask-inline .ask-inline-options button:not(:disabled):hover,
+.ask-inline .ask-inline-options button:focus-visible {
+  border-color: transparent;
+  background: var(--color-secondary);
+}
+
+.ask-inline .ask-inline-options button.selected {
+  border-color: var(--color-primary-border);
   color: var(--color-primary-hover);
-  border-color: var(--color-border-focus);
   background: var(--color-primary-soft);
 }
 
-.ask-inline-options button:disabled {
+.ask-inline .ask-inline-options button:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+.ask-inline .ask-inline-options button.selected:disabled {
+  opacity: 1;
+}
+
+.ask-inline-option-index {
+  @include inline-center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  background: var(--color-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.ask-inline-option-label {
+  min-width: 0;
+}
+
+.ask-inline-option-arrow {
+  justify-self: end;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.ask-inline-options button.selected .ask-inline-option-arrow {
+  opacity: 1;
+}
+
+.ask-inline .ask-inline-options button:not(:disabled):hover .ask-inline-option-arrow,
+.ask-inline .ask-inline-options button:focus-visible .ask-inline-option-arrow {
+  opacity: 1;
+}
+
+.ask-inline-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--color-border-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.ask-inline-custom:focus-within {
+  border-color: transparent;
+  background: var(--color-secondary);
+}
+
+.ask-inline-custom.selected {
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft);
+}
+
+.ask-inline-custom input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--color-text-primary);
+  background: transparent;
+  font-size: var(--font-size-body);
 }
 
 .composer button {

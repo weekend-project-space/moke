@@ -142,6 +142,49 @@ test('process display retains a non-zero command exit code', () => {
   assert.equal(step.tone, 'error')
 })
 
+test('process display merges tool name, arguments, and output into one step', () => {
+  const items: ProcessItem[] = [
+    {
+      id: 'command-created',
+      kind: 'tool-call',
+      title: 'execute',
+      detail: '',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+    },
+    {
+      id: 'command-ready',
+      kind: 'tool-args',
+      title: 'Arguments',
+      detail: '',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({ command: 'npm test' }),
+    },
+    {
+      id: 'command-completed',
+      kind: 'tool-result',
+      title: 'execute',
+      detail: 'Completed',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({ exit_code: 0, stdout: 'passed' }),
+    },
+  ]
+
+  const group = createProcessGroupView(items)
+  const step = group.items[0] as ToolStepViewItem
+
+  assert.equal(group.items.length, 1)
+  assert.equal(step.toolName, 'execute')
+  assert.equal(step.renderer, 'command')
+  assert.equal(step.objectLabel, 'npm test')
+  assert.equal(step.inputRaw, JSON.stringify({ command: 'npm test' }))
+  assert.equal(step.outputRaw, JSON.stringify({ exit_code: 0, stdout: 'passed' }))
+  assert.equal(step.summary.command, 'npm test')
+  assert.equal(step.summary.stdout, 'passed')
+})
+
 test('process display keeps activated skill rows compact', () => {
   const items: ProcessItem[] = [
     {

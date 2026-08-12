@@ -442,7 +442,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
   }
 
-  async function selectAskOption(option: AskOption) {
+  async function selectAskOption(answer: AskOption | string) {
     const targetSessionId = sessionId.value
     const state = sessionRunStates[targetSessionId]
     const ask = state ? pendingAskFrom(state) : null
@@ -454,7 +454,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     submittingAskId.value = ask.ask_id
 
     try {
-      await run.answer({ requestId: ask.ask_id, optionId: option.id })
+      await run.answer(typeof answer === 'string'
+        ? { requestId: ask.ask_id, customText: answer }
+        : { requestId: ask.ask_id, optionId: answer.id })
       const currentState = sessionRunStates[targetSessionId]
       if (
         currentState?.runId === targetRunId

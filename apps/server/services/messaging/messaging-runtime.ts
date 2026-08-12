@@ -131,7 +131,7 @@ export class MessagingRuntime {
       }, `run:${run.id}:status:started`, `run:${run.id}:status`);
       return;
     }
-    if (event.type === 'tool.call') {
+    if (event.type === 'tool.call.created') {
       this.enqueueRunOperation(run, {
         kind: 'status', phase: 'working', title: 'Working', detail: `Using ${event.payload.tool}`,
       }, `run:${run.id}:status:${event.seq}`, `run:${run.id}:status`);

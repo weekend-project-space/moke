@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { RuntimeContentManager } from '@moke/agent-runtime';
-import { ChatCompletionsAdapter, normalizeTokenUsage, ResponsesAdapter } from './model-adapter.js';
+import { ChatCompletionsAdapter, normalizeStreamToolCalls, normalizeTokenUsage, ResponsesAdapter } from './model-adapter.js';
 import type { ChatModelSettings } from './llm-client.js';
 
 const settings: ChatModelSettings = {
@@ -129,4 +129,31 @@ test('provider token usage normalizes DeepSeek and OpenAI cache fields', () => {
     cached_input_tokens: 40,
     uncached_input_tokens: 10,
   });
+});
+
+test('OpenAI-compatible adapter joins split tool name and arguments', () => {
+  assert.deepEqual(normalizeStreamToolCalls([
+    { id: 'call_name', name: 'ask_user', args: {} },
+    { id: 'call_args', name: '', args: { question: 'Choose:', options: ['One', 'Two'] } },
+  ]), [{
+    id: 'call_name',
+    name: 'ask_user',
+    args: { question: 'Choose:', options: ['One', 'Two'] },
+  }]);
+});
+
+test('OpenAI-compatible adapter does not merge unrelated tool calls', () => {
+  assert.deepEqual(normalizeStreamToolCalls([
+    { id: 'call_1', name: 'search', args: { query: 'one' } },
+    { id: 'call_2', name: '', args: { query: 'two' } },
+    { id: 'call_3', name: 'read_file', args: { path: 'README.md' } },
+  ]), [
+    { id: 'call_1', name: 'search', args: { query: 'one' } },
+    { id: 'call_3', name: 'read_file', args: { path: 'README.md' } },
+  ]);
+  assert.deepEqual(normalizeStreamToolCalls([
+    { id: 'call_1', name: 'search', args: {} },
+    { id: 'fragment_1', name: '', args: {} },
+    { id: 'fragment_2', name: '', args: { query: 'two' } },
+  ]), [{ id: 'call_1', name: 'search', args: {} }]);
 });

@@ -25,7 +25,10 @@ function eventKey(event: AgentEvent) {
 
 function shouldStoreEvent(event: AgentEvent) {
   if (event.type === 'agent.message.delta') return event.payload.channel === 'reasoning'
-  return event.type === 'tool.call' || event.type === 'tool.result' || event.type === 'agent.error'
+  return event.type === 'tool.call.created'
+    || event.type === 'tool.call.ready'
+    || event.type === 'tool.call.completed'
+    || event.type === 'agent.error'
 }
 
 export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEventReduction {

@@ -45,7 +45,7 @@ export type ProcessNote = {
 
 export type ProcessItem = {
   id: string
-  kind: 'assistant' | 'tool-call' | 'tool-result' | 'event' | 'reasoning'
+  kind: 'assistant' | 'tool-call' | 'tool-args' | 'tool-result' | 'event' | 'reasoning'
   title: string
   detail: string
   tone: ProcessTone
