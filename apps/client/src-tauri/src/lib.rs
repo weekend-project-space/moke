@@ -426,6 +426,7 @@ struct BrowserSnapshotOptions {
     page_id: Option<u32>,
     verbose: Option<bool>,
     file_path: Option<String>,
+    workspace_root: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1536,7 +1537,7 @@ fn repo_dir() -> PathBuf {
         .to_path_buf()
 }
 
-fn validate_screenshot_relative_path(path: &str) -> Result<PathBuf, String> {
+fn validate_workspace_relative_path(path: &str, label: &str) -> Result<PathBuf, String> {
     let path = Path::new(path);
     if path.is_absolute()
         || path.components().any(|component| {
@@ -1546,8 +1547,16 @@ fn validate_screenshot_relative_path(path: &str) -> Result<PathBuf, String> {
             )
         })
     {
-        return Err("Screenshot path must stay inside the current workspace".to_string());
+        return Err(format!(
+            "{label} path must stay inside the current workspace"
+        ));
     }
+
+    Ok(path.to_path_buf())
+}
+
+fn validate_screenshot_relative_path(path: &str) -> Result<PathBuf, String> {
+    let path = validate_workspace_relative_path(path, "Screenshot")?;
     if !path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -1558,21 +1567,31 @@ fn validate_screenshot_relative_path(path: &str) -> Result<PathBuf, String> {
     Ok(path.to_path_buf())
 }
 
-fn ensure_screenshot_path_in_workspace(workspace_root: &Path, path: &Path) -> Result<(), String> {
+fn ensure_path_in_workspace(workspace_root: &Path, path: &Path, label: &str) -> Result<(), String> {
+    let outside_error = || format!("{label} path must stay inside the current workspace");
     let canonical_root = fs::canonicalize(workspace_root)
-        .map_err(|error| format!("Could not resolve screenshot workspace: {error}"))?;
+        .map_err(|error| format!("Could not resolve {label} workspace: {error}"))?;
     let mut ancestor = path.parent().unwrap_or(workspace_root);
     while !ancestor.exists() {
-        ancestor = ancestor
-            .parent()
-            .ok_or_else(|| "Screenshot path must stay inside the current workspace".to_string())?;
+        ancestor = ancestor.parent().ok_or_else(outside_error)?;
     }
     let canonical_ancestor = fs::canonicalize(ancestor)
-        .map_err(|error| format!("Could not resolve screenshot directory: {error}"))?;
+        .map_err(|error| format!("Could not resolve {label} directory: {error}"))?;
     if !canonical_ancestor.starts_with(&canonical_root) {
-        return Err("Screenshot path must stay inside the current workspace".to_string());
+        return Err(outside_error());
+    }
+    if fs::symlink_metadata(path).is_ok() {
+        let canonical_path = fs::canonicalize(path)
+            .map_err(|error| format!("Could not resolve {label} path: {error}"))?;
+        if !canonical_path.starts_with(&canonical_root) {
+            return Err(outside_error());
+        }
     }
     Ok(())
+}
+
+fn ensure_screenshot_path_in_workspace(workspace_root: &Path, path: &Path) -> Result<(), String> {
+    ensure_path_in_workspace(workspace_root, path, "Screenshot")
 }
 
 fn screenshot_file_path(workspace_root: &Path, path: Option<String>) -> Result<PathBuf, String> {
@@ -1599,6 +1618,23 @@ fn screenshot_file_path(workspace_root: &Path, path: Option<String>) -> Result<P
         &screenshot_dir,
         Path::new(&format!("browser-{millis}.png")),
     ))
+}
+
+fn snapshot_file_path(workspace_root: &Path, path: &str) -> Result<PathBuf, String> {
+    if !workspace_root.is_dir() {
+        return Err("Snapshot workspace is unavailable".to_string());
+    }
+
+    let output_path = workspace_root.join(validate_workspace_relative_path(path, "Snapshot")?);
+    ensure_path_in_workspace(workspace_root, &output_path, "Snapshot")?;
+    if output_path.is_dir() {
+        return Err("Snapshot output must be a file".to_string());
+    }
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create snapshot directory: {error}"))?;
+    }
+    Ok(output_path)
 }
 
 fn write_png(path: &Path, image: &CapturedImage) -> Result<(), String> {
@@ -2409,8 +2445,13 @@ async fn browser_take_snapshot(
         30000,
     )?;
     if let Some(file_path) = options.file_path {
+        let workspace_root = options
+            .workspace_root
+            .ok_or_else(|| "Snapshot workspace is unavailable".to_string())?;
+        let output_path = snapshot_file_path(Path::new(&workspace_root), &file_path)?;
         let content = serde_json::to_string_pretty(&snapshot).map_err(|error| error.to_string())?;
-        fs::write(file_path, content).map_err(|error| error.to_string())?;
+        fs::write(output_path, content)
+            .map_err(|error| format!("Could not write snapshot: {error}"))?;
     }
     browser_result_with_value(&state, None, Some(snapshot), None)
 }
@@ -3390,6 +3431,26 @@ mod tests {
         );
         assert!(validate_screenshot_relative_path("../page.png").is_err());
         assert!(validate_screenshot_relative_path("artifacts/page.jpg").is_err());
+    }
+
+    #[test]
+    fn snapshot_file_path_stays_in_the_workspace_and_creates_parent_directories() {
+        let directory = std::env::temp_dir().join(format!(
+            "moke-snapshot-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+
+        let output = snapshot_file_path(&directory, "artifacts/page.json").unwrap();
+
+        assert_eq!(output, directory.join("artifacts/page.json"));
+        assert!(output.parent().unwrap().is_dir());
+        assert!(snapshot_file_path(&directory, "../page.json").is_err());
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[cfg(target_os = "windows")]

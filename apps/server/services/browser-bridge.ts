@@ -36,6 +36,9 @@ type PendingRequest = {
 };
 
 const DEFAULT_TIMEOUT_MS = 30000;
+const RECONNECT_WAIT_MS = 5000;
+
+class BrowserBridgeReconnectError extends Error {}
 
 function normalizeBrowserResult(result: Record<string, unknown>): BrowserActionResult {
   const { page: _page, ...rest } = result;
@@ -46,10 +49,12 @@ export class BrowserBridge {
   private client: ServerResponse | null = null;
   private requestSeq = 0;
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly clientWaiters = new Set<() => void>();
 
   connect(res: ServerResponse) {
-    this.closeClient(new Error('Browser bridge client was replaced'));
+    this.closeClient(new BrowserBridgeReconnectError('Browser bridge client was replaced'));
     this.client = res;
+    for (const resolve of this.clientWaiters) resolve();
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -62,7 +67,25 @@ export class BrowserBridge {
   disconnect(res: ServerResponse) {
     if (this.client !== res) return;
     this.client = null;
-    this.rejectPending(new Error('Browser bridge disconnected'));
+    this.rejectPending(new BrowserBridgeReconnectError('Browser bridge disconnected'));
+  }
+
+  waitForClient(timeoutMs = RECONNECT_WAIT_MS) {
+    if (this.client) return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      let timer: NodeJS.Timeout;
+      const waiter = () => {
+        clearTimeout(timer);
+        this.clientWaiters.delete(waiter);
+        resolve();
+      };
+      timer = setTimeout(() => {
+        this.clientWaiters.delete(waiter);
+        reject(new Error('In-app browser is not connected'));
+      }, timeoutMs);
+      this.clientWaiters.add(waiter);
+    });
   }
 
   close(error = new Error('Browser bridge closed')) {
@@ -158,8 +181,15 @@ export class BrowserBridgeBackend implements BrowserBackend {
     return this.callBrowser<BrowserActionResult>('evaluate_script', input);
   }
 
-  async takeSnapshot(input: TakeSnapshotInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('take_snapshot', input);
+  async takeSnapshot(input: TakeSnapshotInput, workspaceRoot: string): Promise<BrowserActionResult> {
+    const params = { ...input, workspaceRoot };
+    try {
+      return await this.callBrowser<BrowserActionResult>('take_snapshot', params);
+    } catch (error) {
+      if (!(error instanceof BrowserBridgeReconnectError)) throw error;
+      await this.bridge.waitForClient();
+      return this.callBrowser<BrowserActionResult>('take_snapshot', params);
+    }
   }
 
   async takeScreenshot(input: TakeScreenshotInput, workspaceRoot: string): Promise<BrowserActionResult> {

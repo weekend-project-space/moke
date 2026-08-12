@@ -12,6 +12,8 @@ type UseBrowserWorkspaceOptions = {
 
 export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
   let disconnectBrowserBridge: (() => void) | null = null
+  let initPromise: Promise<void> | null = null
+  let bridgeGeneration = 0
 
   function normalizeHttpUrl(rawUrl: string) {
     const trimmed = rawUrl.trim()
@@ -50,25 +52,41 @@ export function useBrowserWorkspace(options: UseBrowserWorkspaceOptions) {
 
   async function initBrowserWorkspace() {
     if (!isNativeBrowserAvailable()) return
+    if (disconnectBrowserBridge) return
+    if (initPromise) return initPromise
+
+    const generation = bridgeGeneration
+    initPromise = (async () => {
+      try {
+        await initializeApiAccess()
+      } catch (error) {
+        console.error('Failed to initialize browser bridge authentication', error)
+        return
+      }
+
+      if (generation !== bridgeGeneration) return
+
+      const disconnect = connectBrowserBridge({
+        apiBase: options.apiBase,
+        getBrowserBounds: options.getBrowserBounds,
+        showBrowserPanel: options.openWorkspace,
+        hideBrowserPanel: options.closeWorkspace,
+      })
+      disconnectBrowserBridge = disconnect
+    })()
 
     try {
-      await initializeApiAccess()
-    } catch (error) {
-      console.error('Failed to initialize browser bridge authentication', error)
-      return
+      await initPromise
+    } finally {
+      if (generation === bridgeGeneration) initPromise = null
     }
-
-    disconnectBrowserBridge = connectBrowserBridge({
-      apiBase: options.apiBase,
-      getBrowserBounds: options.getBrowserBounds,
-      showBrowserPanel: options.openWorkspace,
-      hideBrowserPanel: options.closeWorkspace,
-    })
   }
 
   function disposeBrowserWorkspace() {
+    bridgeGeneration += 1
     disconnectBrowserBridge?.()
     disconnectBrowserBridge = null
+    initPromise = null
   }
 
   return {

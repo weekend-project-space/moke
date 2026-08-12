@@ -167,7 +167,8 @@
   }
 
   &.manageable:hover,
-  &.manageable:focus-within {
+  &.manageable:has(.session-menu-trigger:focus-visible),
+  &.manageable:has(.session-menu-trigger[aria-expanded='true']) {
     .session-menu-trigger {
       opacity: 1;
       pointer-events: auto;
@@ -500,17 +501,6 @@
 
   svg {
     color: var(--color-text-muted);
-  }
-}
-
-@media (hover: none), (pointer: coarse) {
-  .session.manageable .session-menu-trigger {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .session.manageable .session-meta {
-    opacity: 0;
   }
 }
 

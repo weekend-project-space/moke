@@ -184,8 +184,8 @@ export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typ
       'Return a lightweight snapshot of the active in-app browser page, including actionable elements and page content as Markdown.',
     approval: 'none',
     schema: takeSnapshotSchema,
-    async handler(input) {
-      return browser.takeSnapshot(input);
+    async handler(input, context) {
+      return browser.takeSnapshot(input, context.workspace);
     },
   };
 }
