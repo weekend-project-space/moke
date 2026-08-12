@@ -16,8 +16,8 @@ test('event store appends idempotently and replays after sequence', async () => 
 test('run store isolates persisted checkpoints', async () => {
   const store = new MemoryRunStore();
   const checkpoint: AgentRunCheckpoint = { version: 1, threadId: 't1', runId: 'r1', status: 'awaiting_user', nextStepIndex: 1, messages: [], state: { count: 1 }, usage: { steps: 1, toolCalls: 0, inputTokens: 0, outputTokens: 0 }, pendingInteraction: { id: 'i1', type: 'question', question: 'Continue?', allowText: true }, pendingToolCalls: [] };
-  await store.save('r1', checkpoint); checkpoint.state.count = 2;
-  assert.equal((await store.load('r1'))?.state.count, 1);
+  await store.saveCheckpoint('r1', checkpoint); checkpoint.state.count = 2;
+  assert.equal((await store.loadCheckpoint('r1'))?.state.count, 1);
 });
 
 test('interaction broker resolves the pending request exactly once', async () => {

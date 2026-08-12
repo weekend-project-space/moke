@@ -62,3 +62,4 @@ export {
 export type { PathApprovalDetails } from './workspace-approval.js';
 export { AgentRuntime, MemoryEventStore, MemoryInteractionBroker, MemoryRunStore } from './core-runtime.js';
 export type { AgentRuntimeDependencies, EventStore, InteractionBroker, RunStore, RuntimeAgent, RuntimeAgentRun } from './core-runtime.js';
+export { createAgentHttpHandler } from './http-transport.js';
