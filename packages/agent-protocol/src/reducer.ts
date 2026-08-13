@@ -16,6 +16,7 @@ export function reduceAgentEvent(snapshot: AgentRunSnapshot, event: AgentEvent):
     case 'step.started': next.usage = { ...next.usage, steps: next.usage.steps + 1 }; break;
     case 'message.started': next.messages.push({ id: event.messageId, role: 'assistant', content: '' }); break;
     case 'message.content': updateText(next.messages, event.messageId, event.delta); break;
+    case 'message.completed': upsertMessage(next.messages, event.message); break;
     case 'reasoning_message.started': next.messages.push({ id: event.messageId, role: 'reasoning', content: '' }); break;
     case 'reasoning_message.content': updateText(next.messages, event.messageId, event.delta); break;
     case 'tool_call.started': {
@@ -51,6 +52,12 @@ export function reduceAgentEvent(snapshot: AgentRunSnapshot, event: AgentEvent):
 function updateText(messages: AgentMessage[], id: string, delta: string) {
   const message = messages.find(item => item.id === id);
   if (message?.role === 'assistant' || message?.role === 'reasoning') message.content = (message.content ?? '') + delta;
+}
+
+function upsertMessage(messages: AgentMessage[], message: AgentMessage) {
+  const index = messages.findIndex(item => item.id === message.id);
+  if (index >= 0) messages[index] = structuredClone(message);
+  else messages.push(structuredClone(message));
 }
 
 function upsertActivity(activities: ActivityMessage[], event: Extract<AgentEvent, { type: 'activity.snapshot' }>) {

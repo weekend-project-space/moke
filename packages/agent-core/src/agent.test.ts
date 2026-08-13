@@ -48,12 +48,15 @@ test('emits a complete text and reasoning lifecycle with stable message IDs', as
   assert.deepEqual(events.map(item => item.type), [
     'run.started', 'step.started',
     'reasoning.started', 'reasoning_message.started', 'reasoning_message.content',
-    'message.started', 'message.content', 'message.content', 'message.completed',
-    'reasoning_message.completed', 'reasoning.completed',
+    'message.started', 'message.content', 'message.content',
+    'reasoning_message.completed', 'reasoning.completed', 'message.completed',
     'step.completed', 'run.completed',
   ]);
   const textEvents = events.filter(item => item.type.startsWith('message.')) as Array<{ messageId: string }>;
   assert.equal(new Set(textEvents.map(item => item.messageId)).size, 1);
+  const completed = events.find(item => item.type === 'message.completed');
+  assert.equal(completed?.type === 'message.completed' && completed.message.content, 'hello');
+  assert.equal(completed?.type === 'message.completed' && completed.reasoning, 'check');
   assert.equal(result.messages.some(message => message.role === 'reasoning' && message.content === 'check'), true);
 });
 
@@ -110,6 +113,38 @@ test('emits tool lifecycle and preserves tool call/result order for the next tur
   assert.deepEqual(nextInput.map(item => item.type), ['message', 'tool_call', 'tool_result']);
   assert.equal(nextInput[1].callId, 'c1');
   assert.equal(nextInput[2].callId, 'c1');
+  const toolMessageCompleted = events.find(item => item.type === 'message.completed' && item.message.toolCalls?.length);
+  assert.deepEqual(toolMessageCompleted?.type === 'message.completed' ? toolMessageCompleted.message : undefined, {
+    id: toolMessageCompleted?.type === 'message.completed' ? toolMessageCompleted.messageId : '',
+    role: 'assistant',
+    content: undefined,
+    toolCalls: [{ id: 'c1', type: 'function', function: { name: 'add', arguments: '{"a":1}' } }],
+  });
+});
+
+test('uses streamed text in the completed message when the provider final response omits it', async () => {
+  const llm = model(() => fakeRun(response(), [event('text.delta', { delta: 'streamed' }, 1)]));
+  const run = createAgent({ model: llm }).run({ threadId: 't1', input: 'hi' });
+  const eventsPromise = collect(run);
+  const result = await run.result();
+  const events = await eventsPromise;
+  const completed = events.find(item => item.type === 'message.completed');
+
+  assert.equal(result.message.content, 'streamed');
+  assert.equal(completed?.type === 'message.completed' && completed.message.content, 'streamed');
+  assert.equal(completed?.type === 'message.completed' && completed.message.id, completed?.type === 'message.completed' ? completed.messageId : '');
+});
+
+test('keeps one message ID when text exists only in the final provider response', async () => {
+  const run = createAgent({ model: model(() => fakeRun(response({ text: 'final only' }))) }).run({ threadId: 't1', input: 'hi' });
+  const eventsPromise = collect(run);
+  const result = await run.result();
+  const events = await eventsPromise;
+  const messageEvents = events.filter(item => item.type === 'message.started' || item.type === 'message.content' || item.type === 'message.completed');
+
+  assert.deepEqual(messageEvents.map(item => item.type), ['message.started', 'message.content', 'message.completed']);
+  assert.equal(new Set(messageEvents.map(item => item.messageId)).size, 1);
+  assert.equal(result.message.id, messageEvents[0]?.messageId);
 });
 
 test('forwards tool context, media, and configured reasoning to the next model turn', async () => {

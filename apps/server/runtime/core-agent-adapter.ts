@@ -97,11 +97,10 @@ export class CoreAgentAdapter implements Agent {
       tools: tools.listTools().map((tool) => tool.name),
     });
 
-    const eventTask = forwardEvents(run.events(), input);
+    const eventTask = forwardCoreEvents(run.events(), input);
     const result = await run.result();
-    await eventTask;
-    const message = toRuntimeAssistant(result.message, result.messages);
-    input.eventBus.emit('agent.message.done', { message }, { step: step(result.usage.steps + 1, 'respond') });
+    const completedMessages = await eventTask;
+    const message = completedMessages.get(result.message.id) ?? toRuntimeAssistant(result.message);
     return {
       toolCalls: result.usage.toolCalls,
       message,
@@ -221,9 +220,10 @@ class RuntimeToolProvider implements ToolProvider {
   }
 }
 
-async function forwardEvents(events: AsyncIterable<CoreAgentEvent>, input: AgentRunInput) {
+export async function forwardCoreEvents(events: AsyncIterable<CoreAgentEvent>, input: Pick<AgentRunInput, 'eventBus'>) {
   let stepIndex = 0;
   const calls = new Map<string, { name: string; arguments: string }>();
+  const completedMessages = new Map<string, AssistantMessage>();
   for await (const event of events) {
     if (event.type === 'step.started') {
       stepIndex++;
@@ -232,6 +232,10 @@ async function forwardEvents(events: AsyncIterable<CoreAgentEvent>, input: Agent
       input.eventBus.emit('agent.message.delta', { channel: 'answer', content: event.delta }, { step: step(stepIndex, 'reason') });
     } else if (event.type === 'reasoning_message.content') {
       input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content: event.delta }, { step: step(stepIndex, 'reason') });
+    } else if (event.type === 'message.completed') {
+      const message = toRuntimeAssistant(event.message, event.timestamp, event.reasoning);
+      completedMessages.set(message.id, message);
+      input.eventBus.emit('agent.message.done', { message }, { step: step(stepIndex, event.message.toolCalls?.length ? 'reason' : 'respond') });
     } else if (event.type === 'tool_call.started') {
       calls.set(event.toolCallId, { name: event.toolCallName, arguments: '' });
       input.eventBus.emit('tool.call.created', { call_id: event.toolCallId, tool: event.toolCallName });
@@ -248,17 +252,9 @@ async function forwardEvents(events: AsyncIterable<CoreAgentEvent>, input: Agent
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
       } catch {}
       input.eventBus.emit('tool.call.ready', { call_id: event.toolCallId, input: args });
-      input.eventBus.emit('agent.message.done', {
-        message: {
-          id: `msg_${randomUUID()}`,
-          role: 'assistant',
-          content: '',
-          created_at: new Date().toISOString(),
-          tool_calls: [{ id: event.toolCallId, name: call.name, args }],
-        },
-      }, { step: step(stepIndex, 'reason') });
     }
   }
+  return completedMessages;
 }
 
 function buildContext(input: AgentRunInput) {
@@ -302,15 +298,30 @@ function toHistory(history: NonNullable<AgentRunInput['history']>): CoreAgentMes
   });
 }
 
-function toRuntimeAssistant(message: { id: string; content?: string }, messages: CoreAgentMessage[]): AssistantMessage {
-  const reasoning = [...messages].reverse().find((item) => item.role === 'reasoning')?.content;
+function toRuntimeAssistant(message: Extract<CoreAgentMessage, { role: 'assistant' }>, createdAt = new Date().toISOString(), reasoning?: string): AssistantMessage {
   return {
     id: message.id,
     role: 'assistant',
     content: message.content ?? '',
-    created_at: new Date().toISOString(),
+    created_at: createdAt,
     ...(reasoning ? { reasoning } : {}),
+    ...(message.toolCalls?.length ? {
+      tool_calls: message.toolCalls.map((call) => ({
+        id: call.id,
+        name: call.function.name,
+        args: parseToolArguments(call.function.arguments),
+      })),
+    } : {}),
   };
+}
+
+function parseToolArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}') as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
 }
 
 function normalizeOptions(value: unknown) {

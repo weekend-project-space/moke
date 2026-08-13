@@ -82,7 +82,11 @@ export type StepStartedEvent = EventBase<'step.started'> & { stepName: string };
 export type StepCompletedEvent = EventBase<'step.completed'> & { stepName: string };
 export type MessageStartedEvent = EventBase<'message.started'> & { messageId: string; role: 'assistant' };
 export type MessageContentEvent = EventBase<'message.content'> & { messageId: string; delta: string };
-export type MessageCompletedEvent = EventBase<'message.completed'> & { messageId: string };
+export type MessageCompletedEvent = EventBase<'message.completed'> & {
+  messageId: string;
+  message: AssistantMessage;
+  reasoning?: string;
+};
 export type ToolCallStartedEvent = EventBase<'tool_call.started'> & { toolCallId: string; toolCallName: string; parentMessageId?: string };
 export type ToolCallArgsEvent = EventBase<'tool_call.args'> & { toolCallId: string; delta: string };
 export type ToolCallCompletedEvent = EventBase<'tool_call.completed'> & { toolCallId: string };

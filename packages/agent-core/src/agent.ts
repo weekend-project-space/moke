@@ -185,7 +185,7 @@ class Run implements AgentRun {
         if (this.controller.signal.aborted) return;
         this.activeModelRun = undefined;
         const assistant = stream.assistantMessage(response.text, response.toolCalls);
-        stream.finish(response.text);
+        stream.finish(assistant);
         const reasoningMessage = stream.reasoningMessage();
         if (reasoningMessage) this.messages.push(reasoningMessage);
         this.usage.inputTokens += response.usage?.inputTokens ?? 0;
@@ -310,7 +310,8 @@ class StepStream {
     }
   }
 
-  finish(text: string) {
+  finish(message: AssistantMessage) {
+    const text = message.content ?? '';
     if (text) {
       const messageId = this.startAssistant();
       const missing = text.startsWith(this.assistantText) ? text.slice(this.assistantText.length) : (this.assistantText ? '' : text);
@@ -319,16 +320,24 @@ class StepStream {
         this.run.streamEmit({ type: 'message.content', stepId: this.stepId, messageId, delta: missing });
       }
     }
-    if (this.assistantId) this.run.streamEmit({ type: 'message.completed', stepId: this.stepId, messageId: this.assistantId });
     if (this.reasoningId) {
       this.run.streamEmit({ type: 'reasoning_message.completed', stepId: this.stepId, messageId: this.reasoningId });
       this.run.streamEmit({ type: 'reasoning.completed', stepId: this.stepId, messageId: this.reasoningId });
     }
+    this.run.streamEmit({
+      type: 'message.completed',
+      stepId: this.stepId,
+      messageId: message.id,
+      message,
+      ...(this.reasoningText ? { reasoning: this.reasoningText } : {}),
+    });
   }
 
   assistantMessage(text: string, toolCalls: ModelToolCall[] = []): AssistantMessage {
     for (const call of toolCalls) this.completeTool(call);
-    return { id: this.assistantId ?? createId('msg'), role: 'assistant', content: text || undefined, toolCalls: toolCalls.length ? toolCalls.map(toAgentToolCall) : undefined };
+    const content = text || this.assistantText || undefined;
+    const id = this.startAssistant();
+    return { id, role: 'assistant', content, toolCalls: toolCalls.length ? toolCalls.map(toAgentToolCall) : undefined };
   }
 
   reasoningMessage() {
