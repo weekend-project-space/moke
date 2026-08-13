@@ -146,7 +146,7 @@ class Run implements AgentRun {
 
   private isTerminal() { return this.current === 'completed' || this.current === 'failed' || this.current === 'cancelled'; }
   private emit(input: AgentEventInput) {
-    const event = { ...input, eventId: createId('evt'), sequence: ++this.sequence, threadId: this.threadId, runId: this.runId, timestamp: new Date().toISOString() } as AgentEvent;
+    const event = { ...input, eventId: createId('evt'), sequence: ++this.sequence, threadId: this.threadId, runId: this.runId, timestamp: Date.now() } as AgentEvent;
     const waiter = this.waiters.shift();
     if (waiter) waiter({ value: event, done: false });
     else this.queue.push(event);
@@ -247,9 +247,21 @@ class Run implements AgentRun {
     let validated;
     try { validated = this.agent.tools.validate(toolCall); }
     catch (error) { throw new AgentCoreError('invalid_tool_arguments', `Invalid arguments for tool ${call.name}`, 'tool', error); }
+    const startedAt = Date.now();
     const result = await withTimeout(this.agent.tools.execute(validated, { threadId: this.threadId, runId: this.runId, stepId, signal: this.controller.signal }), timeoutMs, `Tool ${call.name} timed out`);
     const message = { id: createId('msg'), role: 'tool' as const, content: result.content, toolCallId: call.callId, error: result.error, encryptedValue: result.encryptedValue };
-    this.emit({ type: result.error ? 'tool_result.failed' : 'tool_result.completed', stepId, messageId: message.id, toolCallId: call.callId, content: result.content, error: result.error });
+    this.emit({
+      type: result.error ? 'tool_result.failed' : 'tool_result.completed',
+      stepId,
+      messageId: message.id,
+      toolCallId: call.callId,
+      toolName: call.name,
+      content: result.content,
+      output: result.output,
+      durationMs: Date.now() - startedAt,
+      metadata: result.metadata,
+      ...(result.error ? { error: { kind: 'tool' as const, code: 'tool_failed', message: result.error, retryable: false, stepId, toolCallId: call.callId } } : {}),
+    });
     return {
       message,
       modelOutput: result.output ?? result.content,
