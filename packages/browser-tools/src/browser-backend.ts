@@ -42,7 +42,7 @@ export type BrowserSnapshot = {
   url: string;
   title: string;
   content: BrowserSnapshotContent;
-  elements: BrowserSnapshotNode[];
+  elements?: BrowserSnapshotNode[];
 };
 
 export type CreatePageInput = {

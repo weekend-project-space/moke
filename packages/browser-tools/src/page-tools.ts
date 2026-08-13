@@ -37,6 +37,9 @@ const takeSnapshotSchema = z.object({
   pageId: z.number().int().positive().optional(),
   verbose: z.boolean().optional(),
   filePath: z.string().min(1).optional(),
+  interaction: z.enum(['act', 'observe']).default('act').describe(
+    'Use act when snapshot elements are needed for follow-up interaction; use observe to return page content without elements.',
+  ),
 });
 
 const takeScreenshotSchema = z.object({
@@ -181,11 +184,16 @@ export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typ
   return {
     name: 'take_snapshot',
     description:
-      'Return a lightweight snapshot of the active in-app browser page, including actionable elements and page content as Markdown.',
+      'Return a lightweight snapshot of the active in-app browser page. interaction defaults to act and includes actionable elements; observe returns only page content.',
     approval: 'none',
     schema: takeSnapshotSchema,
-    async handler(input, context) {
-      return browser.takeSnapshot(input, context.workspace);
+    async handler({ interaction, ...input }, context) {
+      const result = await browser.takeSnapshot(input, context.workspace);
+      if (interaction === 'observe' && result.snapshot) {
+        const { elements: _elements, ...snapshot } = result.snapshot;
+        return { ...result, snapshot };
+      }
+      return result;
     },
   };
 }
