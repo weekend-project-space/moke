@@ -142,7 +142,7 @@ test('process display retains a non-zero command exit code', () => {
   assert.equal(step.tone, 'error')
 })
 
-test('process display merges tool name, arguments, and output into one step', () => {
+test('process display merges tool input and output into one step', () => {
   const items: ProcessItem[] = [
     {
       id: 'command-created',
@@ -151,15 +151,10 @@ test('process display merges tool name, arguments, and output into one step', ()
       detail: '',
       tone: 'neutral',
       toolCallId: 'call_1',
-    },
-    {
-      id: 'command-ready',
-      kind: 'tool-args',
-      title: 'Arguments',
-      detail: '',
-      tone: 'neutral',
-      toolCallId: 'call_1',
       raw: JSON.stringify({ command: 'npm test' }),
+      renderer: 'command',
+      objectLabel: 'npm test',
+      summary: { command: 'npm test' },
     },
     {
       id: 'command-completed',

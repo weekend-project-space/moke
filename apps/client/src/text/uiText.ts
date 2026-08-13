@@ -165,6 +165,8 @@ const process = {
   toolFailed: (toolName: string, summary: string) => `Tool failed: ${toolName} · ${summary}`,
   unknownError: 'Unknown error',
   validationResult: 'Validation result',
+  generatingArguments: 'Generating arguments',
+  executing: 'Executing',
   toolFailedFallback: 'Tool failed',
   working: 'Working',
   processed: 'Processed',

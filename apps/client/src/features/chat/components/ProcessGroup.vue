@@ -32,7 +32,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
       <span v-if="isActive" class="process-active-indicator" aria-hidden="true"></span>
       <span class="process-toggle-label">
         <template v-if="isActive">
-          <span class="process-active-label">{{ uiText.process.working }}</span>
+          <span class="process-active-label live-text-sweep">{{ uiText.process.working }}</span>
           <span>{{ durationLabel }}</span>
         </template>
         <template v-else>{{ label }}</template>
@@ -72,7 +72,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
       <details
         v-else
         class="process-item"
-        :open="processItem.kind === 'reasoning' && isActive"
+        :open="isActive && (processItem.kind === 'reasoning' || (processItem.kind === 'tool-step' && (processItem.executionStatus === 'streaming-args' || processItem.executionStatus === 'executing')))"
         :class="[
           processItem.tone,
           processItem.kind,
@@ -102,7 +102,10 @@ function iconKind(step: { toolCategory: ToolCategory }) {
             <Plug v-else-if="iconKind(processItem) === 'skill'" :size="14" stroke-width="1.9" />
             <Code2 v-else :size="14" stroke-width="1.9" />
           </span>
-          <span class="process-tool-title">{{ processItem.toolName }}</span>
+          <span
+            class="process-tool-title"
+            :class="{ 'live-text-sweep': processItem.executionStatus === 'streaming-args' || processItem.executionStatus === 'executing' }"
+          >{{ processItem.toolName }}</span>
           <span v-if="processItem.objectLabel" class="process-tool-separator" aria-hidden="true">·</span>
           <small v-if="processItem.objectLabel" class="process-tool-detail">{{ processItem.objectLabel }}</small>
           <span

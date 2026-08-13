@@ -78,6 +78,8 @@ const {
   decideApproval,
   disposeAgentSession,
   events,
+  toolCalls,
+  answeredInteractions,
   forkSession,
   isRunning,
   isSubmittingApproval,
@@ -345,6 +347,8 @@ const {
 } = useConversationDisplay({
   messages,
   events,
+  toolCalls,
+  answeredInteractions,
   isRunning,
   runtimeNow,
   runError,

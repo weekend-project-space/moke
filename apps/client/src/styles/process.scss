@@ -1,3 +1,7 @@
+.live-turn {
+  display: contents;
+}
+
 .process-group {
   align-self: center;
   width: var(--content-width);
@@ -48,7 +52,6 @@
 
 .process-active-label {
   color: var(--color-text-secondary);
-  animation: process-active-label-breathe 1.6s ease-in-out infinite;
 }
 
 @keyframes process-active-breathe {
@@ -61,17 +64,6 @@
   50% {
     opacity: 1;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  }
-}
-
-@keyframes process-active-label-breathe {
-  0%,
-  100% {
-    opacity: 0.6;
-  }
-
-  50% {
-    opacity: 1;
   }
 }
 

@@ -10,16 +10,18 @@ import {
   shortText,
   summarizeOutput,
 } from './toolDisplay'
+import { projectToolCalls, toolCallSummaryArguments, type ToolCallViewState } from './toolCallProjector'
 
 const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
 
 type ToolCreatedEvent = Extract<AgentEvent, { type: 'tool_call.started' }>
-type ToolReadyEvent = Extract<AgentEvent, { type: 'tool_call.args' }>
 type ToolCompletedEvent = Extract<AgentEvent, { type: 'tool_result.completed' | 'tool_result.failed' }>
 
 type UseConversationDisplayOptions = {
   messages: Ref<Message[]>
   events: Ref<AgentEvent[]>
+  toolCalls?: Ref<Map<string, ToolCallViewState>>
+  answeredInteractions?: Ref<Map<string, string>>
   isRunning: Ref<boolean>
   runtimeNow: Ref<number>
   runError: Ref<string>
@@ -38,10 +40,28 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
   const activeEventProcessItems = computed<ProcessItem[]>(() => {
     const items: ProcessItem[] = []
     const callsById = new Map<string, ToolCreatedEvent>()
+    const projectedCalls = options.toolCalls?.value || projectToolCalls(options.events.value)
     let reasoningText = ''
     let reasoningTime = 0
     let reasoningId = ''
     let reasoningStepId = ''
+    let answerText = ''
+    let answerTime = 0
+    let answerId = ''
+
+    function flushAnswer() {
+      if (!answerText) return
+      const id = answerId || `answer-${items.length}`
+      items.push(createAssistantProcessItem({
+        id,
+        role: 'assistant',
+        content: answerText,
+        created_at: new Date(answerTime || Date.now()).toISOString(),
+      }, id))
+      answerText = ''
+      answerTime = 0
+      answerId = ''
+    }
 
     function flushReasoning() {
       if (!reasoningText.trim()) return
@@ -61,6 +81,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
     for (const event of options.events.value) {
       if (event.type === 'reasoning_message.content') {
+        flushAnswer()
         const content = event.delta
         const stepId = event.stepId || ''
         if (!content) continue
@@ -75,27 +96,28 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
 
       flushReasoning()
 
-      if (event.type === 'tool_call.started') {
-        const callId = event.toolCallId
-        callsById.set(callId, event)
-        if (isPendingInteractionCall(event.toolCallName, callId, options)) continue
-        items.push(createToolCreatedEventProcessItem(event))
+      if (event.type === 'message.content') {
+        answerText += event.delta
+        answerTime = answerTime || parseEventTime(event)
+        answerId = answerId || `answer-${event.messageId}`
         continue
       }
 
-      if (event.type === 'tool_call.args') {
+      if (event.type === 'tool_call.started') {
+        flushAnswer()
         const callId = event.toolCallId
-        const call = callsById.get(callId)
-        if (call && isPendingInteractionCall(call.toolCallName, callId, options)) continue
-        items.push(createToolReadyEventProcessItem(event))
+        callsById.set(callId, event)
+        if (isPendingInteractionCall(event.toolCallName, callId, options)) continue
+        items.push(createToolCreatedEventProcessItem(event, projectedCalls.get(callId), options.answeredInteractions?.value.get(callId)))
         continue
       }
 
       if (event.type === 'tool_result.completed' || event.type === 'tool_result.failed') {
+        flushAnswer()
         const callId = event.toolCallId
         const call = callsById.get(callId)
         if (call && isPendingInteractionCall(call.toolCallName, callId, options)) continue
-        items.push(createToolCompletedEventProcessItem(event, call))
+        items.push(createToolCompletedEventProcessItem(event, call, projectedCalls.get(callId)))
         continue
       }
 
@@ -110,6 +132,7 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     }
 
     flushReasoning()
+    flushAnswer()
     return items
   })
 
@@ -366,7 +389,7 @@ function mergeProcessItems(messageItems: ProcessItem[], eventItems: ProcessItem[
   )
 
   for (const item of eventItems) {
-    if (item.toolCallId && persistedToolCallIds.has(item.toolCallId)) continue
+    if (item.kind === 'tool-call' && item.toolCallId && persistedToolCallIds.has(item.toolCallId)) continue
 
     const comparableRaw = normalizeComparableText(item.raw || '')
     if (item.kind === 'reasoning' && comparableRaw && seenReasoning.has(comparableRaw)) continue
@@ -384,9 +407,10 @@ function normalizeComparableText(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function createToolCreatedEventProcessItem(event: ToolCreatedEvent): ProcessItem {
+function createToolCreatedEventProcessItem(event: ToolCreatedEvent, call?: ToolCallViewState, answer?: string): ProcessItem {
   const name = event.toolCallName
-  const description = describeToolCall(name, {})
+  const args = toolCallSummaryArguments(call)
+  const description = describeToolCall(name, args)
   const callId = event.toolCallId
 
   return {
@@ -399,22 +423,11 @@ function createToolCreatedEventProcessItem(event: ToolCreatedEvent): ProcessItem
     actionLabel: description.actionLabel,
     objectLabel: description.objectLabel,
     renderer: description.renderer,
-    summary: description.summary,
+    summary: { ...description.summary, ...(answer ? { selectedLabel: answer } : {}) },
     toolCategory: description.toolCategory,
     toolCallId: callId,
-  }
-}
-
-function createToolReadyEventProcessItem(event: ToolReadyEvent): ProcessItem {
-  return {
-    id: `process-tool-args-event-${event.eventId}`,
-    kind: 'tool-args',
-    title: uiText.tool.input,
-    detail: '',
-    tone: 'neutral',
-    time: parseEventTime(event),
-    raw: event.delta,
-    toolCallId: event.toolCallId,
+    executionStatus: call?.status || 'streaming-args',
+    raw: call?.arguments ? JSON.stringify(call.arguments, null, 2) : undefined,
   }
 }
 
@@ -455,7 +468,7 @@ function isPendingInteractionCall(
   return options.pendingApproval.value?.call_id === callId
 }
 
-function createToolCompletedEventProcessItem(event: ToolCompletedEvent, callEvent?: ToolCreatedEvent): ProcessItem {
+function createToolCompletedEventProcessItem(event: ToolCompletedEvent, callEvent?: ToolCreatedEvent, call?: ToolCallViewState): ProcessItem {
   const output = event.output ?? event.content
   const toolName = event.toolName || callEvent?.toolCallName || 'tool'
   const parsedOutput = typeof output === 'string' ? parseToolContent(output) : output
@@ -478,6 +491,7 @@ function createToolCompletedEventProcessItem(event: ToolCompletedEvent, callEven
     objectLabel: shortText(detail, 120),
     raw,
     toolCallId: event.toolCallId,
+    executionStatus: call?.status || (event.type === 'tool_result.failed' ? 'failed' : 'completed'),
   }
 }
 

@@ -12,9 +12,9 @@ import type {
   ToolCall as ProtocolToolCall,
   ToolApprovalRecord as ProtocolToolApprovalRecord,
 } from '@moke/protocol'
-import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol'
+import type { AgentEvent as SdkAgentEvent } from '@moke/agent-sdk'
 
-export type AgentEvent = CoreAgentEvent
+export type AgentEvent = SdkAgentEvent
 export type AgentStepPhase = ProtocolAgentStepPhase
 export type AgentStep = ProtocolAgentStep
 export type ReasoningEffort = ProtocolReasoningEffort

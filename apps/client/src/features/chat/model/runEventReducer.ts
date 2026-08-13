@@ -6,6 +6,7 @@ import {
   resumeRun,
   type SessionRunState,
 } from './runState'
+import { applyToolCallEvent } from '../presentation/toolCallProjector'
 
 export type RunEventEffects = {
   answerDelta?: string
@@ -24,9 +25,10 @@ function eventKey(event: AgentEvent) {
 }
 
 function shouldStoreEvent(event: AgentEvent) {
-  return event.type === 'reasoning_message.content'
+  return event.type === 'message.content'
+    || event.type === 'reasoning_message.content'
     || event.type === 'tool_call.started'
-    || event.type === 'tool_call.args'
+    || event.type === 'tool_call.completed'
     || event.type === 'tool_result.completed'
     || event.type === 'tool_result.failed'
     || event.type === 'run.failed'
@@ -42,8 +44,22 @@ export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEv
   const storesEvent = shouldStoreEvent(event)
   const nextState: SessionRunState = {
     ...state,
-    events: storesEvent ? [...state.events, event] : state.events,
+    events: state.events,
     seenEventKeys: new Set(state.seenEventKeys).add(key),
+    toolCalls: state.toolCalls,
+  }
+  if (storesEvent) appendDisplayEvent(nextState.events, event)
+  if (event.type.startsWith('tool_') || event.type.startsWith('tool_result.')) {
+    applyToolCallEvent(nextState.toolCalls, event)
+  }
+  if (event.type === 'interaction.resolved' && event.response.decision === 'answered') {
+    const callId = state.lifecycle.status === 'awaiting-user' && state.lifecycle.ask.ask_id === event.interactionId
+      ? state.lifecycle.ask.call_id
+      : event.interactionId
+    const option = state.lifecycle.status === 'awaiting-user'
+      ? state.lifecycle.ask.options.find(item => item.id === event.response.optionId)
+      : undefined
+    nextState.answeredInteractions.set(callId, option?.label || event.response.answer || event.response.optionId || '')
   }
   const effects: RunEventEffects = { finish: false }
 
@@ -66,11 +82,57 @@ export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEv
   ) {
     resumeRun(nextState)
   } else if (event.type === 'message.completed' && event.message.role === 'assistant') {
-    effects.message = { id: event.message.id, role: 'assistant', content: event.message.content || '', created_at: new Date(event.timestamp).toISOString() }
+    effects.message = {
+      id: event.message.id,
+      role: 'assistant',
+      content: event.message.content || '',
+      created_at: new Date(event.timestamp).toISOString(),
+      ...(event.reasoning ? { reasoning: event.reasoning } : {}),
+      ...(event.message.toolCalls?.length ? {
+        tool_calls: event.message.toolCalls.map(call => ({
+          id: call.id,
+          name: call.function.name,
+          args: parseToolArguments(call.function.arguments),
+        })),
+      } : {}),
+    }
   } else if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') {
     finishRunState(nextState)
     effects.finish = true
   }
 
   return { accepted: true, state: nextState, effects }
+}
+
+function appendDisplayEvent(events: AgentEvent[], event: AgentEvent) {
+  const previous = events.at(-1)
+  if (
+    event.type === 'message.content'
+    && previous?.type === 'message.content'
+    && previous.messageId === event.messageId
+  ) {
+    events[events.length - 1] = { ...previous, delta: previous.delta + event.delta }
+    return
+  }
+
+  if (
+    event.type === 'reasoning_message.content'
+    && previous?.type === 'reasoning_message.content'
+    && previous.messageId === event.messageId
+    && previous.stepId === event.stepId
+  ) {
+    events[events.length - 1] = { ...previous, delta: previous.delta + event.delta }
+    return
+  }
+
+  events.push(event)
+}
+
+function parseToolArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}') as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
 }

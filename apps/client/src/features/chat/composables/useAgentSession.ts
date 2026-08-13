@@ -6,6 +6,7 @@ import { uiText } from '../../../text/uiText'
 import { AgentApiError, createAgentApi, type AgentApi } from '../api/agentApi'
 import { appendOptimisticUserMessage } from '../model/optimisticMessages'
 import { reduceRunEvent } from '../model/runEventReducer'
+import { reconcileSessionMessages, serverCoversLiveMessages } from '../model/reconcileMessages'
 import {
   connectRun,
   createSessionRunState,
@@ -86,6 +87,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const currentRunState = computed(() => (sessionId.value ? sessionRunStates[sessionId.value] : undefined) || emptyRunState)
   const runId = computed(() => currentRunState.value.runId)
   const events = computed(() => currentRunState.value.events)
+  const toolCalls = computed(() => currentRunState.value.toolCalls)
+  const answeredInteractions = computed(() => currentRunState.value.answeredInteractions)
   const streamingText = computed(() => currentRunState.value.streamingText)
   const pendingApproval = computed(() => pendingApprovalFrom(currentRunState.value))
   const pendingAsk = computed(() => pendingAskFrom(currentRunState.value))
@@ -270,7 +273,22 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   async function refreshSessionMessagesIfActive(targetSessionId: string) {
     if (sessionId.value !== targetSessionId) return
-    await loadSessionMessages(targetSessionId)
+    // Session persistence is flushed after terminal events. Retry briefly so a
+    // stale snapshot cannot replace messages already received over SSE.
+    for (const delay of [0, 80, 180]) {
+      if (delay) await new Promise(resolve => window.setTimeout(resolve, delay))
+      if (sessionId.value !== targetSessionId) return
+      let loaded: Message[]
+      try {
+        loaded = await api.loadSessionMessages(targetSessionId)
+      } catch {
+        continue
+      }
+      if (sessionId.value !== targetSessionId) return
+      const current = messages.value
+      messages.value = reconcileSessionMessages(loaded, current)
+      if (serverCoversLiveMessages(loaded, current)) return
+    }
   }
 
   async function selectSession(id: string) {
@@ -336,6 +354,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       const targetSessionId = sessionId.value
       const state = ensureRunState(targetSessionId)
       state.events = []
+      state.toolCalls.clear()
+      state.answeredInteractions.clear()
       state.seenEventKeys.clear()
       streamingTextBuffer.clear(targetSessionId)
       startRun(state)
@@ -418,7 +438,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       ) {
         messages.value.push(doneMessage)
       }
-      if (options.isFinalAssistantMessage(doneMessage)) streamingTextBuffer.clear(targetSessionId)
+      streamingTextBuffer.clear(targetSessionId)
     }
 
     if (reduction.effects.finish) finishRunEffects(targetSessionId)
@@ -452,6 +472,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     const targetRunId = run.id
     submittingAskId.value = ask.ask_id
+    state.answeredInteractions.set(ask.call_id, typeof answer === 'string' ? answer : answer.label)
 
     try {
       await run.answer(typeof answer === 'string'
@@ -466,6 +487,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         resumeRun(currentState)
       }
     } catch (error) {
+      state.answeredInteractions.delete(ask.call_id)
       if (error instanceof AgentApiError && error.code === 'ASK_NOT_PENDING') {
         await reconcileRun(targetSessionId, run)
       } else {
@@ -541,6 +563,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     decideApproval,
     disposeAgentSession,
     events,
+    toolCalls,
+    answeredInteractions,
     forkSession,
     isRunning,
     isSubmittingApproval,

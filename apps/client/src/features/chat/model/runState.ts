@@ -1,4 +1,5 @@
 import type { AgentEvent, PendingApproval, PendingAsk } from './conversation'
+import type { ToolCallViewState } from '../presentation/toolCallProjector'
 
 export type RunLifecycle =
   | { status: 'idle' }
@@ -15,6 +16,8 @@ export type SessionRunState = {
   connection: 'disconnected' | 'connected' | 'reconnecting'
   error: string
   seenEventKeys: Set<string>
+  toolCalls: Map<string, ToolCallViewState>
+  answeredInteractions: Map<string, string>
 }
 
 export function createSessionRunState(runId = ''): SessionRunState {
@@ -26,6 +29,8 @@ export function createSessionRunState(runId = ''): SessionRunState {
     connection: 'disconnected',
     error: '',
     seenEventKeys: new Set<string>(),
+    toolCalls: new Map(),
+    answeredInteractions: new Map(),
   }
 }
 

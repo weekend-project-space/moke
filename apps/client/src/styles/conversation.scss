@@ -68,7 +68,6 @@
       color: var(--color-text-muted);
       font-size: var(--font-size-ui);
       font-weight: 430;
-      animation: thinking-breathe 1.6s ease-in-out infinite;
     }
   }
 }
@@ -135,17 +134,6 @@
     font-size: var(--font-size-ui);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-}
-
-@keyframes thinking-breathe {
-  0%,
-  100% {
-    opacity: 0.48;
-  }
-
-  50% {
-    opacity: 0.9;
   }
 }
 

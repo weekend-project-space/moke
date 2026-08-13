@@ -76,6 +76,8 @@ export function useRunSubscriptions(options: RunSubscriptionOptions) {
       if (state.runId !== run.id) {
         options.streamingTextBuffer.clear(targetSessionId)
         state.events = []
+        state.toolCalls.clear()
+        state.answeredInteractions.clear()
         state.seenEventKeys.clear()
         connectRun(state, run.id)
       }

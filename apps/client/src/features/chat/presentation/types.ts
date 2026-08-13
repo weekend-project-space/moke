@@ -1,4 +1,5 @@
 import type { Message, ToolApprovalRecord } from '../model/conversation'
+import type { ToolCallExecutionStatus } from './toolCallProjector'
 
 export type ProcessTone = 'neutral' | 'error' | 'ask'
 export type ToolCategory = 'view' | 'change' | 'run' | 'browser' | 'claw' | 'skill'
@@ -45,7 +46,7 @@ export type ProcessNote = {
 
 export type ProcessItem = {
   id: string
-  kind: 'assistant' | 'tool-call' | 'tool-args' | 'tool-result' | 'event' | 'reasoning'
+  kind: 'assistant' | 'tool-call' | 'tool-result' | 'event' | 'reasoning'
   title: string
   detail: string
   tone: ProcessTone
@@ -58,6 +59,7 @@ export type ProcessItem = {
   raw?: string
   toolCallId?: string
   approvals?: ToolApprovalRecord[]
+  executionStatus?: ToolCallExecutionStatus
 }
 
 export type ToolStepViewItem = {
@@ -77,6 +79,7 @@ export type ToolStepViewItem = {
   outputRaw?: string
   approvals?: ToolApprovalRecord[]
   state?: ToolStepState
+  executionStatus?: ToolCallExecutionStatus
 }
 
 export type ProcessViewItem = ProcessItem | ToolStepViewItem

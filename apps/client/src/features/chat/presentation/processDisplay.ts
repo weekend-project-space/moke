@@ -8,7 +8,7 @@ import type {
   ToolStepState,
 } from './types'
 import type { ToolApprovalRecord } from '../model/conversation'
-import { describeToolCall, summarizeOutput } from './toolDisplay'
+import { summarizeOutput } from './toolDisplay'
 import { uiText } from '../../../text/uiText'
 
 const DONE = uiText.process.done
@@ -63,18 +63,6 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
       continue
     }
 
-    if (item.kind === 'tool-args') {
-      const call = item.toolCallId ? pendingCalls.get(item.toolCallId) || null : lastPendingCall
-      const step = findStep(call)
-      if (step) {
-        applyToolArguments(step, item)
-        continue
-      }
-
-      viewItems.push(item)
-      continue
-    }
-
     if (item.kind === 'tool-result') {
       let call: ProcessItem | null = lastPendingCall
       if (item.toolCallId) call = pendingCalls.get(item.toolCallId) || null
@@ -96,6 +84,7 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
         }
         step.approvals = item.approvals
         step.state = resolveToolStepState(resultTone, item.approvals)
+        step.executionStatus = item.executionStatus
         if (call?.toolCallId) pendingCalls.delete(call.toolCallId)
         if (lastPendingCall === call) lastPendingCall = null
         continue
@@ -109,28 +98,6 @@ function mergeToolSteps(items: ProcessItem[]): ProcessViewItem[] {
   }
 
   return viewItems
-}
-
-function applyToolArguments(step: ToolStepViewItem, item: ProcessItem) {
-  const input = parseRecord(item.raw)
-  const description = describeToolCall(step.toolName, input)
-  step.detail = description.objectLabel
-  step.actionLabel = description.actionLabel
-  step.objectLabel = description.objectLabel
-  step.renderer = description.renderer
-  step.summary = description.summary
-  step.toolCategory = description.toolCategory
-  step.inputRaw = item.raw
-}
-
-function parseRecord(raw: string | undefined): Record<string, unknown> {
-  if (!raw) return {}
-  try {
-    const value = JSON.parse(raw)
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-  } catch {
-    return {}
-  }
 }
 
 function combineToolStepDetail(inputLabel: string, outputRaw: string | undefined, tone: ProcessItem['tone']) {
@@ -166,6 +133,7 @@ function createToolStepView(call: ProcessItem): ToolStepViewItem {
     inputRaw: call.raw,
     approvals: call.approvals,
     state: resolveToolStepState(call.tone, call.approvals),
+    executionStatus: call.executionStatus,
   }
 }
 

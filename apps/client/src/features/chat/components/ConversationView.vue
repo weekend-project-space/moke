@@ -59,6 +59,12 @@ const lastUserDisplayItemId = computed(() => {
 
   return ''
 })
+const streamsBeforeActiveProcess = computed(() => props.displayItems.some(
+  (item) => item.type === 'process-group' && Boolean(item.isActive) && !item.items.some(processItem => processItem.kind === 'assistant'),
+))
+const liveTextRenderedInProcess = computed(() => props.displayItems.some(
+  (item) => item.type === 'process-group' && item.isActive && item.items.some(processItem => processItem.kind === 'assistant'),
+))
 
 const markdown = new MarkdownIt({
   html: false,
@@ -311,6 +317,12 @@ defineExpose({
       </div>
     </div>
 
+    <div v-if="streamingText && streamsBeforeActiveProcess" class="message-row assistant">
+      <article class="bubble assistant">
+        <div class="markdown streaming" :class="{ active: props.isRunning }" v-html="renderMarkdown(streamingText)"></div>
+      </article>
+    </div>
+
     <template v-for="(item, index) in displayItems" :key="item.id">
       <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
       <ProcessGroup
@@ -339,14 +351,14 @@ defineExpose({
       />
     </template>
 
-    <div v-if="streamingText" class="message-row assistant">
+    <div v-if="streamingText && !streamsBeforeActiveProcess && !liveTextRenderedInProcess" class="message-row assistant">
       <article class="bubble assistant">
         <div class="markdown streaming" :class="{ active: props.isRunning }" v-html="renderMarkdown(streamingText)"></div>
       </article>
     </div>
     <div v-else-if="showThinking" class="message-row assistant">
       <article class="bubble assistant thinking" :aria-label="uiText.chat.thinking">
-        <span class="thinking-label">{{ uiText.chat.thinkingLabel }}</span>
+        <span class="thinking-label live-text-sweep">{{ uiText.chat.thinkingLabel }}</span>
       </article>
     </div>
     </div>

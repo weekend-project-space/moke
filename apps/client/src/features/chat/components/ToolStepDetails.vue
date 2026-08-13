@@ -29,7 +29,6 @@ const guardedBrowserText = computed(() => guardToolContent(browserText.value))
 const channelText = computed(() => props.step.summary.preview || doneText)
 const guardedChannelText = computed(() => guardToolContent(channelText.value))
 const guardedFileReadText = computed(() => guardToolContent(props.step.summary.preview || ''))
-const guardedInputRaw = computed(() => guardToolContent(props.step.inputRaw || ''))
 const fileChangeView = computed(() => createFileChangeResultView(props.step))
 const cliTextView = computed(() => createCliTextResultView(props.step))
 const guardedFileChangeContent = computed(() => guardToolContent(fileChangeView.value.contentText))
@@ -52,13 +51,6 @@ const resultEmptyText = computed(() => {
   }
 
   return props.step.renderer === 'directory' ? uiText.process.emptyDirectory : uiText.process.noResults
-})
-const latestApproval = computed(() => props.step.approvals?.at(-1))
-const approvalAuditText = computed(() => {
-  const approval = latestApproval.value
-  if (!approval) return ''
-  const reviewer = approval.reviewer || 'user'
-  return approval.review_reason ? `${reviewer}: ${approval.review_reason}` : reviewer
 })
 function browserFallbackText(toolName: string) {
   if (toolName === 'navigate_page' || toolName === 'create_page' || toolName === 'select_page') return uiText.tool.pageOpened
@@ -94,19 +86,6 @@ function diffStats(lines: string[]) {
 
 <template>
   <div class="tool-detail">
-    <div v-if="latestApproval" class="tool-approval-audit">
-      <span>{{ latestApproval.decision }}</span>
-      <span>{{ approvalAuditText }}</span>
-    </div>
-    <!-- Arguments are collected for tool summaries but hidden from the UI for now. -->
-    <section v-if="false && step.inputRaw !== undefined" class="tool-stage">
-      <span class="tool-stage-label">{{ uiText.tool.arguments }}</span>
-      <p v-if="guardedInputRaw.isOversize" class="tool-content-oversize">
-        Content is {{ formatBytes(guardedInputRaw.bytes) }}. It is larger than 100 kB and is not rendered inline.
-      </p>
-      <pre v-else class="tool-stage-json">{{ guardedInputRaw.text }}</pre>
-    </section>
-
     <section v-if="step.outputRaw !== undefined" class="tool-stage">
       <!-- <span class="tool-stage-label">{{ uiText.process.output }}</span> -->
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
