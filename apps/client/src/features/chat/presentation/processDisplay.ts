@@ -202,9 +202,12 @@ function summarizeToolResult(renderer: ToolRendererKind, outputRaw: string | und
     }
 
     if (renderer === 'command') {
+      const error = objectValue(output.error)
       return {
         exitCode: typeof output.exit_code === 'number' ? output.exit_code : undefined,
-        stderr: typeof output.stderr === 'string' ? output.stderr : undefined,
+        stderr: typeof output.stderr === 'string'
+          ? output.stderr
+          : typeof error.message === 'string' ? error.message : undefined,
         stdout: typeof output.stdout === 'string' ? output.stdout : undefined,
       }
     }

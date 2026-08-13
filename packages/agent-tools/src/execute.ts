@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import type { ExecutableSystemBackend, RuntimeTool } from '@moke/agent-runtime';
 
+const MIN_EXECUTE_TIMEOUT_MS = 5_000;
+
 const executeSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
@@ -18,7 +20,9 @@ export function createExecuteTool(system: ExecutableSystemBackend): RuntimeTool<
     async handler(input, context) {
       return system.execute(input.command, input.args, {
         cwd: input.cwd,
-        timeoutMs: input.timeout_ms,
+        timeoutMs: input.timeout_ms === undefined
+          ? undefined
+          : Math.max(input.timeout_ms, MIN_EXECUTE_TIMEOUT_MS),
       }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
     },
   };

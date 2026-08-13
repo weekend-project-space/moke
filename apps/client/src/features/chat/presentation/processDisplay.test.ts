@@ -180,6 +180,41 @@ test('process display merges tool input and output into one step', () => {
   assert.equal(step.summary.stdout, 'passed')
 })
 
+test('process display extracts a command failure message', () => {
+  const items: ProcessItem[] = [
+    {
+      id: 'command-call',
+      kind: 'tool-call',
+      title: 'execute',
+      detail: 'pwd',
+      tone: 'neutral',
+      toolCallId: 'call_1',
+      renderer: 'command',
+      objectLabel: 'pwd',
+      summary: { command: 'pwd' },
+    },
+    {
+      id: 'command-result',
+      kind: 'tool-result',
+      title: 'execute',
+      detail: 'Failed',
+      tone: 'error',
+      toolCallId: 'call_1',
+      raw: JSON.stringify({
+        error: {
+          code: 'TOOL_FAILED',
+          message: 'Command timed out after 10ms: pwd',
+          tool: 'execute',
+        },
+      }),
+    },
+  ]
+  const step = createProcessGroupView(items).items[0] as ToolStepViewItem
+
+  assert.equal(step.summary.stderr, 'Command timed out after 10ms: pwd')
+  assert.equal(step.tone, 'error')
+})
+
 test('process display keeps activated skill rows compact', () => {
   const items: ProcessItem[] = [
     {

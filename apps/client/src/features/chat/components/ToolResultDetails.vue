@@ -17,7 +17,7 @@ const commandOutput = computed(() => props.step.summary.stdout || props.step.sum
 const guardedCommandOutput = computed(() => guardToolContent(commandOutput.value))
 const commandStatusText = computed(() => (isCommandError.value ? uiText.process.failed : uiText.process.success))
 const commandExitCode = computed(() =>
-  typeof props.step.summary.exitCode === 'number' ? props.step.summary.exitCode : props.step.tone === 'error' ? 1 : 0,
+  typeof props.step.summary.exitCode === 'number' ? props.step.summary.exitCode : undefined,
 )
 const isCommandError = computed(() =>
   props.step.tone === 'error' ||
@@ -113,7 +113,7 @@ function diffStats(lines: string[]) {
       <div class="tool-panel-card tool-command-card" :class="{ error: isCommandError }">
         <div class="tool-panel-header">
           <span>{{ uiText.process.shell }}</span>
-          <strong>{{ uiText.process.exit }} {{ commandExitCode }}</strong>
+          <strong v-if="commandExitCode !== undefined">{{ uiText.process.exit }} {{ commandExitCode }}</strong>
         </div>
         <div class="tool-command-body">
           <div class="tool-command-prompt">

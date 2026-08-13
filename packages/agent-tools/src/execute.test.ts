@@ -6,6 +6,7 @@ import type { ExecutableSystemBackend } from '@moke/agent-runtime';
 
 function createSystemBackend() {
   const calls: string[] = [];
+  const timeouts: Array<number | undefined> = [];
   const system: ExecutableSystemBackend = {
     rootDir: 'E:\\work\\test\\moke',
     async ls() {
@@ -29,13 +30,14 @@ function createSystemBackend() {
     async editFile() {
       return { path: 'a.md', replacements: 0 };
     },
-    async execute(command) {
+    async execute(command, _args, options) {
       calls.push(command);
+      timeouts.push(options?.timeoutMs);
       return { exit_code: 0, stdout: 'ok', stderr: '' };
     },
   };
 
-  return { calls, system };
+  return { calls, timeouts, system };
 }
 
 test('execute delegates all approval decisions to ToolRegistry', async () => {
@@ -49,4 +51,16 @@ test('execute delegates all approval decisions to ToolRegistry', async () => {
 
   assert.deepEqual(result, { exit_code: 0, stdout: 'ok', stderr: '' });
   assert.deepEqual(calls, ['echo hello && echo world']);
+});
+
+test('execute raises explicit timeouts below the shell startup floor', async () => {
+  const { timeouts, system } = createSystemBackend();
+  const tool = createExecuteTool(system);
+
+  await tool.handler(
+    { command: 'pwd', timeout_ms: 10 },
+    { workspace: 'E:\\work\\test\\moke' },
+  );
+
+  assert.deepEqual(timeouts, [5_000]);
 });
