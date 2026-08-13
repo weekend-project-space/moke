@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
-import ProcessGroup from './ProcessGroup.vue'
+import ProcessDetails from './ProcessDetails.vue'
 import { conversationScrollState } from '../presentation/conversationScroll'
 import type { DisplayItem, TaskTemplate } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
@@ -325,7 +325,7 @@ defineExpose({
 
     <template v-for="(item, index) in displayItems" :key="item.id">
       <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
-      <ProcessGroup
+      <ProcessDetails
         v-else-if="item.type === 'process-group'"
         :label="item.label"
         :duration-label="item.durationLabel"

@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { Check, CircleX, ChevronDown, ChevronRight, Code2, FilePenLine, Plug, Search, Send, ShieldCheck, ShieldX, Sparkles, SquareDashedMousePointer, SquareTerminal } from 'lucide-vue-next'
 import type { ToolCategory, ProcessViewItem } from '../presentation/types'
-import ToolStepDetails from './ToolStepDetails.vue'
+import ToolResultDetails from './ToolResultDetails.vue'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
@@ -128,7 +128,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <span class="process-tool-title">{{ processItem.actionLabel || processItem.title }}</span>
           <small class="process-tool-detail">{{ processItem.objectLabel || processItem.detail }}</small>
         </summary>
-        <ToolStepDetails v-if="processItem.kind === 'tool-step'" :step="processItem" />
+        <ToolResultDetails v-if="processItem.kind === 'tool-step'" :step="processItem" />
         <div v-else-if="processItem.kind === 'reasoning' && processItem.raw" class="process-reasoning-body">{{ processItem.raw }}</div>
         <pre v-else-if="processItem.raw && processItem.kind !== 'assistant'">{{ processItem.raw }}</pre>
       </details>

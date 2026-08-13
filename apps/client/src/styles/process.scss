@@ -301,6 +301,15 @@
   height: 15px;
   align-items: center;
   justify-content: center;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.process-item > summary:hover .process-step-caret,
+.process-item > summary:focus-visible .process-step-caret {
+  visibility: visible;
+  opacity: 1;
 }
 
 .process-item[open] > summary .process-step-caret .when-closed {
@@ -367,9 +376,10 @@
 
 .process-reasoning-body {
   max-height: 260px;
-  margin: 4px 0 8px 23px;
-  padding: 2px 0 4px 0;
+  margin: 4px 0 8px;
+  padding: 2px 0 4px 10px;
   overflow: auto;
+  border-left: 3px solid var(--color-border-subtle);
   color: color-mix(in srgb, var(--color-text-muted), var(--color-text-primary) 14%);
   font-size: var(--font-size-body);
   font-weight: 400;
