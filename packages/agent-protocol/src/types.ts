@@ -34,6 +34,7 @@ export type ToolExecutionResult = {
   encryptedValue?: string;
   context?: AgentContext[];
   media?: MediaInputContent[];
+  metadata?: Record<string, unknown>;
 };
 export interface ToolProvider {
   listTools(filter?: { names?: string[] }): AgentToolDefinition[];
@@ -42,9 +43,18 @@ export interface ToolProvider {
 }
 
 export type AgentInteraction =
-  | { id: string; type: 'approval'; toolCallId: string; reason: string; action: { tool: string; input: JsonObject } }
-  | { id: string; type: 'question'; question: string; options?: Array<{ id: string; label: string }>; allowText: boolean };
-export type AgentInteractionResponse = { interactionId: string; decision: 'approved' | 'rejected' | 'answered'; answer?: string; optionId?: string; idempotencyKey: string };
+  | { id: string; type: 'approval'; toolCallId?: string; approvalKind: 'tool' | 'workspace_path'; reason: string; action: { tool: string; input: JsonObject }; path?: string; suggestedRoot?: string; scope?: 'once' | 'session' | 'persistent' }
+  | { id: string; type: 'question'; toolCallId?: string; question: string; options?: Array<{ id: string; label: string }>; allowText: boolean };
+export type AgentInteractionResponse = {
+  interactionId: string;
+  decision: 'approved' | 'rejected' | 'answered';
+  answer?: string;
+  optionId?: string;
+  scope?: 'once' | 'session' | 'persistent';
+  reviewer?: 'user' | 'ai' | 'auto_approve';
+  reviewReason?: string;
+  idempotencyKey: string;
+};
 
 export type AgentRunInput = {
   threadId: string;
@@ -70,13 +80,15 @@ type EventBase<T extends string> = {
   threadId: string;
   runId: string;
   stepId?: string;
-  timestamp: string;
+  /** Unix epoch time in milliseconds. */
+  timestamp: number;
   rawEvent?: unknown;
 };
 
 export type RunStartedEvent = EventBase<'run.started'> & { parentRunId?: string; input?: AgentRunInput };
-export type RunCompletedEvent = EventBase<'run.completed'> & { result: AgentResult };
+export type RunCompletedEvent = EventBase<'run.completed'> & { result?: AgentResult; usage?: AgentUsage };
 export type RunFailedEvent = EventBase<'run.failed'> & { error: AgentError };
+export type RunTimedOutEvent = EventBase<'run.timed_out'> & { error: AgentError };
 export type RunCancelledEvent = EventBase<'run.cancelled'> & { reason?: string };
 export type StepStartedEvent = EventBase<'step.started'> & { stepName: string };
 export type StepCompletedEvent = EventBase<'step.completed'> & { stepName: string };
@@ -84,13 +96,13 @@ export type MessageStartedEvent = EventBase<'message.started'> & { messageId: st
 export type MessageContentEvent = EventBase<'message.content'> & { messageId: string; delta: string };
 export type MessageCompletedEvent = EventBase<'message.completed'> & {
   messageId: string;
-  message: AssistantMessage;
+  message: AgentMessage;
   reasoning?: string;
 };
 export type ToolCallStartedEvent = EventBase<'tool_call.started'> & { toolCallId: string; toolCallName: string; parentMessageId?: string };
 export type ToolCallArgsEvent = EventBase<'tool_call.args'> & { toolCallId: string; delta: string };
 export type ToolCallCompletedEvent = EventBase<'tool_call.completed'> & { toolCallId: string };
-export type ToolResultEvent = EventBase<'tool_result.completed' | 'tool_result.failed'> & { messageId: string; toolCallId: string; content: string; error?: string };
+export type ToolResultEvent = EventBase<'tool_result.completed' | 'tool_result.failed'> & { messageId: string; toolCallId: string; toolName?: string; content: string; output?: unknown; durationMs?: number; error?: AgentError; metadata?: Record<string, unknown> };
 export type ReasoningStartedEvent = EventBase<'reasoning.started'> & { messageId: string };
 export type ReasoningMessageStartedEvent = EventBase<'reasoning_message.started'> & { messageId: string; role: 'reasoning' };
 export type ReasoningMessageContentEvent = EventBase<'reasoning_message.content'> & { messageId: string; delta: string };
@@ -108,7 +120,7 @@ export type RawEvent = EventBase<'raw'> & { event: unknown; source?: string };
 export type CustomEvent = EventBase<'custom'> & { name: string; value: unknown };
 
 export type AgentEvent =
-  | RunStartedEvent | RunCompletedEvent | RunFailedEvent | RunCancelledEvent
+  | RunStartedEvent | RunCompletedEvent | RunFailedEvent | RunTimedOutEvent | RunCancelledEvent
   | StepStartedEvent | StepCompletedEvent
   | MessageStartedEvent | MessageContentEvent | MessageCompletedEvent
   | ToolCallStartedEvent | ToolCallArgsEvent | ToolCallCompletedEvent | ToolResultEvent

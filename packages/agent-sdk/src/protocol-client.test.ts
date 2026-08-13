@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { AgentProtocolClient } from './protocol-client.js';
 import type { AgentEvent } from '@moke/agent-protocol';
 
-const base = { eventId: 'e1', sequence: 1, type: 'run.started', threadId: 't1', runId: 'r1', timestamp: '2026-08-12T00:00:00.000Z' } as AgentEvent;
+const base = { eventId: 'e1', sequence: 1, type: 'run.started', threadId: 't1', runId: 'r1', timestamp: Date.parse('2026-08-12T00:00:00.000Z') } as AgentEvent;
 function sse(events: AgentEvent[]) { const encoder = new TextEncoder(); return new Response(new ReadableStream<Uint8Array>({ start(controller) { const text = events.map(event => `id: ${event.sequence}\ndata: ${JSON.stringify(event)}\n\n`).join(''); const middle = Math.floor(text.length / 2); controller.enqueue(encoder.encode(text.slice(0, middle))); controller.enqueue(encoder.encode(text.slice(middle))); controller.close(); } }), { headers: { 'Content-Type': 'text/event-stream' } }); }
 
 test('creates runs without serializing AbortSignal', async () => {

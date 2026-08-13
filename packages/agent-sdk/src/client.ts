@@ -17,6 +17,7 @@ import type {
   SessionSummary,
   UpdateSessionResponse,
 } from '@moke/protocol';
+import type { AgentInteraction, AgentMessage, AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
 import { MokeInteractionRequiredError, MokeProtocolError, MokeRunError } from './errors.js';
 import { streamRunEvents } from './event-stream.js';
 import { HttpClient } from './http-client.js';
@@ -373,33 +374,35 @@ export class RunHandle {
       finalEvent = event;
       const context = {
         run: this,
-        session: this.client.session(this.sessionId || event.session_id),
+        session: this.client.session(this.sessionId || event.threadId),
       };
       await handlers.onEvent?.(event, context);
-      if (event.type === 'ask_user.required') {
-        if (!handlers.onAsk) throw new MokeInteractionRequiredError(this.id, event.payload);
-        const answer = await handlers.onAsk(event.payload, context);
+      if (event.type === 'interaction.required' && event.interaction.type === 'question') {
+        const request = { ask_id: event.interaction.id, call_id: event.interaction.toolCallId || '', question: event.interaction.question, options: event.interaction.options || [], created_at: new Date(event.timestamp).toISOString() };
+        if (!handlers.onAsk) throw new MokeInteractionRequiredError(this.id, request);
+        const answer = await handlers.onAsk(request, context);
         const answerInput = typeof answer === 'string'
           ? { optionId: answer }
           : 'customText' in answer
             ? { customText: answer.customText }
             : { optionId: answer.optionId };
         await this.answer({
-          requestId: event.payload.ask_id,
+          requestId: event.interaction.id,
           ...answerInput,
         }, options);
-      } else if (event.type === 'approval.required') {
-        if (!handlers.onApproval) throw new MokeInteractionRequiredError(this.id, event.payload);
-        const decision = await handlers.onApproval(event.payload, context);
+      } else if (event.type === 'interaction.required' && event.interaction.type === 'approval') {
+        const request = { approval_id: event.interaction.id, call_id: event.interaction.toolCallId, kind: event.interaction.approvalKind, reason: event.interaction.reason, action: event.interaction.action, path: event.interaction.path, suggested_root: event.interaction.suggestedRoot, created_at: new Date(event.timestamp).toISOString() };
+        if (!handlers.onApproval) throw new MokeInteractionRequiredError(this.id, request);
+        const decision = await handlers.onApproval(request, context);
         await this.approve({
-          requestId: event.payload.approval_id,
+          requestId: event.interaction.id,
           ...decision,
         }, options);
       }
     }
     const result = await this.result(options);
     if (result.status === 'failed') {
-      const error = result.error || (finalEvent?.type === 'agent.error' ? finalEvent.payload : undefined);
+      const error = result.error || ((finalEvent?.type === 'run.failed' || finalEvent?.type === 'run.timed_out') ? finalEvent.error : undefined);
       throw new MokeRunError(this.id, error?.code || 'RUN_FAILED', error?.message || 'Run failed');
     }
     return result;
@@ -636,24 +639,17 @@ function resultFromSnapshot(run: RunSnapshot): RunResult {
   let usage: RunResult['usage'];
   let error: RunResult['error'];
   for (const event of run.events) {
-    if (event.type === 'agent.message.done' && event.payload.message.role === 'assistant') {
-      message = event.payload.message;
-    } else if (event.type === 'agent.done' && event.payload.usage) {
+    if (event.type === 'message.completed' && event.message.role === 'assistant') {
+      const m = event.message;
+      message = { id: m.id, role: 'assistant', content: m.content || '', ...(m.toolCalls ? { tool_calls: m.toolCalls.map((call) => ({ id: call.id, name: call.function.name, args: (() => { try { return JSON.parse(call.function.arguments || '{}') as Record<string, unknown>; } catch { return {}; } })() })) } : {}), created_at: new Date(event.timestamp).toISOString() };
+    } else if (event.type === 'run.completed' && event.usage) {
       usage = {
-        steps: event.payload.usage.steps,
-        toolCalls: event.payload.usage.tool_calls,
-        durationMs: event.payload.usage.duration_ms,
-        ...(event.payload.usage.input_tokens !== undefined ? { inputTokens: event.payload.usage.input_tokens } : {}),
-        ...(event.payload.usage.output_tokens !== undefined ? { outputTokens: event.payload.usage.output_tokens } : {}),
-        ...(event.payload.usage.cached_input_tokens !== undefined
-          ? { cachedInputTokens: event.payload.usage.cached_input_tokens }
-          : {}),
-        ...(event.payload.usage.uncached_input_tokens !== undefined
-          ? { uncachedInputTokens: event.payload.usage.uncached_input_tokens }
-          : {}),
+        steps: event.usage.steps, toolCalls: event.usage.toolCalls, durationMs: 0,
+        inputTokens: event.usage.inputTokens, outputTokens: event.usage.outputTokens,
+        ...(event.usage.cachedInputTokens !== undefined ? { cachedInputTokens: event.usage.cachedInputTokens } : {}),
       };
-    } else if (event.type === 'agent.error') {
-      error = event.payload;
+    } else if (event.type === 'run.failed' || event.type === 'run.timed_out') {
+      error = event.error;
     }
   }
   return { runId: run.id, sessionId: run.session_id, status: run.status, message, usage, error };

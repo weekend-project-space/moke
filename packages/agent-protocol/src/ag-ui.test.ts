@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fromAgUiRunInput, toAgUiEvent } from './ag-ui.js';
 import type { AgentEvent } from './types.js';
 
-const base = { eventId: 'e1', sequence: 1, threadId: 't1', runId: 'r1', timestamp: '2026-08-12T00:00:00.000Z' };
+const base = { eventId: 'e1', sequence: 1, threadId: 't1', runId: 'r1', timestamp: Date.parse('2026-08-12T00:00:00.000Z') };
 
 test('converts AG-UI input and extracts the last user message as run input', () => {
   const input = fromAgUiRunInput({ threadId: 't1', runId: 'r1', state: { x: 1 }, messages: [{ id: 's1', role: 'system', content: 'system' }, { id: 'u1', role: 'user', content: 'hello' }], tools: [], context: [], forwardedProps: {} });

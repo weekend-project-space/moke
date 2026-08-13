@@ -8,7 +8,7 @@ import type { AgentEvent } from '@moke/protocol';
 import { forwardCoreEvents } from './core-agent-adapter.js';
 
 test('persists one complete assistant message for streamed text and multiple tool calls', async () => {
-  const timestamp = '2026-08-13T01:00:00.000Z';
+  const timestamp = Date.parse('2026-08-13T01:00:00.000Z');
   const events = [
     coreEvent({ type: 'step.started', stepId: 'step_1', stepName: 'model-1' }, 1, timestamp),
     coreEvent({ type: 'message.started', stepId: 'step_1', messageId: 'msg_1', role: 'assistant' }, 2, timestamp),
@@ -41,8 +41,8 @@ test('persists one complete assistant message for streamed text and multiple too
     eventBus: new EventBus(run, event => runtimeEvents.push(event)),
   });
   const messages = runtimeEvents
-    .filter(event => event.type === 'agent.message.done')
-    .map(event => event.type === 'agent.message.done' ? event.payload.message : undefined);
+    .filter(event => event.type === 'message.completed')
+    .map(event => event.type === 'message.completed' ? event.message : undefined);
 
   assert.equal(messages.length, 1);
   assert.deepEqual(messages[0], {
@@ -66,7 +66,7 @@ function coreEvent(
       : never
     : never,
   sequence: number,
-  timestamp: string,
+  timestamp: number,
 ): CoreAgentEvent {
   return { ...input, eventId: `evt_${sequence}`, sequence, threadId: 'sess_1', runId: 'run_1', timestamp } as CoreAgentEvent;
 }

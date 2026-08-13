@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MemoryEventStore, MemoryInteractionBroker, MemoryRunStore } from './core-runtime.js';
 import type { AgentEvent, AgentRunCheckpoint } from '@moke/agent-protocol';
 
-const base = { eventId: 'e1', sequence: 1, type: 'step.started', threadId: 't1', runId: 'r1', timestamp: new Date().toISOString(), stepId: 's1', stepName: 'model-1' } satisfies AgentEvent;
+const base = { eventId: 'e1', sequence: 1, type: 'step.started', threadId: 't1', runId: 'r1', timestamp: Date.now(), stepId: 's1', stepName: 'model-1' } satisfies AgentEvent;
 
 test('event store appends idempotently and replays after sequence', async () => {
   const store = new MemoryEventStore();

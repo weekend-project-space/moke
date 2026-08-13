@@ -23,17 +23,17 @@ export function fromAgUiRunInput(input: AgUiRunAgentInput): AgentRunInput {
 }
 
 export function toAgUiEvent(event: AgentEvent): AgUiEvent {
-  const base = { timestamp: Date.parse(event.timestamp), rawEvent: event.rawEvent };
+  const base = { timestamp: event.timestamp, rawEvent: event.rawEvent };
   switch (event.type) {
     case 'run.started': return { ...base, type: 'RUN_STARTED', threadId: event.threadId, runId: event.runId, parentRunId: event.parentRunId };
-    case 'run.completed': return { ...base, type: 'RUN_FINISHED', threadId: event.threadId, runId: event.runId, result: event.result };
-    case 'run.failed': return { ...base, type: 'RUN_ERROR', message: event.error.message, code: event.error.code };
+    case 'run.completed': return { ...base, type: 'RUN_FINISHED', threadId: event.threadId, runId: event.runId, result: event.result, usage: event.usage };
+    case 'run.failed': case 'run.timed_out': return { ...base, type: 'RUN_ERROR', message: event.error.message, code: event.error.code };
     case 'run.cancelled': return { ...base, type: 'RUN_ERROR', message: event.reason ?? 'Run cancelled', code: 'cancelled' };
     case 'step.started': return { ...base, type: 'STEP_STARTED', stepName: event.stepName };
     case 'step.completed': return { ...base, type: 'STEP_FINISHED', stepName: event.stepName };
     case 'message.started': return { ...base, type: 'TEXT_MESSAGE_START', messageId: event.messageId, role: event.role };
     case 'message.content': return { ...base, type: 'TEXT_MESSAGE_CONTENT', messageId: event.messageId, delta: event.delta };
-    case 'message.completed': return { ...base, type: 'TEXT_MESSAGE_END', messageId: event.messageId };
+    case 'message.completed': return { ...base, type: 'TEXT_MESSAGE_END', messageId: event.messageId, message: event.message, reasoning: event.reasoning };
     case 'tool_call.started': return { ...base, type: 'TOOL_CALL_START', toolCallId: event.toolCallId, toolCallName: event.toolCallName, parentMessageId: event.parentMessageId };
     case 'tool_call.args': return { ...base, type: 'TOOL_CALL_ARGS', toolCallId: event.toolCallId, delta: event.delta };
     case 'tool_call.completed': return { ...base, type: 'TOOL_CALL_END', toolCallId: event.toolCallId };

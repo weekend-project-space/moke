@@ -117,12 +117,12 @@ export class MessagingRuntime {
   }
 
   onRunEvent(event: AgentEvent, run: RuntimeRun) {
-    if (event.type === 'agent.done' || event.type === 'agent.error') {
+    if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') {
       this.resumeQueuedBindingsForSession(run.session_id);
     }
     if (run.origin.kind !== 'messaging') return;
     const bindingId = run.origin.binding_id;
-    if (event.type === 'agent.started') {
+    if (event.type === 'run.started') {
       this.enqueueRunOperation(run, {
         kind: 'activity', active: true,
       }, `run:${run.id}:activity:start`);
@@ -131,60 +131,60 @@ export class MessagingRuntime {
       }, `run:${run.id}:status:started`, `run:${run.id}:status`);
       return;
     }
-    if (event.type === 'tool.call.created') {
+    if (event.type === 'tool_call.started') {
       this.enqueueRunOperation(run, {
-        kind: 'status', phase: 'working', title: 'Working', detail: `Using ${event.payload.tool}`,
-      }, `run:${run.id}:status:${event.seq}`, `run:${run.id}:status`);
+        kind: 'status', phase: 'working', title: 'Working', detail: `Using ${event.toolCallName}`,
+      }, `run:${run.id}:status:${event.sequence}`, `run:${run.id}:status`);
       return;
     }
-    if (event.type === 'ask_user.required') {
+    if (event.type === 'interaction.required' && event.interaction.type === 'question') {
       this.enqueueRunOperation(run, { kind: 'activity', active: false }, `run:${run.id}:activity:waiting-ask`);
       this.enqueueRunOperation(run, {
-        kind: 'status', phase: 'waiting_input', title: 'Waiting for input', detail: event.payload.question,
-      }, `run:${run.id}:status:${event.seq}`, `run:${run.id}:status`);
+        kind: 'status', phase: 'waiting_input', title: 'Waiting for input', detail: event.interaction.question,
+      }, `run:${run.id}:status:${event.sequence}`, `run:${run.id}:status`);
       const interaction = this.store.createInteraction({
         run_id: run.id,
         binding_id: bindingId,
-        request_id: event.payload.ask_id,
+        request_id: event.interaction.id,
         kind: 'ask',
         allowed_sender_id: this.store.getBinding(bindingId)?.last_sender_id,
-        choices: event.payload.options.map((option) => ({ id: option.id, label: option.label, value: { option_id: option.id } })),
+        choices: (event.interaction.options || []).map((option) => ({ id: option.id, label: option.label, value: { option_id: option.id } })),
       });
-      this.enqueueInteraction(run, interaction, event.payload.question);
+      this.enqueueInteraction(run, interaction, event.interaction.question);
       return;
     }
-    if (event.type === 'approval.required') {
+    if (event.type === 'interaction.required' && event.interaction.type === 'approval') {
       this.enqueueRunOperation(run, { kind: 'activity', active: false }, `run:${run.id}:activity:waiting-approval`);
       this.enqueueRunOperation(run, {
-        kind: 'status', phase: 'waiting_approval', title: 'Waiting for approval', detail: event.payload.reason,
-      }, `run:${run.id}:status:${event.seq}`, `run:${run.id}:status`);
+        kind: 'status', phase: 'waiting_approval', title: 'Waiting for approval', detail: event.interaction.reason,
+      }, `run:${run.id}:status:${event.sequence}`, `run:${run.id}:status`);
       const interaction = this.store.createInteraction({
         run_id: run.id,
         binding_id: bindingId,
-        request_id: event.payload.approval_id,
+        request_id: event.interaction.id,
         kind: 'approval',
         allowed_sender_id: this.store.getBinding(bindingId)?.last_sender_id,
         choices: approvalChoices(),
       });
-      this.enqueueInteraction(run, interaction, approvalDetail(event.payload));
+      this.enqueueInteraction(run, interaction, approvalDetail({ approval_id: event.interaction.id, kind: event.interaction.approvalKind, reason: event.interaction.reason, action: event.interaction.action, path: event.interaction.path, suggested_root: event.interaction.suggestedRoot, created_at: new Date(event.timestamp).toISOString() }));
       return;
     }
-    if (event.type === 'ask_user.answered') {
-      const interaction = this.store.findInteraction(run.id, event.payload.ask_id);
-      if (interaction) this.enqueueResolvedInteraction(run, interaction, `Selected: ${event.payload.selected.label}`);
+    if (event.type === 'interaction.resolved' && event.response.decision === 'answered') {
+      const interaction = this.store.findInteraction(run.id, event.interactionId);
+      if (interaction) this.enqueueResolvedInteraction(run, interaction, `Selected: ${event.response.answer || event.response.optionId || ''}`);
       this.enqueueRunOperation(run, { kind: 'activity', active: true }, `run:${run.id}:activity:resume-ask`);
       return;
     }
-    if (event.type === 'approval.resolved') {
-      const interaction = this.store.findInteraction(run.id, event.payload.approval_id);
+    if (event.type === 'interaction.resolved' && event.response.decision !== 'answered') {
+      const interaction = this.store.findInteraction(run.id, event.interactionId);
       if (interaction) {
-        const label = event.payload.decision === 'approved' ? `Allowed for ${event.payload.scope}` : 'Rejected';
+        const label = event.response.decision === 'approved' ? `Allowed for ${event.response.scope}` : 'Rejected';
         this.enqueueResolvedInteraction(run, interaction, label);
       }
       this.enqueueRunOperation(run, { kind: 'activity', active: true }, `run:${run.id}:activity:resume-approval`);
       return;
     }
-    if (event.type === 'agent.done' || event.type === 'agent.error') {
+    if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') {
       void this.finishRun(event, run);
     }
   }
@@ -404,23 +404,23 @@ export class MessagingRuntime {
     }
   }
 
-  private async finishRun(event: Extract<AgentEvent, { type: 'agent.done' | 'agent.error' }>, run: RuntimeRun) {
+  private async finishRun(event: Extract<AgentEvent, { type: 'run.completed' | 'run.failed' | 'run.timed_out' | 'run.cancelled' }>, run: RuntimeRun) {
     const bindingId = run.origin.kind === 'messaging' ? run.origin.binding_id : undefined;
     if (!bindingId) return;
     const inbound = this.store.findInboundJobByRun(run.id);
     if (!inbound) return;
-    if (event.type === 'agent.done' && event.payload.status === 'cancelled' && run.cancel_reason === 'shutdown') return;
+    if (event.type === 'run.cancelled' && run.cancel_reason === 'shutdown') return;
     this.store.markInboundDelivering(bindingId, inbound.id);
     this.store.expireRunInteractions(run.id);
     this.enqueueRunOperation(run, { kind: 'activity', active: false }, `run:${run.id}:activity:stop`);
-    const completed = event.type === 'agent.done' && event.payload.status === 'completed';
-    const timedOut = event.type === 'agent.done' && event.payload.status === 'timeout';
+    const completed = event.type === 'run.completed';
+    const timedOut = event.type === 'run.timed_out';
     const text = completed
       ? this.finalText(bindingId)
       : timedOut
         ? 'The task timed out.'
-        : event.type === 'agent.error'
-          ? `Task failed: ${event.payload.message}`
+        : event.type === 'run.failed'
+          ? `Task failed: ${event.error.message}`
           : 'The task was cancelled.';
     this.store.enqueueOutboundJob({
       idempotencyKey: `run:${run.id}:result`,
@@ -430,7 +430,7 @@ export class MessagingRuntime {
       coalesceKey: `run:${run.id}:status`,
       operation: {
         kind: 'result',
-        outcome: completed ? 'completed' : timedOut || event.type === 'agent.error' ? 'failed' : 'cancelled',
+        outcome: completed ? 'completed' : timedOut || event.type === 'run.failed' ? 'failed' : 'cancelled',
         text,
         message_already_delivered: this.store.hasDeliveredText(bindingId, text, run.id),
       },

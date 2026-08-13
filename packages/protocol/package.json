@@ -15,5 +15,8 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@moke/agent-protocol": "0.1.0"
+  }
 }

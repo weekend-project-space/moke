@@ -7,8 +7,8 @@ import { createAgentHttpHandler } from './http-transport.js';
 
 test('HTTP handler creates a run and exposes replayable SSE events', async () => {
   const events: AgentEvent[] = [
-    { eventId: 'e1', sequence: 1, type: 'run.started', threadId: 't1', runId: 'r1', timestamp: '2026-08-12T00:00:00.000Z' },
-    { eventId: 'e2', sequence: 2, type: 'run.cancelled', threadId: 't1', runId: 'r1', timestamp: '2026-08-12T00:00:01.000Z', reason: 'done' },
+    { eventId: 'e1', sequence: 1, type: 'run.started', threadId: 't1', runId: 'r1', timestamp: Date.parse('2026-08-12T00:00:00.000Z') },
+    { eventId: 'e2', sequence: 2, type: 'run.cancelled', threadId: 't1', runId: 'r1', timestamp: Date.parse('2026-08-12T00:00:01.000Z'), reason: 'done' },
   ];
   const run = { runId: 'r1', events: async function* () { for (const event of events) yield event; }, snapshot: () => ({ ...createAgentRunSnapshot('t1', 'r1'), status: 'cancelled' as const, lastSequence: 2 }), respond: async () => undefined, cancel: () => undefined };
   const runtime = new AgentRuntime({ agent: { run: (_input: AgentRunInput) => run }, eventStore: new MemoryEventStore() });

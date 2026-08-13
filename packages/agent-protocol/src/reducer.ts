@@ -10,7 +10,15 @@ export function reduceAgentEvent(snapshot: AgentRunSnapshot, event: AgentEvent):
   const next = { ...snapshot, messages: structuredClone(snapshot.messages), activities: structuredClone(snapshot.activities), state: structuredClone(snapshot.state), lastSequence: event.sequence };
   switch (event.type) {
     case 'run.started': next.status = 'running'; break;
-    case 'run.completed': next.status = 'completed'; next.messages = [...event.result.messages]; next.state = structuredClone(event.result.state); next.usage = { ...event.result.usage }; break;
+    case 'run.completed':
+      next.status = 'completed';
+      if (event.result) {
+        next.messages = [...event.result.messages];
+        next.state = structuredClone(event.result.state);
+        next.usage = { ...event.result.usage };
+      } else if (event.usage) next.usage = { ...event.usage };
+      break;
+    case 'run.timed_out': next.status = 'failed'; break;
     case 'run.failed': next.status = 'failed'; break;
     case 'run.cancelled': next.status = 'cancelled'; break;
     case 'step.started': next.usage = { ...next.usage, steps: next.usage.steps + 1 }; break;
@@ -31,7 +39,7 @@ export function reduceAgentEvent(snapshot: AgentRunSnapshot, event: AgentEvent):
     }
     case 'tool_result.completed':
     case 'tool_result.failed':
-      next.messages.push({ id: event.messageId, role: 'tool', toolCallId: event.toolCallId, content: event.content, error: event.error });
+      next.messages.push({ id: event.messageId, role: 'tool', toolCallId: event.toolCallId, content: event.content, error: event.error?.message });
       next.usage = { ...next.usage, toolCalls: next.usage.toolCalls + 1 };
       break;
     case 'state.snapshot': next.state = structuredClone(event.snapshot); break;

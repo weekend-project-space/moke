@@ -1,5 +1,4 @@
 import type {
-  AgentEvent as ProtocolAgentEvent,
   FileAttachment as ProtocolFileAttachment,
   FileAttachmentInput as ProtocolFileAttachmentInput,
   AgentStep as ProtocolAgentStep,
@@ -13,8 +12,9 @@ import type {
   ToolCall as ProtocolToolCall,
   ToolApprovalRecord as ProtocolToolApprovalRecord,
 } from '@moke/protocol'
+import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol'
 
-export type AgentEvent = ProtocolAgentEvent
+export type AgentEvent = CoreAgentEvent
 export type AgentStepPhase = ProtocolAgentStepPhase
 export type AgentStep = ProtocolAgentStep
 export type ReasoningEffort = ProtocolReasoningEffort

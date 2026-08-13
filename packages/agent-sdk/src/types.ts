@@ -1,5 +1,4 @@
 import type {
-  AgentEvent,
   AssistantMessage,
   ImageAttachmentUpload,
   FileAttachmentInput,
@@ -12,6 +11,7 @@ import type {
   SendMessageEnvironmentInput,
   UpdateSessionEnvironmentInput,
 } from '@moke/protocol';
+import type { AgentEvent } from '@moke/agent-protocol';
 import type { RunHandle, SessionHandle } from './client.js';
 
 export type MokeClientOptions = {

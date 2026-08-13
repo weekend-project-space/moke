@@ -1,9 +1,9 @@
-import type { AgentEvent } from '@moke/protocol';
+import type { AgentEvent } from '@moke/agent-protocol';
 import { MokeApiError, MokeNetworkError, MokeProtocolError } from './errors.js';
 import type { HttpClient } from './http-client.js';
 import type { RunEventsOptions } from './types.js';
 
-const TERMINAL_EVENTS = new Set(['agent.done', 'agent.error']);
+const TERMINAL_EVENTS = new Set(['run.completed', 'run.failed', 'run.timed_out', 'run.cancelled']);
 
 export async function* streamRunEvents(
   http: HttpClient,
@@ -34,9 +34,9 @@ export async function* streamRunEvents(
 
       for await (const data of readSseData(response.body, options.signal)) {
         const event = parseAgentEvent(data);
-        if (event.run_id !== runId) throw new MokeProtocolError('Event run_id does not match subscription');
-        if (event.seq <= lastSeq) continue;
-        lastSeq = event.seq;
+        if (event.runId !== runId) throw new MokeProtocolError('Event runId does not match subscription');
+        if (event.sequence <= lastSeq) continue;
+        lastSeq = event.sequence;
         attempt = 0;
         yield event;
         if (TERMINAL_EVENTS.has(event.type)) return;
@@ -112,15 +112,14 @@ function parseAgentEvent(data: string): AgentEvent {
     throw new MokeProtocolError(`Event contains invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (!value || typeof value !== 'object') throw new MokeProtocolError('Event must be an object');
-  const event = value as Partial<AgentEvent>;
+  const event = value as Record<string, unknown>;
   if (
-    typeof event.id !== 'string'
-    || typeof event.seq !== 'number'
+    typeof event.eventId !== 'string'
+    || typeof event.sequence !== 'number'
     || typeof event.type !== 'string'
-    || typeof event.run_id !== 'string'
-    || typeof event.session_id !== 'string'
-    || typeof event.ts !== 'string'
-    || !('payload' in event)
+    || typeof event.runId !== 'string'
+    || typeof event.threadId !== 'string'
+    || typeof event.timestamp !== 'number'
   ) {
     throw new MokeProtocolError('Event does not match the AgentEvent protocol');
   }

@@ -89,14 +89,6 @@ export class CoreAgentAdapter implements Agent {
       },
     }, { signal: input.context.abortSignal });
 
-    input.eventBus.emit('agent.started', { input: input.input });
-    input.eventBus.emit('agent.plan', {
-      mode: 'tool-loop',
-      planner: 'agent-core',
-      model: settings.model,
-      tools: tools.listTools().map((tool) => tool.name),
-    });
-
     const eventTask = forwardCoreEvents(run.events(), input);
     const result = await run.result();
     const completedMessages = await eventTask;
@@ -152,22 +144,14 @@ class RuntimeToolProvider implements ToolProvider {
           });
       const normalized = normalizeRuntimeToolResult(raw);
       const approvals = this.input.context.consumeApprovals?.(call.id) ?? [];
-      this.emitTool(call, 'ok', normalized.publicOutput, startedAt, approvals);
       for (const item of normalized.context) {
         if (item.scope !== 'session' || item.authority !== 'user') continue;
-        this.input.eventBus.emit('agent.message.done', {
-          message: {
-            id: `msg_${randomUUID()}`,
-            role: 'user',
-            content: item.content,
-            created_at: new Date().toISOString(),
-            visibility: 'internal',
-          },
-        });
+        this.input.eventBus.emit({ type: 'custom', name: 'moke.internal.message', value: { id: `msg_${randomUUID()}`, role: 'user', content: item.content } });
       }
       return {
         content: JSON.stringify(normalized.publicOutput),
         output: normalized.modelOutput,
+        metadata: { publicOutput: normalized.publicOutput, durationMs: Date.now() - startedAt, approvals },
         context: normalized.context.map((item) => ({
           description: `${item.authority} tool context`,
           value: item.content,
@@ -184,8 +168,7 @@ class RuntimeToolProvider implements ToolProvider {
         ? error.output
         : { error: { code: 'TOOL_FAILED', message: error instanceof Error ? error.message : String(error), tool: name } };
       const approvals = this.input.context.consumeApprovals?.(call.id) ?? [];
-      this.emitTool(call, 'error', output, startedAt, approvals);
-      return { content: JSON.stringify(output), output, error: error instanceof Error ? error.message : String(error) };
+      return { content: JSON.stringify(output), output, error: error instanceof Error ? error.message : String(error), metadata: { publicOutput: output, durationMs: Date.now() - startedAt, approvals } };
     }
   }
 
@@ -198,63 +181,23 @@ class RuntimeToolProvider implements ToolProvider {
     return { question, selected, status: 'answered' };
   }
 
-  private emitTool(call: ValidatedToolCall, status: 'ok' | 'error', output: unknown, startedAt: number, approvals: NonNullable<ReturnType<NonNullable<AgentRunInput['context']['consumeApprovals']>>>) {
-    this.input.eventBus.emit('tool.call.completed', {
-      call_id: call.id,
-      status,
-      duration_ms: Date.now() - startedAt,
-      output,
-    });
-    this.input.eventBus.emit('agent.message.done', {
-      message: {
-        id: `msg_${randomUUID()}`,
-        role: 'tool',
-        content: JSON.stringify(output),
-        created_at: new Date().toISOString(),
-        tool_call_id: call.id,
-        name: call.function.name,
-        status: status === 'ok' ? 'success' : 'error',
-        ...(approvals.length ? { approvals } : {}),
-      },
-    });
-  }
 }
 
 export async function forwardCoreEvents(events: AsyncIterable<CoreAgentEvent>, input: Pick<AgentRunInput, 'eventBus'>) {
-  let stepIndex = 0;
-  const calls = new Map<string, { name: string; arguments: string }>();
   const completedMessages = new Map<string, AssistantMessage>();
   for await (const event of events) {
-    if (event.type === 'step.started') {
-      stepIndex++;
-      input.eventBus.emit('agent.state', { state: 'reason' }, { step: step(stepIndex, 'reason') });
-    } else if (event.type === 'message.content') {
-      input.eventBus.emit('agent.message.delta', { channel: 'answer', content: event.delta }, { step: step(stepIndex, 'reason') });
-    } else if (event.type === 'reasoning_message.content') {
-      input.eventBus.emit('agent.message.delta', { channel: 'reasoning', content: event.delta }, { step: step(stepIndex, 'reason') });
-    } else if (event.type === 'message.completed') {
+    input.eventBus.emit(toEventInput(event), { timestamp: event.timestamp });
+    if (event.type === 'message.completed' && event.message.role === 'assistant') {
       const message = toRuntimeAssistant(event.message, event.timestamp, event.reasoning);
       completedMessages.set(message.id, message);
-      input.eventBus.emit('agent.message.done', { message }, { step: step(stepIndex, event.message.toolCalls?.length ? 'reason' : 'respond') });
-    } else if (event.type === 'tool_call.started') {
-      calls.set(event.toolCallId, { name: event.toolCallName, arguments: '' });
-      input.eventBus.emit('tool.call.created', { call_id: event.toolCallId, tool: event.toolCallName });
-      input.eventBus.emit('agent.state', { state: 'act' }, { step: step(stepIndex, 'act') });
-    } else if (event.type === 'tool_call.args') {
-      const call = calls.get(event.toolCallId);
-      if (call) call.arguments += event.delta;
-    } else if (event.type === 'tool_call.completed') {
-      const call = calls.get(event.toolCallId);
-      if (!call) continue;
-      let args: Record<string, unknown> = {};
-      try {
-        const parsed = JSON.parse(call.arguments || '{}') as unknown;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
-      } catch {}
-      input.eventBus.emit('tool.call.ready', { call_id: event.toolCallId, input: args });
     }
   }
   return completedMessages;
+}
+
+function toEventInput(event: CoreAgentEvent) {
+  const { eventId: _eventId, sequence: _sequence, threadId: _threadId, runId: _runId, timestamp: _timestamp, ...input } = event;
+  return input;
 }
 
 function buildContext(input: AgentRunInput) {
@@ -298,12 +241,13 @@ function toHistory(history: NonNullable<AgentRunInput['history']>): CoreAgentMes
   });
 }
 
-function toRuntimeAssistant(message: Extract<CoreAgentMessage, { role: 'assistant' }>, createdAt = new Date().toISOString(), reasoning?: string): AssistantMessage {
+function toRuntimeAssistant(message: Extract<CoreAgentMessage, { role: 'assistant' }>, createdAt: string | number = new Date().toISOString(), reasoning?: string): AssistantMessage {
+  const createdAtText = typeof createdAt === 'number' ? new Date(createdAt).toISOString() : createdAt;
   return {
     id: message.id,
     role: 'assistant',
     content: message.content ?? '',
-    created_at: createdAt,
+    created_at: createdAtText,
     ...(reasoning ? { reasoning } : {}),
     ...(message.toolCalls?.length ? {
       tool_calls: message.toolCalls.map((call) => ({
@@ -348,8 +292,4 @@ function resolveSettings(input: Partial<ChatModelSettings>): ChatModelSettings {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(Math.trunc(value), max));
-}
-
-function step(index: number, phase: 'reason' | 'act' | 'respond') {
-  return { index: Math.max(1, index), phase } as const;
 }

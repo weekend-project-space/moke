@@ -65,7 +65,7 @@ function eventStream(runtime: AgentRuntime, runId: string, afterSequence: number
 }
 
 function lastSequence(request: Request) { const value = Number(request.headers.get('Last-Event-ID') ?? 0); return Number.isSafeInteger(value) && value >= 0 ? value : 0; }
-function terminal(event: AgentEvent) { return event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled'; }
-function terminalStatus(status: string) { return status === 'completed' || status === 'failed' || status === 'cancelled'; }
+function terminal(event: AgentEvent) { return event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled'; }
+function terminalStatus(status: string) { return status === 'completed' || status === 'failed' || status === 'timed_out' || status === 'cancelled'; }
 async function body<T>(request: Request): Promise<T> { return request.json() as Promise<T>; }
 function json(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }

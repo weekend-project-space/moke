@@ -51,7 +51,6 @@ export type {
   WorkspaceEntry,
 } from './types.js';
 export type {
-  AgentEvent,
   Message,
   ModelSelection,
   PendingApproval,
@@ -65,3 +64,4 @@ export type {
   CreateSessionEnvironmentInput,
   SendMessageEnvironmentInput,
 } from '@moke/protocol';
+export type { AgentEvent } from '@moke/agent-protocol';

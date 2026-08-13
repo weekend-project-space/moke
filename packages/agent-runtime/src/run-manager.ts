@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   AgentEvent,
-  AgentEventPayloadMap,
   FileAttachment,
   ImageAttachment,
   Message,
@@ -14,6 +13,7 @@ import type {
   SessionEnvironment,
   ToolApprovalRecord,
 } from '@moke/protocol';
+import type { AgentMessage } from '@moke/agent-protocol';
 import type { Agent } from './agent.js';
 import { EventBus } from './event-bus.js';
 import { resolveHistory, selectRecentHistory } from './history.js';
@@ -86,27 +86,41 @@ export class SessionRunActiveError extends Error {
   }
 }
 
-function readSessionMessage(event: AgentEvent & { payload: AgentEventPayloadMap['agent.message.done'] }) {
-  const message = event.payload.message;
-  if (!message || typeof message !== 'object') return null;
-
-  const candidate = message as Partial<Message>;
-  if (
-    (candidate.role !== 'user' && candidate.role !== 'assistant' && candidate.role !== 'tool') ||
-    typeof candidate.content !== 'string' ||
-    typeof candidate.created_at !== 'string'
-  ) {
-    return null;
-  }
-
-  if (event.step && candidate.role === 'assistant') {
+function readSessionMessage(event: AgentEvent): Message | null {
+  if (event.type === 'message.completed') return toSessionMessage(event.message, event.timestamp, event.reasoning);
+  if (event.type === 'tool_result.completed' || event.type === 'tool_result.failed') {
     return {
-      ...candidate,
-      step: event.step,
-    } as Message;
+      id: event.messageId,
+      role: 'tool',
+      content: event.content,
+      created_at: new Date(event.timestamp).toISOString(),
+      tool_call_id: event.toolCallId,
+      name: event.toolName ?? 'tool',
+      status: event.type === 'tool_result.failed' ? 'error' : 'success',
+      ...(Array.isArray(event.metadata?.approvals) ? { approvals: event.metadata.approvals as ToolApprovalRecord[] } : {}),
+    };
   }
+  return null;
+}
 
-  return candidate as Message;
+function toSessionMessage(message: AgentMessage, timestamp: number, reasoning?: string): Message | null {
+  if (message.role === 'assistant') return {
+    id: message.id,
+    role: 'assistant',
+    content: message.content ?? '',
+    created_at: new Date(timestamp).toISOString(),
+    ...(reasoning ? { reasoning } : {}),
+    ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map(call => ({ id: call.id, name: call.function.name, args: parseArguments(call.function.arguments) })) } : {}),
+  };
+  if (message.role === 'user' && typeof message.content === 'string') return { id: message.id, role: 'user', content: message.content, created_at: new Date(timestamp).toISOString() };
+  return null;
+}
+
+function parseArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}') as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch { return {}; }
 }
 
 export class RunManager {
@@ -184,10 +198,6 @@ export class RunManager {
     const eventBus = new EventBus(run, (event) => {
       this.observers.notify(event, run);
       if (run.abort) return;
-      if (event.type !== 'agent.message.done') {
-        return;
-      }
-
       const message = readSessionMessage(event);
       if (!message) return;
 
@@ -267,13 +277,14 @@ export class RunManager {
         this.config.onSessionChanged?.(session);
       }
       this.setStatus(run, 'completed');
-      eventBus.emit('agent.done', {
-        status: 'completed',
+      eventBus.emit({
+        type: 'run.completed',
         usage: {
           steps: run.seq,
-          tool_calls: result.toolCalls,
-          duration_ms: Date.now() - run.started_at,
-          ...result.usage,
+          toolCalls: result.toolCalls,
+          inputTokens: result.usage?.input_tokens ?? 0,
+          outputTokens: result.usage?.output_tokens ?? 0,
+          ...(result.usage?.cached_input_tokens !== undefined ? { cachedInputTokens: result.usage.cached_input_tokens } : {}),
         },
       });
     } catch (error) {
@@ -288,13 +299,8 @@ export class RunManager {
         created_at: new Date().toISOString(),
       };
       this.setStatus(run, 'failed');
-      eventBus.emit('agent.message.done', {
-        message: assistantMessage,
-      });
-      eventBus.emit('agent.error', {
-        code: 'RUNTIME_ERROR',
-        message,
-      });
+      eventBus.emit({ type: 'message.completed', messageId: assistantMessage.id, message: { id: assistantMessage.id, role: 'assistant', content: assistantMessage.content } });
+      eventBus.emit({ type: 'run.failed', error: { kind: 'protocol', code: 'RUNTIME_ERROR', message, retryable: false } });
     } finally {
       clearTimeout(timeout);
       this.abortControllers.delete(run.id);
@@ -331,7 +337,7 @@ export class RunManager {
         resolve,
         reject,
       });
-      eventBus.emit('approval.required', pendingApproval);
+      eventBus.emit({ type: 'interaction.required', interaction: toApprovalInteraction(pendingApproval) });
     });
   }
 
@@ -426,7 +432,7 @@ export class RunManager {
         reviewer,
         reviewReason,
       });
-      eventBus.emit('approval.required', pendingApproval);
+      eventBus.emit({ type: 'interaction.required', interaction: toApprovalInteraction(pendingApproval) });
     });
   }
 
@@ -451,7 +457,7 @@ export class RunManager {
         resolve,
         reject,
       });
-      eventBus.emit('ask_user.required', run.pending_ask!);
+      eventBus.emit({ type: 'interaction.required', interaction: toQuestionInteraction(run.pending_ask!) });
     });
   }
 
@@ -473,11 +479,7 @@ export class RunManager {
     run.pending_ask = undefined;
     this.setStatus(run, 'running');
 
-    const event = new EventBus(run).emit('ask_user.answered', {
-      ask_id: pendingAsk.ask_id,
-      call_id: pendingAsk.call_id,
-      selected,
-    });
+    const event = new EventBus(run).emit({ type: 'interaction.resolved', interactionId: pendingAsk.ask_id, response: { interactionId: pendingAsk.ask_id, decision: 'answered', optionId: selected.id, answer: selected.label, idempotencyKey: pendingAsk.ask_id } });
     this.observers.notify(event, run);
 
     pending.resolve(selected);
@@ -506,11 +508,7 @@ export class RunManager {
     this.setStatus(run, 'running');
     const scope = pendingApproval.kind === 'tool' ? 'once' : (options.scope || 'session');
     this.recordApproval(run.id, pendingApproval, decision, scope, pending.reviewer || 'user', pending.reviewReason);
-    const event = new EventBus(run).emit('approval.resolved', {
-      approval_id: pendingApproval.approval_id,
-      decision,
-      scope,
-    });
+    const event = new EventBus(run).emit({ type: 'interaction.resolved', interactionId: pendingApproval.approval_id, response: { interactionId: pendingApproval.approval_id, decision, scope, reviewer: pending.reviewer || 'user', reviewReason: pending.reviewReason, idempotencyKey: pendingApproval.approval_id } });
     this.observers.notify(event, run);
     const workspaceApproval =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
@@ -540,14 +538,7 @@ export class RunManager {
     this.abortControllers.delete(runId);
     this.rejectPendingInteractions(run, 'Run cancelled');
 
-    const event = new EventBus(run).emit('agent.done', {
-      status: 'cancelled',
-      usage: {
-        steps: run.seq,
-        tool_calls: 0,
-        duration_ms: Date.now() - run.started_at,
-      },
-    });
+    const event = new EventBus(run).emit({ type: 'run.cancelled', reason });
     this.observers.notify(event, run);
     this.pruneTerminalRuns();
 
@@ -557,27 +548,14 @@ export class RunManager {
   private timeoutRun(run: RuntimeRun, eventBus: EventBus, timeoutMs: number) {
     if (!isActiveRun(run)) return;
 
-    eventBus.emit('agent.message.done', {
-      message: {
-        id: id('msg'),
-        role: 'assistant',
-        content: `Run timed out after ${timeoutMs}ms`,
-        created_at: new Date().toISOString(),
-      },
-    });
+    const messageId = id('msg');
+    eventBus.emit({ type: 'message.completed', messageId, message: { id: messageId, role: 'assistant', content: `Run timed out after ${timeoutMs}ms` } });
     run.abort = true;
     this.setStatus(run, 'timeout');
     this.abortControllers.get(run.id)?.abort(new Error('Run timed out'));
     this.abortControllers.delete(run.id);
     this.rejectPendingInteractions(run, 'Run timed out');
-    eventBus.emit('agent.done', {
-      status: 'timeout',
-      usage: {
-        steps: run.seq,
-        tool_calls: 0,
-        duration_ms: Date.now() - run.started_at,
-      },
-    });
+    eventBus.emit({ type: 'run.timed_out', error: { kind: 'limit', code: 'run_timeout', message: `Run timed out after ${timeoutMs}ms`, retryable: false } });
     this.pruneTerminalRuns();
   }
 
@@ -739,6 +717,30 @@ function snapshotEnvironment(
 
 function safeApprovalInput(value: Record<string, unknown>): Record<string, unknown> {
   return sanitizeApprovalValue(value) as Record<string, unknown>;
+}
+
+function toApprovalInteraction(approval: PendingApproval) {
+  return {
+    id: approval.approval_id,
+    type: 'approval' as const,
+    ...(approval.call_id ? { toolCallId: approval.call_id } : {}),
+    approvalKind: approval.kind,
+    reason: approval.reason,
+    action: approval.action,
+    ...(approval.path ? { path: approval.path } : {}),
+    ...(approval.suggested_root ? { suggestedRoot: approval.suggested_root } : {}),
+  };
+}
+
+function toQuestionInteraction(ask: NonNullable<RuntimeRun['pending_ask']>) {
+  return {
+    id: ask.ask_id,
+    type: 'question' as const,
+    toolCallId: ask.call_id,
+    question: ask.question,
+    options: ask.options,
+    allowText: true,
+  };
 }
 
 function sanitizeApprovalValue(value: unknown, key = ''): unknown {

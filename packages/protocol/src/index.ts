@@ -1,3 +1,5 @@
+import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
+
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
 export type ModelSelection = {
@@ -23,17 +25,8 @@ export type RunLifecycleEvent = {
   runId: string;
 };
 
-export type AgentEvent = {
-  id: string;
-  seq: number;
-  type: AgentEventType;
-  run_id: string;
-  session_id: string;
-  ts: string;
-  step?: AgentStep;
-} & AgentEventPayloadUnion;
-
-export type AgentEventType = keyof AgentEventPayloadMap;
+export type AgentEvent = CoreAgentEvent;
+export type AgentEventType = AgentEvent['type'];
 
 export type AgentMessageDeltaChannel = 'answer' | 'reasoning';
 
@@ -247,84 +240,6 @@ export type RuntimeLimits = {
   max_tool_calls: number;
   timeout_ms: number;
 };
-
-export type AgentEventPayloadMap = {
-  'agent.started': {
-    input: string;
-  };
-  'agent.plan': {
-    mode: string;
-    planner: string;
-    model: string;
-    tools: string[];
-  };
-  'agent.state': {
-    state: 'reason' | 'act' | 'respond' | string;
-  };
-  'agent.message.delta': {
-    channel?: AgentMessageDeltaChannel;
-    content: string;
-  };
-  'agent.message.done': {
-    message: Message;
-  };
-  'tool.call.created': {
-    call_id: string;
-    tool: string;
-    source?: {
-      type: 'local' | 'mcp';
-      server_id?: string;
-    };
-  };
-  'tool.call.ready': {
-    call_id: string;
-    input: Record<string, unknown>;
-  };
-  'tool.call.completed': {
-    call_id: string;
-    status: 'ok' | 'error' | string;
-    duration_ms: number;
-    output: unknown;
-  };
-  'ask_user.required': PendingAsk;
-  'ask_user.answered': {
-    ask_id: string;
-    call_id: string;
-    selected: {
-      id: string;
-      label: string;
-    };
-  };
-  'approval.required': PendingApproval;
-  'approval.resolved': {
-    approval_id: string;
-    decision: 'approved' | 'rejected';
-    scope: 'once' | 'session' | 'persistent';
-  };
-  'agent.done': {
-    status: RunStatus;
-    usage?: {
-      steps: number;
-      tool_calls: number;
-      duration_ms: number;
-      input_tokens?: number;
-      output_tokens?: number;
-      cached_input_tokens?: number;
-      uncached_input_tokens?: number;
-    };
-  };
-  'agent.error': {
-    code: string;
-    message: string;
-  };
-};
-
-type AgentEventPayloadUnion = {
-  [Type in AgentEventType]: {
-    type: Type;
-    payload: AgentEventPayloadMap[Type];
-  };
-}[AgentEventType];
 
 export type ApiErrorResponse = {
   error: {

@@ -20,15 +20,17 @@ export type RunEventReduction = {
 }
 
 function eventKey(event: AgentEvent) {
-  return event.id || `${event.seq || ''}:${event.type}:${event.ts || ''}`
+  return event.eventId || `${event.sequence}:${event.type}:${event.timestamp}`
 }
 
 function shouldStoreEvent(event: AgentEvent) {
-  if (event.type === 'agent.message.delta') return event.payload.channel === 'reasoning'
-  return event.type === 'tool.call.created'
-    || event.type === 'tool.call.ready'
-    || event.type === 'tool.call.completed'
-    || event.type === 'agent.error'
+  return event.type === 'reasoning_message.content'
+    || event.type === 'tool_call.started'
+    || event.type === 'tool_call.args'
+    || event.type === 'tool_result.completed'
+    || event.type === 'tool_result.failed'
+    || event.type === 'run.failed'
+    || event.type === 'run.timed_out'
 }
 
 export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEventReduction {
@@ -45,27 +47,27 @@ export function reduceRunEvent(state: SessionRunState, event: AgentEvent): RunEv
   }
   const effects: RunEventEffects = { finish: false }
 
-  if (event.type === 'agent.message.delta' && event.payload.channel !== 'reasoning') {
-    effects.answerDelta = event.payload.content
-  } else if (event.type === 'approval.required') {
-    awaitRunApproval(nextState, event.payload)
-  } else if (event.type === 'ask_user.required') {
-    awaitRunUser(nextState, event.payload)
+  if (event.type === 'message.content') {
+    effects.answerDelta = event.delta
+  } else if (event.type === 'interaction.required' && event.interaction.type === 'approval') {
+    awaitRunApproval(nextState, { approval_id: event.interaction.id, call_id: event.interaction.toolCallId, kind: event.interaction.approvalKind, reason: event.interaction.reason, action: event.interaction.action, path: event.interaction.path, suggested_root: event.interaction.suggestedRoot, created_at: new Date(event.timestamp).toISOString() })
+  } else if (event.type === 'interaction.required' && event.interaction.type === 'question') {
+    awaitRunUser(nextState, { ask_id: event.interaction.id, call_id: event.interaction.toolCallId || '', question: event.interaction.question, options: event.interaction.options || [], created_at: new Date(event.timestamp).toISOString() })
   } else if (
-    event.type === 'ask_user.answered'
+    event.type === 'interaction.resolved'
     && nextState.lifecycle.status === 'awaiting-user'
-    && nextState.lifecycle.ask.ask_id === event.payload.ask_id
+    && nextState.lifecycle.ask.ask_id === event.interactionId
   ) {
     resumeRun(nextState)
   } else if (
-    event.type === 'approval.resolved'
+    event.type === 'interaction.resolved'
     && nextState.lifecycle.status === 'awaiting-approval'
-    && nextState.lifecycle.approval.approval_id === event.payload.approval_id
+    && nextState.lifecycle.approval.approval_id === event.interactionId
   ) {
     resumeRun(nextState)
-  } else if (event.type === 'agent.message.done') {
-    effects.message = event.payload.message
-  } else if (event.type === 'agent.done' || event.type === 'agent.error') {
+  } else if (event.type === 'message.completed' && event.message.role === 'assistant') {
+    effects.message = { id: event.message.id, role: 'assistant', content: event.message.content || '', created_at: new Date(event.timestamp).toISOString() }
+  } else if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') {
     finishRunState(nextState)
     effects.finish = true
   }

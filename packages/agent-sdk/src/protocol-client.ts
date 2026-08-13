@@ -40,7 +40,7 @@ async function* streamProtocolEvents(client: AgentProtocolClient, runId: string,
         const event = parseEvent(data, runId);
         if (event.sequence <= sequence) continue;
         sequence = event.sequence; attempts = 0; yield event;
-        if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') return;
+        if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') return;
       }
     } catch (error) { if (options.signal?.aborted) throw options.signal.reason; if (options.reconnect === false) throw error; }
     if (options.reconnect === false || ++attempts > maxAttempts) throw new Error('Agent event stream reconnect limit exceeded');

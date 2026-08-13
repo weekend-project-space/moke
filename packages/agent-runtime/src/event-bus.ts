@@ -1,24 +1,20 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentEvent, AgentEventPayloadMap, AgentEventType, AgentStep } from '@moke/protocol';
+import type { AgentEvent, AgentEventInput } from '@moke/agent-protocol';
 import type { RuntimeRun } from './run-state.js';
 
 export const MAX_RETAINED_RUN_EVENTS = 2000;
 
 /** Internal session context is durable model history, never public run output. */
 export function isPublicAgentEvent(event: AgentEvent) {
-  return event.type !== 'agent.message.done'
-    || event.payload.message.role !== 'user'
-    || event.payload.message.visibility !== 'internal';
+  return event.type !== 'custom' || event.name !== 'moke.internal.message';
 }
 
 function id(prefix: string) {
   return `${prefix}_${randomUUID().slice(0, 8)}`;
 }
 
-function now() {
-  return new Date().toISOString();
-}
+function now() { return Date.now(); }
 
 export class EventBus {
   constructor(
@@ -26,16 +22,14 @@ export class EventBus {
     private readonly onEvent?: (event: AgentEvent) => void,
   ) {}
 
-  emit<Type extends AgentEventType>(type: Type, payload: AgentEventPayloadMap[Type], options: { step?: AgentStep } = {}) {
+  emit(input: AgentEventInput, options: { timestamp?: number } = {}) {
     const event: AgentEvent = {
-      id: id('evt'),
-      seq: ++this.run.seq,
-      type,
-      run_id: this.run.id,
-      session_id: this.run.session_id,
-      ts: now(),
-      ...(options.step ? { step: options.step } : {}),
-      payload,
+      ...input,
+      eventId: id('evt'),
+      sequence: ++this.run.seq,
+      threadId: this.run.session_id,
+      runId: this.run.id,
+      timestamp: options.timestamp ?? now(),
     } as AgentEvent;
 
     this.run.events.push(event);
@@ -44,11 +38,11 @@ export class EventBus {
     }
     this.onEvent?.(event);
     if (isPublicAgentEvent(event)) {
-      const sse = `id: ${event.seq}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
+      const sse = `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
       for (const res of this.run.clients) res.write(sse);
     }
 
-    if (type === 'agent.done' || type === 'agent.error') {
+    if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.timed_out' || event.type === 'run.cancelled') {
       for (const res of this.run.clients) res.end();
       this.run.clients.clear();
     }

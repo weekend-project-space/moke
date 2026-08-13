@@ -403,9 +403,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       streamingTextBuffer.append(targetSessionId, reduction.effects.answerDelta)
     }
 
-    if (event.type === 'ask_user.answered' && submittingAskId.value === event.payload.ask_id) {
+    if (event.type === 'interaction.resolved' && submittingAskId.value === event.interactionId) {
       submittingAskId.value = ''
-    } else if (event.type === 'approval.resolved' && submittingApprovalId.value === event.payload.approval_id) {
+    } else if (event.type === 'interaction.resolved' && submittingApprovalId.value === event.interactionId) {
       submittingApprovalId.value = ''
     }
 

@@ -48,7 +48,7 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     const { id: runId } = parseParams(params, idParamsSchema);
     const run = getRun(context, runId);
     const afterSeq = readLastEventId(raw.req.headers['last-event-id']);
-    const firstRetainedSeq = run.events[0]?.seq;
+    const firstRetainedSeq = run.events[0]?.sequence;
     if (afterSeq > 0 && firstRetainedSeq !== undefined && firstRetainedSeq > afterSeq + 1) {
       throw new HttpError(409, 'EVENT_CURSOR_EXPIRED', 'Run event cursor is no longer available');
     }
@@ -61,9 +61,9 @@ export function registerRunRoutes(router: Router<RoutesContext>) {
     });
 
     for (const event of run.events) {
-      if (event.seq <= afterSeq) continue;
+      if (event.sequence <= afterSeq) continue;
       if (!isPublicAgentEvent(event)) continue;
-      raw.res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      raw.res.write(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     }
 
     if (isTerminalRun(run)) {
