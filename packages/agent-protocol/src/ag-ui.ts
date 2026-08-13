@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage, AgentRunInput, AgentToolDefinition, InputContent, JsonPatchOperation } from './types.js';
+import type { AgentEvent, AgentMessage, AgentRunInput, AgentToolDefinition, InputContent } from './types.js';
 
 export type AgUiRunAgentInput = {
   threadId: string;

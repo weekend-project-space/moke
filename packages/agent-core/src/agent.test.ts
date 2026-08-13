@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAgent } from './agent.js';
-import { createAgentRunSnapshot, reduceAgentEvent } from './reducer.js';
-import type { AgentEvent, AgentToolCall, ToolProvider } from './types.js';
+import { createAgentRunSnapshot, reduceAgentEvent } from '@moke/agent-protocol';
+import type { AgentEvent, AgentToolCall, ToolProvider } from '@moke/agent-protocol';
 import type { ChatRequest, ChatResponse, ChatRun, LlmClient, LlmStreamEvent } from '@moke/llm-client';
 
 function response(overrides: Partial<ChatResponse> = {}): ChatResponse {
@@ -57,6 +57,26 @@ test('emits a complete text and reasoning lifecycle with stable message IDs', as
   assert.equal(result.messages.some(message => message.role === 'reasoning' && message.content === 'check'), true);
 });
 
+test('hides provider-exposed reasoning unless the run explicitly enables it', async () => {
+  const thinking = event('thinking.delta', { delta: 'private', visibility: 'provider_exposed' }, 1);
+  const hiddenRun = createAgent({ model: model(() => fakeRun(response({ text: 'ok' }), [thinking])) }).run({ threadId: 't1', input: 'hi' });
+  const hiddenEventsPromise = collect(hiddenRun);
+  const hiddenResult = await hiddenRun.result();
+  const hiddenEvents = await hiddenEventsPromise;
+  assert.equal(hiddenResult.messages.some(message => message.role === 'reasoning'), false);
+  assert.equal(hiddenEvents.some(item => item.type.startsWith('reasoning')), false);
+
+  const visibleRun = createAgent({ model: model(() => fakeRun(response({ text: 'ok' }), [thinking])) }).run({
+    threadId: 't2',
+    input: 'hi',
+    metadata: { showRawReasoning: 'true' },
+  });
+  const visibleEventsPromise = collect(visibleRun);
+  const visibleResult = await visibleRun.result();
+  await visibleEventsPromise;
+  assert.equal(visibleResult.messages.some(message => message.role === 'reasoning' && message.content === 'private'), true);
+});
+
 test('emits tool lifecycle and preserves tool call/result order for the next turn', async () => {
   const requests: ChatRequest[] = [];
   let turn = 0;
@@ -90,6 +110,42 @@ test('emits tool lifecycle and preserves tool call/result order for the next tur
   assert.deepEqual(nextInput.map(item => item.type), ['message', 'tool_call', 'tool_result']);
   assert.equal(nextInput[1].callId, 'c1');
   assert.equal(nextInput[2].callId, 'c1');
+});
+
+test('forwards tool context, media, and configured reasoning to the next model turn', async () => {
+  const requests: ChatRequest[] = [];
+  let turn = 0;
+  const call = { callId: 'c1', name: 'inspect', argumentsJson: '{}', arguments: {} };
+  const llm = model((request: string | ChatRequest) => {
+    requests.push(request as ChatRequest);
+    return ++turn === 1
+      ? fakeRun(response({ toolCalls: [call], output: [{ type: 'tool_call', toolCall: call }] }))
+      : fakeRun(response({ text: 'done' }));
+  });
+  const tools: ToolProvider = {
+    listTools: () => [{ name: 'inspect', description: 'Inspect', parameters: { type: 'object' } }],
+    validate: toolCall => ({ ...toolCall, parsedArguments: {} }),
+    execute: async () => ({
+      content: '{}',
+      context: [{ description: 'inspection', value: 'observed value', role: 'user' }],
+      media: [{ type: 'image', source: { type: 'url', value: 'data:image/png;base64,AAAA' } }],
+    }),
+  };
+  await createAgent({ model: llm, tools }).run({
+    threadId: 't1',
+    input: 'inspect',
+    metadata: { reasoningEffort: 'high' },
+  }).result();
+  assert.deepEqual(requests.map(request => request.reasoning), [{ effort: 'high' }, { effort: 'high' }]);
+  const nextInput = requests[1].input as ChatRequest['input'];
+  assert.equal(Array.isArray(nextInput), true);
+  assert.deepEqual((nextInput as Array<{ type: string; role?: string }>).map(item => [item.type, item.role]), [
+    ['message', 'user'],
+    ['tool_call', undefined],
+    ['tool_result', undefined],
+    ['message', 'user'],
+    ['message', 'user'],
+  ]);
 });
 
 test('completes message and tool lifecycles when the provider only returns a final tool call', async () => {

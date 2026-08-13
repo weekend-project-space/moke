@@ -9,7 +9,7 @@ function sse(events: AgentEvent[]) { const encoder = new TextEncoder(); return n
 test('creates runs without serializing AbortSignal', async () => {
   let body: Record<string, unknown> = {};
   const client = new AgentProtocolClient({ baseUrl: 'http://agent', fetch: (async (_url, init) => { body = JSON.parse(String(init?.body)); return new Response(JSON.stringify({ threadId: 't1', runId: 'r1', status: 'running' })); }) as typeof fetch });
-  await client.createRun({ threadId: 't1', input: 'hi', signal: new AbortController().signal });
+  await client.createRun({ threadId: 't1', input: 'hi' }, { signal: new AbortController().signal });
   assert.equal('signal' in body, false);
 });
 

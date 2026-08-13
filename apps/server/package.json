@@ -7,7 +7,8 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@moke/agent-re-act": "0.1.0",
+    "@moke/agent-core": "0.1.0",
+    "@moke/agent-protocol": "0.1.0",
     "@moke/agent-runtime": "0.1.0",
     "@moke/agent-skills": "0.1.0",
     "@moke/agent-tools": "0.1.0",
@@ -19,6 +20,7 @@
     "@moke/messaging-tools": "0.1.0",
     "@moke/messaging-weixin": "0.1.0",
     "@moke/protocol": "0.1.0",
+    "@moke/llm-client": "0.1.0",
     "cron-parser": "^5.6.2",
     "qrcode": "^1.5.4",
     "zod": "^4.4.3"

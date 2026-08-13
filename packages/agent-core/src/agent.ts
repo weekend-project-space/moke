@@ -1,8 +1,12 @@
 import type { ChatInputItem, InputContentPart, LlmClient, LlmClientError, LlmStreamEvent, ToolCall as ModelToolCall } from '@moke/llm-client';
 import type {
   Agent,
-  AgentCapabilities,
   AgentDependencies,
+  AgentRun,
+  AgentRunOptions,
+} from './types.js';
+import type {
+  AgentCapabilities,
   AgentError,
   AgentEvent,
   AgentEventInput,
@@ -10,7 +14,6 @@ import type {
   AgentLimits,
   AgentMessage,
   AgentResult,
-  AgentRun,
   AgentRunInput,
   AgentRunSnapshot,
   AgentRunStatus,
@@ -18,9 +21,8 @@ import type {
   AgentUsage,
   AssistantMessage,
   InputContent,
-  ToolExecutionResult,
   ToolProvider,
-} from './types.js';
+} from '@moke/agent-protocol';
 
 const DEFAULT_LIMITS: AgentLimits = {
   maxSteps: 20,
@@ -96,14 +98,14 @@ class Run implements AgentRun {
   private activeModelRun?: { cancel(reason?: string): void };
   private lastStepId?: string;
 
-  constructor(private readonly agent: AgentImpl, private readonly input: AgentRunInput) {
+  constructor(private readonly agent: AgentImpl, private readonly input: AgentRunInput, options: AgentRunOptions = {}) {
     this.threadId = input.threadId;
     this.runId = input.runId ?? createId('run');
     this.messages = [...(input.messages ?? [])];
     this.state = { ...(input.state ?? {}) };
     this.modelHistory = toModelHistory(this.messages);
     for (const context of input.context ?? []) {
-      this.modelHistory.push({ type: 'message', role: 'developer', content: `${context.description}\n${context.value}` });
+      this.modelHistory.push({ type: 'message', role: context.role ?? 'developer', content: `${context.description}\n${context.value}` });
     }
     const userMessage = { id: createId('msg'), role: 'user' as const, content: input.input };
     this.messages.push(userMessage);
@@ -112,7 +114,7 @@ class Run implements AgentRun {
       this.resolveResult = resolve;
       this.rejectResult = reject;
     });
-    input.signal?.addEventListener('abort', () => this.cancel('aborted'), { once: true });
+    options.signal?.addEventListener('abort', () => this.cancel('aborted'), { once: true });
     queueMicrotask(() => void this.execute());
   }
 
@@ -155,7 +157,7 @@ class Run implements AgentRun {
     const limits = { ...DEFAULT_LIMITS, ...(this.input.limits ?? {}) };
     const startedAt = Date.now();
     this.current = 'running';
-    this.emit({ type: 'run.started', parentRunId: this.input.parentRunId, input: { ...this.input, signal: undefined } });
+    this.emit({ type: 'run.started', parentRunId: this.input.parentRunId, input: this.input });
     try {
       for (;;) {
         if (this.usage.steps >= limits.maxSteps) throw new AgentCoreError('step_limit', 'Agent step limit exceeded', 'limit');
@@ -170,6 +172,7 @@ class Run implements AgentRun {
           input: [...this.modelHistory],
           tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })),
           parallelToolCalls: this.agent.capabilities.tools.parallelCalls,
+          reasoning: toReasoning(this.input.metadata?.reasoningEffort),
           timeoutMs: limits.modelTimeoutMs,
           metadata: this.input.metadata,
           signal: this.controller.signal,
@@ -229,6 +232,12 @@ class Run implements AgentRun {
     for (const result of results) {
       this.messages.push(result.message);
       this.modelHistory.push({ type: 'tool_result', callId: result.message.toolCallId, output: result.modelOutput });
+      for (const context of result.context) {
+        this.modelHistory.push({ type: 'message', role: context.role ?? 'developer', content: `${context.description}\n${context.value}` });
+      }
+      if (result.media.length) {
+        this.modelHistory.push({ type: 'message', role: 'user', content: mapInputContent(result.media) });
+      }
     }
   }
 
@@ -241,7 +250,12 @@ class Run implements AgentRun {
     const result = await withTimeout(this.agent.tools.execute(validated, { threadId: this.threadId, runId: this.runId, stepId, signal: this.controller.signal }), timeoutMs, `Tool ${call.name} timed out`);
     const message = { id: createId('msg'), role: 'tool' as const, content: result.content, toolCallId: call.callId, error: result.error, encryptedValue: result.encryptedValue };
     this.emit({ type: result.error ? 'tool_result.failed' : 'tool_result.completed', stepId, messageId: message.id, toolCallId: call.callId, content: result.content, error: result.error });
-    return { message, modelOutput: result.output ?? result.content };
+    return {
+      message,
+      modelOutput: result.output ?? result.content,
+      context: result.context ?? [],
+      media: result.media ?? [],
+    };
   }
 
   private complete(message: AssistantMessage) {
@@ -253,6 +267,7 @@ class Run implements AgentRun {
   }
 
   streamEmit(input: AgentEventInput) { this.emit(input); }
+  exposesRawReasoning() { return this.input.metadata?.showRawReasoning === 'true'; }
 }
 
 class StepStream {
@@ -270,11 +285,11 @@ class StepStream {
       const messageId = this.startAssistant();
       this.assistantText += event.payload.delta;
       this.run.streamEmit({ type: 'message.content', stepId: this.stepId, messageId, delta: event.payload.delta });
-    } else if (event.type === 'thinking.delta' && event.payload.delta) {
+    } else if (event.type === 'thinking.delta' && event.payload.delta && (event.payload.visibility === 'summary' || this.run.exposesRawReasoning())) {
       const messageId = this.startReasoning();
       this.reasoningText += event.payload.delta;
       this.run.streamEmit({ type: 'reasoning_message.content', stepId: this.stepId, messageId, delta: event.payload.delta });
-    } else if (event.type === 'thinking.completed' && event.payload.text) {
+    } else if (event.type === 'thinking.completed' && event.payload.text && (event.payload.visibility === 'summary' || this.run.exposesRawReasoning())) {
       const messageId = this.startReasoning();
       const missing = event.payload.text.startsWith(this.reasoningText) ? event.payload.text.slice(this.reasoningText.length) : (this.reasoningText ? '' : event.payload.text);
       if (missing) {
@@ -355,6 +370,15 @@ function toAgentToolCall(call: ModelToolCall): AgentToolCall {
   return { id: call.callId, type: 'function', function: { name: call.name, arguments: call.argumentsJson } };
 }
 
+function toReasoning(value: string | undefined) {
+  if (value === 'off') return { effort: 'none' as const };
+  if (value === 'low') return { effort: 'low' as const };
+  if (value === 'medium') return { effort: 'medium' as const };
+  if (value === 'high') return { effort: 'high' as const };
+  if (value === 'max') return { effort: 'max' as const };
+  return undefined;
+}
+
 async function mapConcurrent<T, R>(values: T[], limit: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(values.length);
   let cursor = 0;
@@ -389,7 +413,7 @@ class AgentImpl implements Agent {
     };
     this.capabilities = { ...defaults, ...capabilities };
   }
-  run(input: AgentRunInput) { return new Run(this, input); }
+  run(input: AgentRunInput, options?: AgentRunOptions) { return new Run(this, input, options); }
 }
 
 export function createAgent(dependencies: AgentDependencies): Agent {

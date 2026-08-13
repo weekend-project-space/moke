@@ -2,7 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { ChatModelSettings } from '@moke/agent-re-act';
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
+export type ReasoningProvider = 'none' | 'llama.cpp';
+
+export type ChatModelSettings = {
+  apiKey: string;
+  apiBaseUrl: string;
+  maxRetries: number;
+  model: string;
+  type: ModelProviderType;
+  reasoningEffort: ReasoningEffort;
+  reasoningProvider: ReasoningProvider;
+  showRawReasoning: boolean;
+  timeoutMs: number;
+};
 
 export type ModelProviderType = 'openai-compatible' | 'openai-responses';
 
@@ -14,8 +27,8 @@ export type ModelProviderProfile = {
   apiBaseUrl: string;
   maxRetries: number;
   model: string;
-  reasoningEffort: ChatModelSettings['reasoningEffort'];
-  reasoningProvider: ChatModelSettings['reasoningProvider'];
+  reasoningEffort: ReasoningEffort;
+  reasoningProvider: ReasoningProvider;
   showRawReasoning: boolean;
   timeoutMs: number;
 };
@@ -50,8 +63,8 @@ export const MODEL_PROVIDER_TIMEOUT_DEFAULT_MS = 30 * 60 * 1000;
 export const MODEL_PROVIDER_MAX_RETRIES_MIN = 0;
 export const MODEL_PROVIDER_MAX_RETRIES_MAX = 6;
 export const MODEL_PROVIDER_MAX_RETRIES_DEFAULT = 3;
-export const MODEL_PROVIDER_REASONING_EFFORT_DEFAULT: ChatModelSettings['reasoningEffort'] = 'medium';
-export const MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT: ChatModelSettings['reasoningProvider'] = 'none';
+export const MODEL_PROVIDER_REASONING_EFFORT_DEFAULT: ReasoningEffort = 'medium';
+export const MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT: ReasoningProvider = 'none';
 export const MODEL_PROVIDER_SHOW_RAW_REASONING_DEFAULT = false;
 export const MODEL_PROVIDER_DEFAULT_NAME = 'Local Qwen';
 export const MODEL_PROVIDER_DEFAULT_API_KEY = 'test';
@@ -77,7 +90,7 @@ export function normalizeProviderMaxRetries(input: unknown, fallback = MODEL_PRO
 export function normalizeProviderReasoningEffort(
   input: unknown,
   fallback = MODEL_PROVIDER_REASONING_EFFORT_DEFAULT,
-): ChatModelSettings['reasoningEffort'] {
+): ReasoningEffort {
   if (input === 'ultra') return 'max';
   return input === 'off' || input === 'low' || input === 'medium' || input === 'high' || input === 'max'
     ? input
@@ -87,7 +100,7 @@ export function normalizeProviderReasoningEffort(
 export function normalizeProviderReasoningProvider(
   input: unknown,
   fallback = MODEL_PROVIDER_REASONING_PROVIDER_DEFAULT,
-): ChatModelSettings['reasoningProvider'] {
+): ReasoningProvider {
   return input === 'llama.cpp' ? input : fallback;
 }
 

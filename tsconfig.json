@@ -12,8 +12,6 @@
     { "path": "./packages/messaging-feishu" },
     { "path": "./packages/messaging-tools" },
     { "path": "./packages/agent-runtime" },
-    { "path": "./packages/agent-re-act" },
-    { "path": "./packages/agent-tools" },
     { "path": "./packages/agent-skills" },
     { "path": "./packages/browser-tools" },
     { "path": "./packages/mcp-client" },

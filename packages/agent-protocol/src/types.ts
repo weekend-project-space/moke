@@ -22,12 +22,19 @@ export type ActivityMessage = { id: string; role: 'activity'; activityType: stri
 export type ReasoningMessage = { id: string; role: 'reasoning'; content: string; encryptedValue?: string };
 export type AgentMessage = DeveloperMessage | SystemMessage | UserMessage | AssistantMessage | ToolMessage | ActivityMessage | ReasoningMessage;
 
-export type AgentContext = { description: string; value: string };
+export type AgentContext = { description: string; value: string; role?: 'developer' | 'user' };
 export type AgentToolDefinition = { name: string; description: string; parameters: JsonObject; strict?: boolean; approval?: 'none' | 'required' };
 export type AgentToolCall = { id: string; type: 'function'; function: { name: string; arguments: string }; encryptedValue?: string };
 export type ValidatedToolCall = AgentToolCall & { parsedArguments: JsonObject };
 export type ToolExecutionContext = { threadId: string; runId: string; stepId: string; signal: AbortSignal };
-export type ToolExecutionResult = { content: string; output?: unknown; error?: string; encryptedValue?: string };
+export type ToolExecutionResult = {
+  content: string;
+  output?: unknown;
+  error?: string;
+  encryptedValue?: string;
+  context?: AgentContext[];
+  media?: MediaInputContent[];
+};
 export interface ToolProvider {
   listTools(filter?: { names?: string[] }): AgentToolDefinition[];
   validate(call: AgentToolCall): ValidatedToolCall;
@@ -50,7 +57,6 @@ export type AgentRunInput = {
   enabledToolNames?: string[];
   limits?: Partial<AgentLimits>;
   metadata?: Record<string, string>;
-  signal?: AbortSignal;
 };
 
 export type JsonPatchOperation =

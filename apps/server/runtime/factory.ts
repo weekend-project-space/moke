@@ -1,6 +1,5 @@
 import path from 'node:path';
 
-import { ReActAgent, ReActApprovalReviewer } from '@moke/agent-re-act';
 import { RunManager, ToolRegistry, type RuntimeContentManager, type RuntimeRun, type WorkspacePathApprovalDecision } from '@moke/agent-runtime';
 import { LocalSystemBackend, registerAgentTools } from '@moke/agent-tools';
 import {
@@ -9,8 +8,10 @@ import {
   SkillLoader,
 } from '@moke/agent-skills';
 import { registerBrowserTools } from '@moke/browser-tools';
-import type { ChatModelSettings } from '@moke/agent-re-act';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
+import type { ChatModelSettings } from '../storage/settings.js';
+import { CoreAgentAdapter } from './core-agent-adapter.js';
+import { LlmApprovalReviewer } from './llm-approval-reviewer.js';
 import type { ImageAttachment, ModelSelection, ResolvedImageAttachment, Session } from '@moke/protocol';
 
 export function createToolRegistry(input: {
@@ -59,7 +60,7 @@ export function createRunManager(input: {
 }) {
   return new RunManager({
     runs: input.runs,
-    agent: new ReActAgent({ getModelSettings: input.getModelSettings }),
+    agent: new CoreAgentAdapter(input.getModelSettings),
     toolRegistry: input.toolRegistry,
     resolveToolRegistry: input.resolveToolRegistry,
     defaultWorkspaceRoot: input.defaultWorkspaceRoot,
@@ -68,6 +69,6 @@ export function createRunManager(input: {
     workspaceRoots: input.workspaceRoots,
     resolveImageAttachments: input.resolveImageAttachments,
     onSessionChanged: input.onSessionChanged,
-    aiApprovalReviewer: new ReActApprovalReviewer(input.getModelSettings),
+    aiApprovalReviewer: new LlmApprovalReviewer(input.getModelSettings),
   });
 }

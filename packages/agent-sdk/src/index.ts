@@ -5,7 +5,7 @@ export {
   SessionHandle,
 } from './client.js';
 export { AgentProtocolClient } from './protocol-client.js';
-export type { AgentEventStreamOptions, AgentProtocolClientOptions } from './protocol-client.js';
+export type { AgentEventStreamOptions, AgentProtocolClientOptions, AgentRequestOptions } from './protocol-client.js';
 export { createAgentRunSnapshot, reduceAgentEvent } from '@moke/agent-protocol';
 export type { AgentEvent as ProtocolAgentEvent, AgentRunInput as ProtocolAgentRunInput, AgentRunSnapshot as ProtocolAgentRunSnapshot } from '@moke/agent-protocol';
 export {

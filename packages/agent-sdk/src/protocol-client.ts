@@ -3,13 +3,16 @@ import type { AgentEvent, AgentInteractionResponse, AgentRunInput, AgentRunSnaps
 import { readSseData } from './event-stream.js';
 
 export type AgentProtocolClientOptions = { baseUrl: string; token?: string; fetch?: typeof fetch; maxReconnectAttempts?: number; maxReconnectDelayMs?: number };
+export type AgentRequestOptions = { signal?: AbortSignal };
 export type AgentEventStreamOptions = { afterSequence?: number; reconnect?: boolean; signal?: AbortSignal; onReconnect?: (attempt: number, delayMs: number) => void };
 
 export class AgentProtocolClient {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
-  constructor(private readonly options: AgentProtocolClientOptions) { this.baseUrl = options.baseUrl.replace(/\/+$/, ''); this.fetcher = (options.fetch ?? fetch).bind(globalThis); }
-  async createRun(input: AgentRunInput) { return this.json<{ threadId: string; runId: string; status: string }>('/api/agent/runs', { method: 'POST', body: JSON.stringify(serializableInput(input)) }, input.signal); }
+  readonly maxReconnectAttempts: number;
+  readonly maxReconnectDelayMs: number;
+  constructor(private readonly options: AgentProtocolClientOptions) { this.baseUrl = options.baseUrl.replace(/\/+$/, ''); this.fetcher = (options.fetch ?? fetch).bind(globalThis); this.maxReconnectAttempts = options.maxReconnectAttempts ?? 8; this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? 5_000; }
+  async createRun(input: AgentRunInput, options: AgentRequestOptions = {}) { return this.json<{ threadId: string; runId: string; status: string }>('/api/agent/runs', { method: 'POST', body: JSON.stringify(input) }, options.signal); }
   async getRun(runId: string, signal?: AbortSignal) { return this.json<{ run: AgentRunSnapshot }>(`/api/agent/runs/${encodeURIComponent(runId)}`, {}, signal).then(value => value.run); }
   async respond(runId: string, response: AgentInteractionResponse, signal?: AbortSignal) { return this.json<{ accepted: boolean }>(`/api/agent/runs/${encodeURIComponent(runId)}/respond`, { method: 'POST', body: JSON.stringify(response) }, signal); }
   async cancel(runId: string, reason?: string, signal?: AbortSignal) { return this.json<{ accepted: boolean }>(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }, signal); }
@@ -24,8 +27,8 @@ export class AgentProtocolClient {
 async function* streamProtocolEvents(client: AgentProtocolClient, runId: string, options: AgentEventStreamOptions): AsyncGenerator<AgentEvent> {
   let sequence = Math.max(0, options.afterSequence ?? 0);
   let attempts = 0;
-  const maxAttempts = client['options'].maxReconnectAttempts ?? 8;
-  const maxDelay = client['options'].maxReconnectDelayMs ?? 5_000;
+  const maxAttempts = client.maxReconnectAttempts;
+  const maxDelay = client.maxReconnectDelayMs;
   for (;;) {
     if (options.signal?.aborted) throw options.signal.reason;
     try {
@@ -46,5 +49,4 @@ async function* streamProtocolEvents(client: AgentProtocolClient, runId: string,
 }
 
 function parseEvent(data: string, runId: string): AgentEvent { const value = JSON.parse(data) as Partial<AgentEvent>; if (!value || typeof value.eventId !== 'string' || typeof value.sequence !== 'number' || typeof value.type !== 'string' || value.runId !== runId || typeof value.threadId !== 'string') throw new Error('Invalid AgentEvent'); return value as AgentEvent; }
-function serializableInput(input: AgentRunInput) { const { signal: _signal, ...value } = input; return value; }
 function delay(ms: number, signal?: AbortSignal) { return new Promise<void>((resolve, reject) => { const timer = setTimeout(resolve, ms); signal?.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true }); }); }
