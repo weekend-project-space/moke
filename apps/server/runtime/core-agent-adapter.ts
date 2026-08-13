@@ -50,7 +50,12 @@ export function toLlmClientOptions(settings: ChatModelSettings): LlmClientOption
     timeoutMs: settings.timeoutMs,
     maxRetries: settings.maxRetries,
     ...(settings.type === 'openai-compatible'
-      ? { compatible: { reasoningFormat: settings.reasoningProvider === 'llama.cpp' ? 'reasoning_content' : 'none' } }
+      ? {
+          compatible: {
+            reasoningFormat: settings.reasoningProvider === 'llama.cpp' ? 'reasoning_content' : 'none',
+            supportsDeveloperRole: false,
+          },
+        }
       : {}),
   };
 }

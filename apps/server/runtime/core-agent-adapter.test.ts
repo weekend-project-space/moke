@@ -5,7 +5,23 @@ import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
 import { EventBus, type RuntimeRun } from '@moke/agent-runtime';
 import type { AgentEvent } from '@moke/protocol';
 
-import { forwardCoreEvents } from './core-agent-adapter.js';
+import { forwardCoreEvents, toLlmClientOptions } from './core-agent-adapter.js';
+
+test('maps developer messages to system for OpenAI-compatible providers', () => {
+  const options = toLlmClientOptions({
+    apiKey: '',
+    apiBaseUrl: 'http://localhost:8080/v1',
+    maxRetries: 1,
+    model: 'local-model',
+    type: 'openai-compatible',
+    reasoningEffort: 'medium',
+    reasoningProvider: 'none',
+    showRawReasoning: false,
+    timeoutMs: 30_000,
+  });
+
+  assert.equal(options.compatible?.supportsDeveloperRole, false);
+});
 
 test('forwards one complete core assistant message and projects its runtime result', async () => {
   const timestamp = Date.parse('2026-08-13T01:00:00.000Z');
