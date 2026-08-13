@@ -87,6 +87,9 @@ export class SessionRunActiveError extends Error {
 }
 
 function readSessionMessage(event: AgentEvent): Message | null {
+  if (event.type === 'custom' && event.name === 'moke.internal.message') {
+    return isSessionMessage(event.value) ? event.value : null;
+  }
   if (event.type === 'message.completed') return toSessionMessage(event.message, event.timestamp, event.reasoning);
   if (event.type === 'tool_result.completed' || event.type === 'tool_result.failed') {
     return {
@@ -101,6 +104,15 @@ function readSessionMessage(event: AgentEvent): Message | null {
     };
   }
   return null;
+}
+
+function isSessionMessage(value: unknown): value is Message {
+  if (!value || typeof value !== 'object') return false;
+  const message = value as Partial<Message>;
+  return typeof message.id === 'string'
+    && (message.role === 'user' || message.role === 'assistant' || message.role === 'tool')
+    && typeof message.content === 'string'
+    && typeof message.created_at === 'string';
 }
 
 function toSessionMessage(message: AgentMessage, timestamp: number, reasoning?: string): Message | null {

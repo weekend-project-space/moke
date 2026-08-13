@@ -216,7 +216,7 @@ test('runtime keeps inbound work queued until the session active run finishes', 
     assert.equal(accepted, 0);
 
     active = false;
-    runtime.onRunEvent({ type: 'agent.done', payload: { status: 'completed' } } as never, {
+    runtime.onRunEvent({ type: 'run.completed' } as never, {
       id: 'run_local', session_id: session.id, origin: { kind: 'local' },
     } as never);
     await new Promise<void>((resolve) => setImmediate(resolve));

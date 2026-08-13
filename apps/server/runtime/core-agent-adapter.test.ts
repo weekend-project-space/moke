@@ -7,7 +7,7 @@ import type { AgentEvent } from '@moke/protocol';
 
 import { forwardCoreEvents } from './core-agent-adapter.js';
 
-test('persists one complete assistant message for streamed text and multiple tool calls', async () => {
+test('forwards one complete core assistant message and projects its runtime result', async () => {
   const timestamp = Date.parse('2026-08-13T01:00:00.000Z');
   const events = [
     coreEvent({ type: 'step.started', stepId: 'step_1', stepName: 'model-1' }, 1, timestamp),
@@ -49,14 +49,19 @@ test('persists one complete assistant message for streamed text and multiple too
     id: 'msg_1',
     role: 'assistant',
     content: 'I will check both.',
-    created_at: timestamp,
-    reasoning: 'Need both files.',
+    toolCalls: [
+      { id: 'call_1', type: 'function', function: { name: 'read', arguments: '{"path":"a"}' } },
+      { id: 'call_2', type: 'function', function: { name: 'read', arguments: '{"path":"b"}' } },
+    ],
+  });
+  assert.deepEqual(completed.get('msg_1'), {
+    id: 'msg_1', role: 'assistant', content: 'I will check both.',
+    created_at: new Date(timestamp).toISOString(), reasoning: 'Need both files.',
     tool_calls: [
       { id: 'call_1', name: 'read', args: { path: 'a' } },
       { id: 'call_2', name: 'read', args: { path: 'b' } },
     ],
   });
-  assert.deepEqual(completed.get('msg_1'), messages[0]);
 });
 
 function coreEvent(

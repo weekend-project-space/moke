@@ -31,7 +31,7 @@ export type {
   ListModelsOptions,
   ModelProviderModels,
   ModelSummary,
-  PromptOptions,
+  ChatOptions,
   PromptInput,
   RequestOptions,
   RunEventsOptions,

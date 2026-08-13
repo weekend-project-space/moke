@@ -35,7 +35,7 @@ import type {
   RunLifecycleOptions,
   SessionRunEventListener,
   SessionRunEventOptions,
-  PromptOptions,
+  ChatOptions,
   RequestOptions,
   RunEventsOptions,
   RunResult,
@@ -194,7 +194,7 @@ export class SessionHandle {
     return new InteractiveSessionHandle(this.client, this.id, handlers);
   }
 
-  async prompt(input: SendMessageInput, options: PromptOptions = {}) {
+  async chat(input: SendMessageInput, options: ChatOptions = {}) {
     const run = await this.send(input, options);
     return run.consume(options);
   }
@@ -291,7 +291,7 @@ export class InteractiveSessionHandle extends SessionHandle {
     });
   }
 
-  override async prompt(input: SendMessageInput, options: PromptOptions = {}) {
+  override async chat(input: SendMessageInput, options: ChatOptions = {}) {
     const run = await this.send(input, options);
     return run.consume({
       ...options,
@@ -367,7 +367,7 @@ export class RunHandle {
     return resultFromSnapshot(await this.get(options));
   }
 
-  async consume(options: PromptOptions = {}) {
+  async consume(options: ChatOptions = {}) {
     const handlers = normalizeHandlers(options.handlers);
     let finalEvent: AgentEvent | undefined;
     for await (const event of this.events(options)) {

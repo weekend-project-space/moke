@@ -57,7 +57,7 @@ test('RunManager exposes messaging origin to in-process observers', async () => 
   const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
   const observed: string[] = [];
   manager.addObserver((event, run) => {
-    if (event.type === 'agent.done') observed.push(run.origin.kind);
+    if (event.type === 'run.completed') observed.push(run.origin.kind);
   });
   const run = manager.createRun(session, { content: 'start' }, {
     origin: {
@@ -113,7 +113,7 @@ test('RunManager fails a run when skill context initialization fails', async () 
     },
   });
   manager.addObserver((event) => {
-    if (event.type === 'agent.error') errors.push(event.payload.message);
+    if (event.type === 'run.failed') errors.push(event.error.message);
   });
 
   const run = manager.createRun(session, { content: 'start' });
@@ -237,8 +237,8 @@ test('RunManager times out the whole run and clears a pending approval', async (
   assert.equal(manager.approve(run.id, approvalId, 'approved').status, 409);
   assert.equal(manager.getActiveRunForSession(session.id), undefined);
   assert.equal(
-    run.events.filter((event) => event.type === 'agent.done').at(-1)?.payload.status,
-    'timeout',
+    run.events.filter((event) => event.type === 'run.timed_out').at(-1)?.type,
+    'run.timed_out',
   );
   assert.match(session.messages.at(-1)?.content || '', /timed out after 20ms/);
 });
@@ -276,8 +276,8 @@ test('RunManager records an ask answer as an interaction event instead of chat m
     { role: 'assistant', content: 'Yes' },
   ]);
   assert.deepEqual(
-    run.events.filter((item) => item.type.startsWith('ask_user.')).map((item) => item.type),
-    ['ask_user.required', 'ask_user.answered'],
+    run.events.filter((item) => item.type.startsWith('interaction.')).map((item) => item.type),
+    ['interaction.required', 'interaction.resolved'],
   );
 });
 
@@ -311,12 +311,10 @@ test('RunManager emits approval resolution after a decision', async () => {
   assert.equal(manager.approve(run.id, approvalId, 'approved', { scope: 'once' }).status, 200);
   await waitFor(() => run.status === 'completed');
 
-  const resolved = run.events.find((item) => item.type === 'approval.resolved');
-  assert.deepEqual(resolved?.payload, {
-    approval_id: approvalId,
-    decision: 'approved',
-    scope: 'once',
-  });
+  const resolved = run.events.find((item) => item.type === 'interaction.resolved');
+  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.interactionId : '', approvalId);
+  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.response.decision : '', 'approved');
+  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.response.scope : '', 'once');
   assert.deepEqual(recordedApprovals, [{
     approval_id: approvalId,
     kind: 'tool',
@@ -332,9 +330,7 @@ test('RunManager persists a returned final message after intermediate tool messa
   const finalMessage = message({ role: 'assistant', content: 'final' });
   const agent: Agent = {
     async run(input) {
-      input.eventBus.emit('agent.message.done', {
-        message: message({ role: 'tool', content: 'tool output', tool_call_id: 'call_1', name: 'test' }),
-      });
+      input.eventBus.emit({ type: 'tool_result.completed', messageId: 'tool_message', toolCallId: 'call_1', toolName: 'test', content: 'tool output' });
       return {
         toolCalls: 1,
         message: finalMessage,
@@ -356,8 +352,8 @@ test('RunManager persists a returned final message after intermediate tool messa
     { role: 'tool', content: 'tool output' },
     { role: 'assistant', content: 'final' },
   ]);
-  const done = run.events.find((event) => event.type === 'agent.done');
-  assert.equal(done?.type === 'agent.done' ? done.payload.usage?.cached_input_tokens : undefined, 75);
+  const done = run.events.find((event) => event.type === 'run.completed');
+  assert.equal(done?.type === 'run.completed' ? done.usage?.cachedInputTokens : undefined, 75);
 });
 
 test('RunManager carries internal session context into the next run history', async () => {
@@ -368,13 +364,7 @@ test('RunManager carries internal session context into the next run history', as
     async run(input) {
       invocation++;
       if (invocation === 1) {
-        input.eventBus.emit('agent.message.done', {
-          message: message({
-            role: 'user',
-            content: '<active_skill id="openwalk-usage">instructions</active_skill>',
-            visibility: 'internal',
-          }),
-        });
+        input.eventBus.emit({ type: 'custom', name: 'moke.internal.message', value: message({ role: 'user', content: '<active_skill id="openwalk-usage">instructions</active_skill>', visibility: 'internal' }) });
       } else {
         nextRunHistory = input.history || [];
       }
@@ -414,7 +404,7 @@ test('RunManager shutdown waits for execution and ignores late messages', async 
       started = true;
       await gate;
       const finalMessage = message({ role: 'assistant', content: 'late' });
-      input.eventBus.emit('agent.message.done', { message: finalMessage });
+      input.eventBus.emit({ type: 'message.completed', messageId: finalMessage.id, message: { id: finalMessage.id, role: 'assistant', content: finalMessage.content } });
       return { toolCalls: 0, message: finalMessage };
     },
   };
@@ -519,8 +509,8 @@ test('RunManager resumes an ask with custom text', async () => {
     workspace: process.cwd(),
   });
   manager.addObserver((event, run) => {
-    if (event.type === 'ask_user.required') {
-      assert.equal(manager.answer(run.id, event.payload.ask_id, undefined, '  My answer  ').status, 200);
+    if (event.type === 'interaction.required' && event.interaction.type === 'question') {
+      assert.equal(manager.answer(run.id, event.interaction.id, undefined, '  My answer  ').status, 200);
     }
   });
 

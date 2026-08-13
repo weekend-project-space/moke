@@ -193,6 +193,6 @@ export type InteractionHandlerOverrides = {
   [Key in keyof InteractionHandlers]?: InteractionHandlers[Key] | null;
 };
 
-export type PromptOptions = RequestOptions & {
+export type ChatOptions = RequestOptions & {
   handlers?: InteractionHandlerOverrides;
 };

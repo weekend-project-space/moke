@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { AgentEvent, RunSnapshot } from '@moke/protocol';
+import type { AgentEvent, AgentEventInput } from '@moke/agent-protocol';
+import type { RunSnapshot } from '@moke/protocol';
 import { MokeClient } from './client.js';
 import { MokeNetworkError, MokeProtocolError } from './errors.js';
 
@@ -12,13 +13,14 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function event(overrides: Partial<AgentEvent> & Pick<AgentEvent, 'seq' | 'type' | 'payload'>): AgentEvent {
+function event(input: AgentEventInput, sequence: number, runId = 'run_1'): AgentEvent {
   return {
-    id: `evt_${overrides.seq}`,
-    run_id: 'run_1',
-    session_id: 'sess_1',
-    ts: '2026-07-21T00:00:00.000Z',
-    ...overrides,
+    ...input,
+    eventId: `evt_${runId}_${sequence}`,
+    sequence,
+    runId,
+    threadId: 'sess_1',
+    timestamp: Date.parse('2026-07-21T00:00:00.000Z'),
   } as AgentEvent;
 }
 
@@ -182,13 +184,9 @@ test('SessionHandle.get rejects a detail response without metadata', async () =>
 
 test('RunHandle.events parses split SSE data and removes replayed sequences', async () => {
   const events = [
-    event({ seq: 1, type: 'agent.started', payload: { input: 'hello' } }),
-    event({ seq: 1, type: 'agent.started', payload: { input: 'hello' } }),
-    event({
-      seq: 2,
-      type: 'agent.done',
-      payload: { status: 'completed', usage: { steps: 1, tool_calls: 0, duration_ms: 4 } },
-    }),
+    event({ type: 'run.started' }, 1),
+    event({ type: 'run.started' }, 1),
+    event({ type: 'run.completed', usage: { steps: 1, toolCalls: 0, inputTokens: 0, outputTokens: 0 } }, 2),
   ];
   const client = new MokeClient({
     baseUrl: '',
@@ -198,11 +196,11 @@ test('RunHandle.events parses split SSE data and removes replayed sequences', as
   const received: AgentEvent[] = [];
   for await (const item of client.run('run_1').events()) received.push(item);
 
-  assert.deepEqual(received.map((item) => item.seq), [1, 2]);
+  assert.deepEqual(received.map((item) => item.sequence), [1, 2]);
 });
 
 test('RunHandle.events stops when replay ends after an already consumed terminal event', async () => {
-  const done = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+  const done = event({ type: 'run.completed' }, 2);
   let requests = 0;
   const client = new MokeClient({
     baseUrl: '',
@@ -222,8 +220,8 @@ test('RunHandle.events stops when replay ends after an already consumed terminal
 });
 
 test('RunHandle.events resumes with Last-Event-ID after a disconnected stream', async () => {
-  const state = event({ seq: 1, type: 'agent.state', payload: { state: 'reason' } });
-  const done = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+  const state = event({ type: 'state.snapshot', snapshot: { phase: 'reason' } }, 1);
+  const done = event({ type: 'run.completed' }, 2);
   const eventHeaders: Array<string | null> = [];
   let eventRequests = 0;
   const client = new MokeClient({
@@ -241,7 +239,7 @@ test('RunHandle.events resumes with Last-Event-ID after a disconnected stream', 
   const received: AgentEvent[] = [];
   for await (const item of client.run('run_1').events({ maxReconnectDelayMs: 0 })) received.push(item);
 
-  assert.deepEqual(received.map((item) => item.seq), [1, 2]);
+  assert.deepEqual(received.map((item) => item.sequence), [1, 2]);
   assert.deepEqual(eventHeaders, [null, '1']);
 });
 
@@ -270,7 +268,7 @@ test('RunHandle.events stops after the configured reconnect limit', async () => 
 test('RunHandle.events cancels the response body when the consumer exits early', async () => {
   let cancelled = false;
   const encoder = new TextEncoder();
-  const state = event({ seq: 1, type: 'agent.state', payload: { state: 'reason' } });
+  const state = event({ type: 'state.snapshot', snapshot: { phase: 'reason' } }, 1);
   const response = new Response(new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(state)}\n\n`));
@@ -390,7 +388,7 @@ test('SessionHandle.onRunEvent follows the session active run and provides its h
   const done = new Promise<void>((resolve) => { resolveDone = resolve; });
   const stop = client.session('sess_1').onRunEvent((item, run) => {
     received.push({ event: item, runId: run.id, sessionId: run.sessionId });
-    if (item.type === 'agent.done') resolveDone();
+    if (item.type === 'run.completed') resolveDone();
   });
   await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -398,12 +396,8 @@ test('SessionHandle.onRunEvent follows the session active run and provides its h
     'data: {"type":"running","sessionId":"sess_1","runId":"run_1"}\n\n',
   ));
   await new Promise<void>((resolve) => setImmediate(resolve));
-  const delta = event({
-    seq: 1,
-    type: 'agent.message.delta',
-    payload: { channel: 'answer', content: 'hello' },
-  });
-  const finished = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+  const delta = event({ type: 'message.content', messageId: 'msg_1', delta: 'hello' }, 1);
+  const finished = event({ type: 'run.completed' }, 2);
   eventsController.enqueue(encoder.encode(`data: ${JSON.stringify(delta)}\n\n`));
   lifecycleController.enqueue(encoder.encode(
     'data: {"type":"completed","sessionId":"sess_1","runId":"run_1"}\n\n',
@@ -415,7 +409,7 @@ test('SessionHandle.onRunEvent follows the session active run and provides its h
   stop();
   lifecycleController.close();
 
-  assert.deepEqual(received.map(({ event: item }) => item.type), ['agent.message.delta', 'agent.done']);
+  assert.deepEqual(received.map(({ event: item }) => item.type), ['message.content', 'run.completed']);
   assert.deepEqual(received.map(({ runId }) => runId), ['run_1', 'run_1']);
   assert.deepEqual(received.map(({ sessionId }) => sessionId), ['sess_1', 'sess_1']);
 });
@@ -482,7 +476,7 @@ test('SessionHandle.onRunEvent follows subsequent runs without resubscribing', a
   ));
   await new Promise<void>((resolve) => setImmediate(resolve));
   eventControllers[0].enqueue(encoder.encode(`data: ${JSON.stringify(
-    event({ seq: 1, type: 'agent.done', payload: { status: 'completed' } }),
+    event({ type: 'run.completed' }, 1),
   )}\n\n`));
   eventControllers[0].close();
   lifecycleController.enqueue(encoder.encode(
@@ -493,8 +487,7 @@ test('SessionHandle.onRunEvent follows subsequent runs without resubscribing', a
   ));
   await new Promise<void>((resolve) => setImmediate(resolve));
   eventControllers[1].enqueue(encoder.encode(`data: ${JSON.stringify({
-    ...event({ seq: 1, type: 'agent.done', payload: { status: 'completed' } }),
-    run_id: 'run_2',
+    ...event({ type: 'run.completed' }, 1, 'run_2'),
   })}\n\n`));
   eventControllers[1].close();
 
@@ -502,33 +495,12 @@ test('SessionHandle.onRunEvent follows subsequent runs without resubscribing', a
   stop();
   lifecycleController.close();
 
-  assert.deepEqual(received, ['run_1:agent.done', 'run_2:agent.done']);
+  assert.deepEqual(received, ['run_1:run.completed', 'run_2:run.completed']);
 });
 
 test('RunHandle.result reads a completed run snapshot', async () => {
-  const done = event({
-    seq: 2,
-    type: 'agent.done',
-    payload: {
-      status: 'completed',
-      usage: {
-        steps: 2,
-        tool_calls: 1,
-        duration_ms: 8,
-        input_tokens: 100,
-        output_tokens: 20,
-        cached_input_tokens: 75,
-        uncached_input_tokens: 25,
-      },
-    },
-  });
-  const message = event({
-    seq: 1,
-    type: 'agent.message.done',
-    payload: {
-      message: { id: 'msg_1', role: 'assistant', content: 'done', created_at: '2026-07-21T00:00:00.000Z' },
-    },
-  });
+  const done = event({ type: 'run.completed', usage: { steps: 2, toolCalls: 1, inputTokens: 100, outputTokens: 20, cachedInputTokens: 75 } }, 2);
+  const message = event({ type: 'message.completed', messageId: 'msg_1', message: { id: 'msg_1', role: 'assistant', content: 'done' } }, 1);
   const run: RunSnapshot = {
     id: 'run_1', session_id: 'sess_1', status: 'completed', seq: 2, events: [message, done],
   };
@@ -544,11 +516,10 @@ test('RunHandle.result reads a completed run snapshot', async () => {
   assert.deepEqual(result.usage, {
     steps: 2,
     toolCalls: 1,
-    durationMs: 8,
+    durationMs: 0,
     inputTokens: 100,
     outputTokens: 20,
     cachedInputTokens: 75,
-    uncachedInputTokens: 25,
   });
 });
 
@@ -671,20 +642,9 @@ test('RunHandle sends custom ask answers', async () => {
   assert.deepEqual(requests, [{ type: 'choose', request_id: 'ask_1', custom_text: 'Another answer' }]);
 });
 
-test('withHandlers creates an immutable session policy and prompt overrides bound handlers', async () => {
-  const approval = event({
-    seq: 1,
-    type: 'approval.required',
-    payload: {
-      approval_id: 'apv_1',
-      call_id: 'call_1',
-      kind: 'tool',
-      reason: 'Allow write?',
-      action: { tool: 'write_file', input: { path: 'README.md' } },
-      created_at: '2026-07-21T00:00:00.000Z',
-    },
-  });
-  const done = event({ seq: 2, type: 'agent.done', payload: { status: 'completed' } });
+test('withHandlers creates an immutable session policy and chat overrides bound handlers', async () => {
+  const approval = event({ type: 'interaction.required', interaction: { id: 'apv_1', type: 'approval', toolCallId: 'call_1', approvalKind: 'tool', reason: 'Allow write?', action: { tool: 'write_file', input: { path: 'README.md' } } } }, 1);
+  const done = event({ type: 'run.completed' }, 2);
   const snapshot: RunSnapshot = {
     id: 'run_1', session_id: 'sess_1', status: 'completed', seq: 2, events: [approval, done],
   };
@@ -710,7 +670,7 @@ test('withHandlers creates an immutable session policy and prompt overrides boun
   });
   let contextIds: string[] = [];
 
-  const result = await interactive.prompt(
+  const result = await interactive.chat(
     { content: 'update the readme' },
     {
       handlers: {
