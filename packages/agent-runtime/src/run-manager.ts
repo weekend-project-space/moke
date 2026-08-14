@@ -340,6 +340,24 @@ export class RunManager {
       suggested_root: input.suggestedRoot,
       created_at: new Date().toISOString(),
     };
+
+    if (run.approval_mode === 'auto_approve') {
+      const scope = 'once';
+      const reviewReason = 'Approved by the session auto-approve policy';
+      const workspaceApproval = this.config.approveWorkspaceRoot?.(
+        input.suggestedRoot,
+        scope,
+        run.session_id,
+      );
+      this.recordApproval(run.id, pendingApproval, 'approved', scope, 'auto_approve', reviewReason);
+      return Promise.resolve({
+        approved: true,
+        scope,
+        approvedRoots: workspaceApproval?.approvedRoots,
+        cleanup: workspaceApproval?.cleanup,
+      });
+    }
+
     run.pending_approval = pendingApproval;
     this.setStatus(run, 'awaiting_approval');
 

@@ -229,8 +229,108 @@ test('runtime keeps inbound work queued until the session active run finishes', 
   }
 });
 
+test('runtime resolves a pending Weixin question from a number or option label', async () => {
+  for (const reply of ['2', 'Deploy now']) {
+    const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+    try {
+      const harness = createHarness();
+      harness.bindings.push({ ...binding('bind_ask', 'wxconn_1', 'weixin', 'sess_ask'), conversation_id: 'user_1' });
+      harness.interactions.push(interaction('int_ask', 'bind_ask'));
+      const answers: Array<{ runId: string; requestId: string; optionId?: string }> = [];
+      const runtime = new MessagingRuntime(
+        harness.store as never,
+        harness.connections as never,
+        { getSession: () => ({ id: 'sess_ask' }) } as never,
+        {
+          answer(runId: string, requestId: string, optionId?: string) {
+            answers.push({ runId, requestId, optionId });
+            return { status: 200 };
+          },
+          getActiveRunForSession: () => ({ id: 'run_ask' }),
+        } as never,
+        {} as never,
+        directory,
+        () => [directory],
+      );
+      const event = weixinTextEvent(reply, `msg_${reply}`);
+
+      assert.deepEqual(await runtime.acceptInbound(event), { status: 'accepted' });
+      assert.deepEqual(answers, [{ runId: 'run_ask', requestId: 'ask_1', optionId: 'deploy' }]);
+      assert.equal(harness.inboundJobs[0]?.state, 'completed');
+      assert.deepEqual(await runtime.acceptInbound(event), { status: 'duplicate' });
+      await runtime.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test('runtime keeps a pending Weixin question open after an invalid option', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+  try {
+    const harness = createHarness();
+    harness.bindings.push({ ...binding('bind_ask', 'wxconn_1', 'weixin', 'sess_ask'), conversation_id: 'user_1' });
+    harness.interactions.push(interaction('int_ask', 'bind_ask'));
+    let answers = 0;
+    const runtime = new MessagingRuntime(
+      harness.store as never,
+      harness.connections as never,
+      { getSession: () => ({ id: 'sess_ask' }) } as never,
+      {
+        answer() { answers++; return { status: 200 }; },
+        getActiveRunForSession: () => ({ id: 'run_ask' }),
+      } as never,
+      {} as never,
+      directory,
+      () => [directory],
+    );
+
+    assert.deepEqual(await runtime.acceptInbound(weixinTextEvent('9', 'msg_invalid')), { status: 'accepted' });
+    assert.equal(answers, 0);
+    assert.equal(harness.interactions[0]?.state, 'pending');
+    assert.equal(harness.inboundJobs[0]?.state, 'completed');
+    assert.match(String(harness.jobs[0]?.operation.contents[0]?.text), /1\. Wait/);
+    assert.match(String(harness.jobs[0]?.operation.contents[0]?.text), /2\. Deploy now/);
+    await runtime.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('runtime does not resolve an approval from Weixin text', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-runtime-'));
+  try {
+    const harness = createHarness();
+    harness.bindings.push({ ...binding('bind_approval', 'wxconn_1', 'weixin', 'sess_approval'), conversation_id: 'user_1' });
+    harness.interactions.push({ ...interaction('int_approval', 'bind_approval'), kind: 'approval' });
+    let approvals = 0;
+    const runtime = new MessagingRuntime(
+      harness.store as never,
+      harness.connections as never,
+      { getSession: () => ({ id: 'sess_approval' }) } as never,
+      {
+        approve() { approvals++; return { status: 200 }; },
+        getActiveRunForSession: () => ({ id: 'run_ask' }),
+      } as never,
+      {} as never,
+      directory,
+      () => [directory],
+    );
+
+    assert.deepEqual(await runtime.acceptInbound(weixinTextEvent('1', 'msg_approval')), { status: 'accepted' });
+    assert.equal(approvals, 0);
+    assert.equal(harness.interactions[0]?.state, 'pending');
+    assert.equal(harness.inboundJobs[0]?.state, 'queued');
+    await runtime.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function createHarness(deliveryError?: Error) {
   const jobs: Array<Record<string, any>> = [];
+  const inboundJobs: Array<Record<string, any>> = [];
+  const interactions: Array<Record<string, any>> = [];
   const delivered: Array<Record<string, unknown>> = [];
   const startedConnections: string[] = [];
   const bindings: Array<Record<string, string>> = [];
@@ -275,13 +375,52 @@ function createHarness(deliveryError?: Error) {
         .filter((job) => job.state === 'pending')
         .sort((left, right) => String(left.next_attempt_at).localeCompare(String(right.next_attempt_at)))[0]?.next_attempt_at;
     },
-    getBinding() {
-      return { id: 'bind_1', platform: 'weixin', account_id: 'conn_1', conversation_id: 'user_1', conversation_type: 'direct' };
+    findBinding(accountId: string, conversationId: string, platform?: string) {
+      return bindings.find((item) => item.account_id === accountId
+        && item.conversation_id === conversationId
+        && (!platform || item.platform === platform)) || null;
+    },
+    getBinding(id?: string) {
+      return bindings.find((item) => item.id === id)
+        || { id: 'bind_1', platform: 'weixin', account_id: 'conn_1', conversation_id: 'user_1', conversation_type: 'direct' };
     },
     listBindings(input: { platform?: string } = {}) {
       return bindings.filter((binding) => !input.platform || binding.platform === input.platform);
     },
     getLatestOutboundReference() { return undefined; },
+    enqueueInboundJob(input: Record<string, any>) {
+      if (inboundJobs.some((job) => job.platform_message_id === input.platformMessageId)) return { status: 'duplicate' };
+      const job = {
+        id: `in_${inboundJobs.length + 1}`,
+        binding_id: input.bindingId,
+        platform_message_id: input.platformMessageId,
+        text: input.text,
+        state: 'queued',
+      };
+      inboundJobs.push(job);
+      return { status: 'queued', job };
+    },
+    completeInboundJob(_bindingId: string, jobId: string) {
+      const job = inboundJobs.find((item) => item.id === jobId);
+      if (!job) return false;
+      job.state = 'completed';
+      return true;
+    },
+    markBindingInbound() {},
+    recordInbound() {},
+    findPendingInteraction(bindingId: string, kind: string) {
+      return interactions.find((item) => item.binding_id === bindingId && item.kind === kind && item.state === 'pending') || null;
+    },
+    claimInteraction(id: string) {
+      const item = interactions.find((candidate) => candidate.id === id && candidate.state === 'pending');
+      if (!item) return null;
+      item.state = 'resolving';
+      return item;
+    },
+    releaseInteraction(id: string) {
+      const item = interactions.find((candidate) => candidate.id === id && candidate.state === 'resolving');
+      if (item) item.state = 'pending';
+    },
     completeOutboundJob(id: string, result: any) {
       const job = jobs.find((item) => item.id === id)!;
       job.state = 'delivered';
@@ -309,7 +448,7 @@ function createHarness(deliveryError?: Error) {
     },
     async close() {},
   };
-  return { store, connections, jobs, delivered, startedConnections, bindings, messagingConnections };
+  return { store, connections, jobs, inboundJobs, interactions, delivered, startedConnections, bindings, messagingConnections };
 }
 
 function connectedConnection(id: string, platform: 'weixin' | 'dingtalk' | 'feishu') {
@@ -324,5 +463,33 @@ function binding(id: string, accountId: string, platform: 'weixin' | 'dingtalk' 
     session_id: sessionId,
     conversation_id: `conversation_${id}`,
     conversation_type: 'direct',
+  };
+}
+
+function interaction(id: string, bindingId: string) {
+  return {
+    id,
+    run_id: 'run_ask',
+    binding_id: bindingId,
+    request_id: 'ask_1',
+    kind: 'ask',
+    allowed_sender_id: 'user_1',
+    choices: [
+      { id: 'wait', label: 'Wait', value: { option_id: 'wait' } },
+      { id: 'deploy', label: 'Deploy now', value: { option_id: 'deploy' } },
+    ],
+    state: 'pending',
+  };
+}
+
+function weixinTextEvent(text: string, messageId: string) {
+  return {
+    id: `weixin:wxconn_1:${messageId}`,
+    platform: 'weixin' as const,
+    account_id: 'wxconn_1',
+    conversation: { id: 'user_1', type: 'direct' as const },
+    sender: { id: 'user_1' },
+    message: { id: messageId, segments: [{ type: 'text' as const, text }] },
+    occurred_at: '2026-08-14T00:00:00.000Z',
   };
 }

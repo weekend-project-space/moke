@@ -57,6 +57,39 @@ test('keeps bindings for different messaging platforms separate', () => {
   }
 });
 
+test('finds only pending interactions for a binding and kind', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'moke-messaging-store-'));
+  try {
+    const store = new JsonMessagingStore(join(directory, 'store'));
+    store.initialize();
+    const ask = store.createInteraction({
+      run_id: 'run_1',
+      binding_id: 'bind_1',
+      request_id: 'ask_1',
+      kind: 'ask',
+      choices: [{ id: 'yes', label: 'Yes', value: { option_id: 'yes' } }],
+    });
+    store.createInteraction({
+      run_id: 'run_2',
+      binding_id: 'bind_1',
+      request_id: 'approval_1',
+      kind: 'approval',
+      choices: [{ id: 'approve', label: 'Approve', value: { decision: 'approved' } }],
+    });
+
+    assert.equal(store.findPendingInteraction('bind_1', 'ask')?.id, ask.id);
+    assert.equal(store.claimInteraction(ask.id)?.id, ask.id);
+    assert.equal(store.findPendingInteraction('bind_1', 'ask'), null);
+
+    const queued = store.enqueueInboundJob({ bindingId: 'bind_1', platformMessageId: 'reply_1', text: '1' });
+    assert.equal(queued.status, 'queued');
+    assert.equal(queued.status === 'queued' && store.completeInboundJob('bind_1', queued.job.id), true);
+    assert.equal(queued.status === 'queued' && store.getInboundJob('bind_1', queued.job.id)?.state, 'completed');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('stores DingTalk credentials and reply webhooks outside public records', () => {
   const directory = mkdtempSync(join(tmpdir(), 'moke-messaging-store-'));
   try {

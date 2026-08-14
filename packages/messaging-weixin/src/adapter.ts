@@ -84,7 +84,7 @@ export class WeixinAdapter implements MessagingAdapter {
     if (operation.kind === 'interaction') {
       const text = operation.resolved
         ? `${operation.detail}\n\n${operation.resolved.label}`
-        : `${operation.title}\n\n${operation.detail}\n\n${operation.options.map((option, index) => `${index + 1}. ${option.label}`).join('\n')}\n\nOpen Moke to respond.`;
+        : `${operation.title}\n\n${operation.detail}\n\n${operation.options.map((option, index) => `${index + 1}. ${option.label}`).join('\n')}\n\n${operation.interaction_kind === 'ask' ? 'Reply with the option number or exact option text.' : 'Open Moke to respond.'}`;
       const receipts = [];
       for (const part of splitMessagingText(text, WEIXIN_TEXT_LIMIT)) receipts.push({ type: 'text' as const, ...(await this.send(legacyTarget, { text: part })) });
       return { receipts };

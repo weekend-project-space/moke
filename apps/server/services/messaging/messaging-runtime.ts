@@ -112,6 +112,28 @@ export class MessagingRuntime {
     if (queued.status === 'duplicate') return { status: 'duplicate' };
     this.store.markBindingInbound(binding.id, event.message.id, event.sender.id);
     this.store.recordInbound(event.account_id, event.platform);
+    if (event.platform === 'weixin' && text && attachments.length === 0) {
+      const pendingAsk = this.store.findPendingInteraction(binding.id, 'ask');
+      if (pendingAsk && (!pendingAsk.allowed_sender_id || pendingAsk.allowed_sender_id === event.sender.id)) {
+        const choice = matchTextChoice(text, pendingAsk.choices);
+        if (!choice) {
+          this.store.completeInboundJob(binding.id, queued.job.id);
+          this.enqueueInvalidTextChoice(binding.id, pendingAsk, event.message.id);
+          return { status: 'accepted' };
+        }
+        const result = this.handleCardAction({
+          account_id: event.account_id,
+          conversation_id: event.conversation.id,
+          sender_id: event.sender.id,
+          interaction_id: pendingAsk.id,
+          option_id: choice.id,
+        });
+        if (result.status === 'accepted') {
+          this.store.completeInboundJob(binding.id, queued.job.id);
+          return { status: 'accepted' };
+        }
+      }
+    }
     await this.drainBinding(binding.id);
     return { status: 'accepted' };
   }
@@ -453,6 +475,7 @@ export class MessagingRuntime {
     this.enqueueRunOperation(run, {
       kind: 'interaction',
       interaction_id: interaction.id,
+      interaction_kind: interaction.kind,
       title: interaction.kind === 'ask' ? 'Input required' : 'Approval required',
       detail,
       options: interaction.choices.map((choice) => ({ id: choice.id, label: choice.label })),
@@ -471,6 +494,21 @@ export class MessagingRuntime {
       options: [],
       resolved: { label },
     }, `interaction:${interaction.id}:resolved`, `interaction:${interaction.id}`);
+  }
+
+  private enqueueInvalidTextChoice(bindingId: string, interaction: InteractionRecord, messageId: string) {
+    this.store.enqueueOutboundJob({
+      idempotencyKey: `interaction:${interaction.id}:invalid:${messageId}`,
+      bindingId,
+      operation: {
+        kind: 'message',
+        contents: [{
+          type: 'text',
+          text: `Please reply with a valid option:\n${interaction.choices.map((choice, index) => `${index + 1}. ${choice.label}`).join('\n')}`,
+        }],
+      },
+    });
+    void this.drainOutbox();
   }
 
   private handleCardAction(action: MessagingInteractionAction): InteractionAck {
@@ -674,6 +712,12 @@ function approvalDetail(approval: PendingApproval) {
   }
   const workspace = approval.action.input.__moke_workspace;
   return `${approval.reason}\n\nTool: ${approval.action.tool}${typeof workspace === 'string' ? `\nWorkspace: ${workspace}` : ''}`;
+}
+
+function matchTextChoice(text: string, choices: InteractionRecord['choices']) {
+  const normalized = text.trim();
+  if (/^[1-9]\d*$/.test(normalized)) return choices[Number(normalized) - 1];
+  return choices.find((choice) => choice.label.trim().toLowerCase() === normalized.toLowerCase());
 }
 
 function retryDelay(attempt: number) {

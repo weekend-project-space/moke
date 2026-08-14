@@ -110,6 +110,7 @@ export type MessagingOutboundOperation =
   | {
       kind: 'interaction';
       interaction_id: string;
+      interaction_kind?: 'ask' | 'approval';
       title: string;
       detail: string;
       options: Array<{ id: string; label: string }>;

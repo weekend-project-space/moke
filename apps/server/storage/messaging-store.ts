@@ -129,7 +129,7 @@ export type StoredOutboundOperation =
     }
   | { kind: 'activity'; active: boolean }
   | { kind: 'status'; phase: 'working' | 'waiting_input' | 'waiting_approval'; title: string; detail?: string }
-  | { kind: 'interaction'; interaction_id: string; title: string; detail: string; options: Array<{ id: string; label: string }>; resolved?: { label: string } }
+  | { kind: 'interaction'; interaction_id: string; interaction_kind?: 'ask' | 'approval'; title: string; detail: string; options: Array<{ id: string; label: string }>; resolved?: { label: string } }
   | { kind: 'result'; outcome: 'completed' | 'failed' | 'cancelled'; text: string; message_already_delivered: boolean };
 
 export type OutboundJob = {
@@ -204,6 +204,7 @@ export interface MessagingStore {
   enqueueInboundJob(input: { bindingId: string; platformMessageId: string; text: string; attachments?: ImageAttachment[] }): { status: 'duplicate' } | { status: 'queued'; job: InboundJob };
   claimNextInboundJob(bindingId: string): InboundJob | null;
   setInboundRun(bindingId: string, jobId: string, runId: string): boolean;
+  completeInboundJob(bindingId: string, jobId: string): boolean;
   findInboundJobByRun(runId: string): InboundJob | null;
   markInboundDelivering(bindingId: string, jobId: string): boolean;
   failInboundJob(bindingId: string, jobId: string, error: string): boolean;
@@ -222,6 +223,7 @@ export interface MessagingStore {
   createInteraction(input: Omit<InteractionRecord, 'id' | 'state' | 'created_at' | 'updated_at'>): InteractionRecord;
   getInteraction(id: string): InteractionRecord | null;
   findInteraction(runId: string, requestId: string): InteractionRecord | null;
+  findPendingInteraction(bindingId: string, kind: InteractionRecord['kind']): InteractionRecord | null;
   claimInteraction(id: string): InteractionRecord | null;
   resolveInteraction(id: string, result: Record<string, string>): InteractionRecord;
   releaseInteraction(id: string): void;
@@ -628,7 +630,7 @@ export class JsonMessagingStore implements MessagingStore {
 
   completeInboundJob(bindingId: string, jobId: string) {
     return this.updateInboundJob(bindingId, jobId, (job) => {
-      if (job.state !== 'delivering' && job.state !== 'running') return false;
+      if (job.state !== 'queued' && job.state !== 'running' && job.state !== 'delivering') return false;
       job.state = 'completed';
       job.error = undefined;
       return true;
@@ -831,6 +833,11 @@ export class JsonMessagingStore implements MessagingStore {
 
   findInteraction(runId: string, requestId: string) {
     return this.readInteractions().find((record) => record.run_id === runId && record.request_id === requestId) || null;
+  }
+
+  findPendingInteraction(bindingId: string, kind: InteractionRecord['kind']) {
+    return this.readInteractions().find((record) =>
+      record.binding_id === bindingId && record.kind === kind && record.state === 'pending') || null;
   }
 
   claimInteraction(id: string) {
@@ -1274,7 +1281,11 @@ function isStoredOutboundOperation(value: unknown): value is StoredOutboundOpera
   }
   if (candidate.kind === 'activity') return typeof candidate.active === 'boolean';
   if (candidate.kind === 'status') return candidate.phase === 'working' || candidate.phase === 'waiting_input' || candidate.phase === 'waiting_approval';
-  if (candidate.kind === 'interaction') return typeof candidate.interaction_id === 'string' && Array.isArray(candidate.options);
+  if (candidate.kind === 'interaction') {
+    return typeof candidate.interaction_id === 'string'
+      && (candidate.interaction_kind === undefined || candidate.interaction_kind === 'ask' || candidate.interaction_kind === 'approval')
+      && Array.isArray(candidate.options);
+  }
   return candidate.kind === 'result' && typeof candidate.text === 'string';
 }
 

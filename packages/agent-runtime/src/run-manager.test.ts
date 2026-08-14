@@ -610,6 +610,59 @@ test('RunManager auto-approves tool decisions and records the reviewer', async (
   assert.equal(decision?.reviewer, 'auto_approve');
 });
 
+test('RunManager auto-approves workspace paths once without pausing the run', async () => {
+  const session = createSession();
+  session.env = {
+    approval_mode: 'auto_approve',
+    system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
+    workspace: { root: process.cwd() },
+  };
+  let decision: Awaited<ReturnType<NonNullable<Parameters<Agent['run']>[0]['context']['approveWorkspacePath']>>> | undefined;
+  let recordedApprovals: ToolApprovalRecord[] = [];
+  const granted: Array<{ root: string; scope: string; sessionId: string }> = [];
+  const manager = new RunManager({
+    runs: new Map(),
+    agent: {
+      async run(input) {
+        decision = await input.context.approveWorkspacePath?.({
+          callId: 'call_1',
+          tool: 'read_file',
+          input: { path: 'E:\\notes\\a.md' },
+          path: 'E:\\notes\\a.md',
+          suggestedRoot: 'E:\\notes',
+          reason: 'Path requires approval',
+        });
+        recordedApprovals = input.context.consumeApprovals?.('call_1') || [];
+        return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
+      },
+    },
+    toolRegistry: new ToolRegistry(),
+    workspace: process.cwd(),
+    approveWorkspaceRoot(root, scope, sessionId) {
+      granted.push({ root, scope, sessionId });
+      return { approved: true, scope, approvedRoots: [root] };
+    },
+  });
+
+  const run = manager.createRun(session, { content: 'read the file' });
+  await waitFor(() => run.status === 'completed');
+
+  assert.deepEqual(decision, { approved: true, scope: 'once', approvedRoots: ['E:\\notes'], cleanup: undefined });
+  assert.deepEqual(granted, [{ root: 'E:\\notes', scope: 'once', sessionId: session.id }]);
+  assert.equal(run.pending_approval, undefined);
+  assert.equal(run.events.some((event) => event.type === 'interaction.required'), false);
+  assert.deepEqual(recordedApprovals, [{
+    approval_id: recordedApprovals[0]?.approval_id,
+    kind: 'workspace_path',
+    decision: 'approved',
+    scope: 'once',
+    reason: 'Path requires approval',
+    reviewer: 'auto_approve',
+    review_reason: 'Approved by the session auto-approve policy',
+    approval_mode: 'auto_approve',
+  }]);
+});
+
 test('RunManager uses the AI reviewer decision without waiting for the user', async () => {
   const session = createSession();
   session.env = {
