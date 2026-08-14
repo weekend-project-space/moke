@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, Cpu, FileText, FolderOpen, FolderPlus, Hand, Paperclip, Plus, ShieldAlert, ShieldCheck, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Brain, Check, ChevronDown, Cpu, Eye, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, Square, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -166,7 +166,7 @@ const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
 const addOptions = ['attachment']
-const approvalOptions: ApprovalMode[] = ['manual', 'ai_review', 'auto_approve']
+const approvalOptions: ApprovalMode[] = ['read-only', 'workspace-write', 'danger-full-access']
 
 function resize() {
   const input = textarea.value
@@ -356,7 +356,7 @@ function modelFromKey(value: string) {
 }
 
 function approvalModeLabel(value: ApprovalMode) {
-  return value === 'manual' ? 'Manual' : value === 'ai_review' ? 'AI review' : 'Auto approve'
+  return value === 'read-only' ? 'Read-only' : value === 'workspace-write' ? 'Workspace write' : 'Full access'
 }
 
 function updateApprovalMenu(value: boolean) {
@@ -643,8 +643,8 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
             @update:open="updateApprovalMenu"
           >
             <template #option-icon="{ option }">
-              <Hand v-if="option === 'manual'" :size="15" stroke-width="2.1" />
-              <ShieldCheck v-else-if="option === 'ai_review'" :size="15" stroke-width="2.1" />
+              <Eye v-if="option === 'read-only'" :size="15" stroke-width="2.1" />
+              <FolderOpen v-else-if="option === 'workspace-write'" :size="15" stroke-width="2.1" />
               <ShieldAlert v-else :size="15" stroke-width="2.1" />
             </template>
             <template #option-selected>
@@ -655,13 +655,13 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
               <button
                 class="composer-approval-action"
                 type="button"
-                aria-label="Approval mode"
-                title="Approval mode"
+                aria-label="Permission mode"
+                title="Permission mode"
                 :class="{ active: open }"
                 @click="toggle"
               >
-                <Hand v-if="props.approvalMode === 'manual'" :size="14" stroke-width="2.1" />
-                <ShieldCheck v-else-if="props.approvalMode === 'ai_review'" :size="14" stroke-width="2.1" />
+                <Eye v-if="props.approvalMode === 'read-only'" :size="14" stroke-width="2.1" />
+                <FolderOpen v-else-if="props.approvalMode === 'workspace-write'" :size="14" stroke-width="2.1" />
                 <ShieldAlert v-else :size="14" stroke-width="2.1" />
               </button>
             </template>

@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -55,7 +55,7 @@ test('send rolls back the session environment and message when run creation fail
     messages: [],
     metadata: {},
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
       workspace: { root: 'E:\\work\\default' },
     },
@@ -73,12 +73,12 @@ test('send rolls back the session environment and message when run creation fail
     session,
     content: 'review this project',
     env: {
-      approval_mode: 'auto_approve',
+      approval_mode: 'danger-full-access',
     },
   }), /run unavailable/);
 
   assert.equal(session.title, 'New chat');
-  assert.equal(session.env?.approval_mode, 'manual');
+  assert.equal(session.env?.approval_mode, 'read-only');
   assert.equal(session.env?.workspace.root, 'E:\\work\\default');
   assert.deepEqual(session.messages, []);
   assert.deepEqual(saved.at(-1), session);
@@ -94,7 +94,7 @@ test('send persists local file references and passes them to the run', () => {
     messages: [],
     metadata: {},
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
       workspace: { root: 'E:\\work\\default' },
     },

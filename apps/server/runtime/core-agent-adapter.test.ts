@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
@@ -107,10 +107,10 @@ function runtimeRun(): RuntimeRun {
     started_at: Date.now(),
     abort: false,
     origin: { kind: 'local' },
-    approval_mode: 'manual',
+    approval_mode: 'read-only',
     env: {
       workspace: { root: process.cwd() },
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       reasoningEffort: 'medium',
       system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
     },

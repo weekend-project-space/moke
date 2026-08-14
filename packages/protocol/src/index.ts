@@ -1,4 +1,5 @@
 import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
+import type { SandboxMode } from '@moke/shell';
 
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max';
 
@@ -123,7 +124,8 @@ export type ToolApprovalRecord = {
   approval_mode?: ApprovalMode;
 };
 
-export type ApprovalMode = 'manual' | 'ai_review' | 'auto_approve';
+/** Kept under its legacy field name, but now defines the shell permission boundary. */
+export type ApprovalMode = SandboxMode;
 
 export type ApprovalReviewer = 'user' | 'ai' | 'auto_approve';
 

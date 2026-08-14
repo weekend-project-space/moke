@@ -87,15 +87,15 @@ Use browser development mode for conversation testing or basic web reading. Use 
 
 Every chat is attached to a workspace, which is a local folder. Moke treats it as the project boundary for reading files, creating files, and saving screenshots. To work on another project, choose a different folder and create a new chat.
 
-### Action confirmations
+### Permission modes
 
-Moke may pause and ask for confirmation before writing files, running commands, accessing paths outside the workspace, or calling external tools. The chat approval settings offer three modes:
+The chat permission setting controls the operating-system boundary used for shell commands:
 
-- **Manual**: you decide each time; this is the safest option
-- **AI review**: a review model checks whether the action matches the current task
-- **Auto-approve**: fewer interruptions; use only in an environment you fully trust
+- **Read-only**: commands can read files, but filesystem writes are blocked
+- **Workspace write**: commands can write inside the selected workspace, while writes outside it are blocked
+- **Full access**: shell commands run without filesystem confinement; use only in an environment you fully trust
 
-Access outside the workspace may still require separate authorization, regardless of the selected mode.
+The API field remains named `approval_mode`. Access to external paths and tools may still be governed by their own authorization rules.
 
 ### Model services
 

@@ -651,6 +651,18 @@ fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String
         )
     };
 
+    #[cfg(windows)]
+    let sandbox_helper_path = if tauri::is_dev() {
+        repo_dir().join(
+            "packages/shell/native/windows-sandbox/target/release/moke-windows-sandbox.exe",
+        )
+    } else {
+        app.path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?
+            .join("shell/moke-windows-sandbox.exe")
+    };
+
     ensure_user_env_file(app, &env_path);
 
     let stdout = agent_server_log_file(app)
@@ -672,6 +684,9 @@ fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(stderr);
+
+    #[cfg(windows)]
+    command.env("MOKE_WINDOWS_SANDBOX_HELPER", &sandbox_helper_path);
 
     #[cfg(windows)]
     {

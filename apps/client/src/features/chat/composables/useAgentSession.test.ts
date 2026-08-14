@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CreateSessionEnvironmentInput, RunHandle, RunLifecycleEvent, RunLifecycleListener, SendMessageEnvironmentInput } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -173,7 +173,7 @@ test('first send creates one session with the draft workspace and approval mode'
   await harness.session.checkServer()
   harness.session.startNewSession()
   harness.session.setDraftWorkspace('E:\\work\\project-a')
-  await harness.session.setApprovalMode('ai_review')
+  await harness.session.setApprovalMode('workspace-write')
 
   const sending = harness.session.sendMessage('first message')
   await flushPromises()
@@ -181,7 +181,7 @@ test('first send creates one session with the draft workspace and approval mode'
   assert.deepEqual(harness.createCalls, [{
     title: 'New chat',
     env: {
-      approval_mode: 'ai_review',
+      approval_mode: 'workspace-write',
       workspace: { root: 'E:\\work\\project-a' },
     },
   }])
@@ -214,13 +214,13 @@ test('failed session creation preserves the new session draft', async () => {
   await harness.session.checkServer()
   harness.session.startNewSession()
   harness.session.setDraftWorkspace('E:\\work\\project-b')
-  await harness.session.setApprovalMode('auto_approve')
+  await harness.session.setApprovalMode('danger-full-access')
   harness.failCreate()
 
   assert.equal(await harness.session.sendMessage('retry me'), false)
   assert.equal(harness.session.sessionId.value, '')
   assert.deepEqual(harness.session.newSessionDraft, {
-    approval_mode: 'auto_approve',
+    approval_mode: 'danger-full-access',
     workspace: { root: 'E:\\work\\project-b' },
   })
   assert.deepEqual(harness.createdSessionIds, [])
@@ -309,13 +309,13 @@ test('approval changes stay local for a draft and persist for an existing sessio
   await harness.session.checkServer()
   harness.session.startNewSession()
 
-  assert.equal(await harness.session.setApprovalMode('auto_approve'), true)
-  assert.equal(harness.session.newSessionDraft.approval_mode, 'auto_approve')
+  assert.equal(await harness.session.setApprovalMode('danger-full-access'), true)
+  assert.equal(harness.session.newSessionDraft.approval_mode, 'danger-full-access')
   assert.deepEqual(harness.environmentUpdates, [])
 
   await harness.session.loadSessionMessages('sess_existing')
-  assert.equal(await harness.session.setApprovalMode('ai_review'), true)
-  assert.deepEqual(harness.environmentUpdates, [{ id: 'sess_existing', approval_mode: 'ai_review' }])
+  assert.equal(await harness.session.setApprovalMode('workspace-write'), true)
+  assert.deepEqual(harness.environmentUpdates, [{ id: 'sess_existing', approval_mode: 'workspace-write' }])
   harness.session.disposeAgentSession()
 })
 
@@ -324,9 +324,9 @@ test('selecting a persisted session discards the new session environment draft',
   await harness.session.checkServer()
   harness.session.startNewSession()
   harness.session.setDraftWorkspace('E:\\work\\project-c')
-  await harness.session.setApprovalMode('auto_approve')
+  await harness.session.setApprovalMode('danger-full-access')
 
   assert.equal(await harness.session.loadSessionMessages('sess_existing'), true)
-  assert.deepEqual(harness.session.newSessionDraft, { approval_mode: 'manual' })
+  assert.deepEqual(harness.session.newSessionDraft, { approval_mode: 'workspace-write' })
   harness.session.disposeAgentSession()
 })

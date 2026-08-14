@@ -35,6 +35,7 @@
     "useLocalToolsDir": true,
     "resources": {
       "resources/server": "server",
+      "resources/shell": "shell",
       "../../../.env.example": ".env.example"
     },
     "icon": [

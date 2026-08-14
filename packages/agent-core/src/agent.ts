@@ -30,7 +30,7 @@ const DEFAULT_LIMITS: AgentLimits = {
   maxParallelToolCalls: 4,
   maxDurationMs: 300_000,
   modelTimeoutMs: 120_000,
-  toolTimeoutMs: 120_000,
+  toolTimeoutMs: 24*60*60_000,
 };
 
 const createId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;

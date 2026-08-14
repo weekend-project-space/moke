@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { SessionSummary } from '../model/conversation'
@@ -18,7 +18,7 @@ function session(id: string, root?: string, generatedWorkspace = false): Session
     ...(generatedWorkspace ? { generated_workspace: true } : {}),
     ...(root ? {
       env: {
-        approval_mode: 'manual',
+        approval_mode: 'read-only',
         system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
         workspace: { root },
       },

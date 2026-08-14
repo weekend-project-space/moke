@@ -38,7 +38,7 @@ export const modelCapabilitiesQuerySchema = z.object({
   refresh: z.enum(['true', 'false']).optional().default('false'),
 }).strict();
 
-const approvalModeSchema = z.enum(['manual', 'ai_review', 'auto_approve']);
+const approvalModeSchema = z.enum(['read-only', 'workspace-write', 'danger-full-access']);
 const scheduledTaskStatusSchema = z.enum(['enabled', 'paused']);
 const modelSelectionSchema = z.object({
   provider_id: safeId,

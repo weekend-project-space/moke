@@ -230,14 +230,14 @@ test('forkSession returns null when the message does not exist', () => {
 test('forkSession deep copies the session environment', () => {
   const source = createSession();
   source.env = {
-    approval_mode: 'ai_review',
+    approval_mode: 'workspace-write',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
     workspace: { root: 'E:\\work\\test\\moke' },
   };
   source.messages.push({ id: 'msg_1', role: 'user', content: 'hello', created_at: source.created_at });
 
   const forked = forkSession({ source, messageId: 'msg_1', now: '2026-06-28T00:00:00.000Z' });
-  assert.equal(forked?.env?.approval_mode, 'ai_review');
+  assert.equal(forked?.env?.approval_mode, 'workspace-write');
   assert.notEqual(forked?.env, source.env);
   assert.notEqual(forked?.env?.system, source.env.system);
 });

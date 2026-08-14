@@ -24,6 +24,8 @@ export type SystemReadOptions = {
 export type SystemAccessOptions = {
   workspaceRoot?: string;
   approvedRoots?: string[];
+  /** OS-level confinement for shell commands. File tools ignore this setting. */
+  sandboxMode?: SandboxMode;
 };
 
 export type SystemReadLine = {
@@ -90,6 +92,7 @@ export type SystemGlobResult = {
 export type SystemExecuteOptions = {
   cwd?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 export type SystemExecuteResult = {
@@ -97,6 +100,15 @@ export type SystemExecuteResult = {
   stdout: string;
   stderr: string;
   duration_ms?: number;
+  status?: ShellResultStatus;
+  error_code?: ShellErrorCode;
+  stdout_truncated?: boolean;
+  stderr_truncated?: boolean;
+  sandbox?: {
+    mode: SandboxMode;
+    enforced: boolean;
+    denied: boolean;
+  };
 };
 
 export interface SystemBackend {
@@ -127,3 +139,4 @@ export interface WritableSystemBackend extends SystemBackend {
 export interface ExecutableSystemBackend extends WritableSystemBackend {
   execute(command: string, args?: string[], options?: SystemExecuteOptions, access?: SystemAccessOptions): Promise<SystemExecuteResult>;
 }
+import type { SandboxMode, ShellErrorCode, ShellResultStatus } from '@moke/shell';

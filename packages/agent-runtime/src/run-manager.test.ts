@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 import { z } from 'zod';
 
@@ -206,19 +206,18 @@ test('RunManager allows only one active run per session', async () => {
   await waitFor(() => next.status === 'completed');
 });
 
-test('RunManager times out the whole run and clears a pending approval', async () => {
+test('RunManager times out the whole run and aborts the agent', async () => {
   const session = createSession();
   let aborted = false;
   const manager = new RunManager({
     runs: new Map(),
     agent: {
       async run(input) {
-        input.context.abortSignal?.addEventListener('abort', () => { aborted = true; }, { once: true });
-        await input.context.approveTool?.({
-          callId: 'call_timeout',
-          tool: 'execute',
-          input: { command: 'npm test' },
-          reason: 'Run tests',
+        await new Promise<void>((resolve) => {
+          input.context.abortSignal?.addEventListener('abort', () => {
+            aborted = true;
+            resolve();
+          }, { once: true });
         });
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'late' }) };
       },
@@ -228,13 +227,10 @@ test('RunManager times out the whole run and clears a pending approval', async (
   });
 
   const run = manager.createRun(session, { content: 'start' }, { timeout_ms: 20 });
-  await waitFor(() => Boolean(run.pending_approval));
-  const approvalId = run.pending_approval?.approval_id || '';
   await waitFor(() => run.status === 'timeout');
 
   assert.equal(aborted, true);
   assert.equal(run.pending_approval, undefined);
-  assert.equal(manager.approve(run.id, approvalId, 'approved').status, 409);
   assert.equal(manager.getActiveRunForSession(session.id), undefined);
   assert.equal(
     run.events.filter((event) => event.type === 'run.timed_out').at(-1)?.type,
@@ -281,7 +277,7 @@ test('RunManager records an ask answer as an interaction event instead of chat m
   );
 });
 
-test('RunManager emits approval resolution after a decision', async () => {
+test('RunManager auto-approves tools without publishing an interaction', async () => {
   const session = createSession();
   const runs = new Map();
   let recordedApprovals: ToolApprovalRecord[] = [];
@@ -305,23 +301,18 @@ test('RunManager emits approval resolution after a decision', async () => {
   });
 
   const run = manager.createRun(session, { content: 'start' });
-  await waitFor(() => Boolean(run.pending_approval));
-  const approvalId = run.pending_approval?.approval_id || '';
-  assert.equal(run.pending_approval?.call_id, 'call_1');
-  assert.equal(manager.approve(run.id, approvalId, 'approved', { scope: 'once' }).status, 200);
   await waitFor(() => run.status === 'completed');
 
-  const resolved = run.events.find((item) => item.type === 'interaction.resolved');
-  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.interactionId : '', approvalId);
-  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.response.decision : '', 'approved');
-  assert.equal(resolved?.type === 'interaction.resolved' ? resolved.response.scope : '', 'once');
+  assert.equal(run.events.some((item) => item.type.startsWith('interaction.')), false);
   assert.deepEqual(recordedApprovals, [{
-    approval_id: approvalId,
+    approval_id: recordedApprovals[0]?.approval_id,
     kind: 'tool',
     decision: 'approved',
     scope: 'once',
     reason: 'Run tests',
-    reviewer: 'user',
+    reviewer: 'auto_approve',
+    review_reason: 'Approved by the workspace-write permission policy',
+    approval_mode: 'workspace-write',
   }]);
 });
 
@@ -523,7 +514,7 @@ test('RunManager resumes an ask with custom text', async () => {
 test('RunManager freezes the session environment and uses its workspace for the run', async () => {
   const session = createSession();
   session.env = {
-    approval_mode: 'ai_review',
+    approval_mode: 'workspace-write',
     model: { provider_id: 'provider_openai', name: 'gpt-5' },
     reasoningEffort: 'high',
     system: { platform: 'windows', arch: 'x64', shell: 'powershell.exe' },
@@ -570,12 +561,12 @@ test('RunManager freezes the session environment and uses its workspace for the 
   const run = manager.createRun(session, { content: 'start' });
   await waitFor(() => skillWorkspace !== '');
   session.env.workspace.root = 'E:\\work\\project-b';
-  session.env.approval_mode = 'auto_approve';
+  session.env.approval_mode = 'danger-full-access';
   release();
   await waitFor(() => run.status === 'completed');
 
   assert.equal(run.env.workspace.root, 'E:\\work\\project-a');
-  assert.equal(run.approval_mode, 'ai_review');
+  assert.equal(run.approval_mode, 'workspace-write');
   assert.deepEqual(run.env.model, { provider_id: 'provider_openai', name: 'gpt-5' });
   assert.equal(run.env.reasoningEffort, 'high');
   assert.equal(skillWorkspace, 'E:\\work\\project-a');
@@ -587,7 +578,7 @@ test('RunManager freezes the session environment and uses its workspace for the 
 test('RunManager auto-approves tool decisions and records the reviewer', async () => {
   const session = createSession();
   session.env = {
-    approval_mode: 'auto_approve',
+    approval_mode: 'danger-full-access',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
     workspace: { root: process.cwd() },
   };
@@ -613,7 +604,7 @@ test('RunManager auto-approves tool decisions and records the reviewer', async (
 test('RunManager auto-approves workspace paths once without pausing the run', async () => {
   const session = createSession();
   session.env = {
-    approval_mode: 'auto_approve',
+    approval_mode: 'danger-full-access',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
     workspace: { root: process.cwd() },
   };
@@ -658,15 +649,15 @@ test('RunManager auto-approves workspace paths once without pausing the run', as
     scope: 'once',
     reason: 'Path requires approval',
     reviewer: 'auto_approve',
-    review_reason: 'Approved by the session auto-approve policy',
-    approval_mode: 'auto_approve',
+     review_reason: 'Approved by the danger-full-access permission policy',
+    approval_mode: 'danger-full-access',
   }]);
 });
 
-test('RunManager uses the AI reviewer decision without waiting for the user', async () => {
+test('RunManager workspace-write mode auto-approves tool execution', async () => {
   const session = createSession();
   session.env = {
-    approval_mode: 'ai_review',
+    approval_mode: 'workspace-write',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
     workspace: { root: process.cwd() },
   };
@@ -675,26 +666,23 @@ test('RunManager uses the AI reviewer decision without waiting for the user', as
     agent: {
       async run(input) {
         const decision = await input.context.approveTool?.({ tool: 'write_file', input: { path: 'a.md' }, callId: 'call_1', reason: 'Write file' });
-        assert.equal(decision?.approved, false);
-        assert.equal(decision?.reviewer, 'ai');
+        assert.equal(decision?.approved, true);
+        assert.equal(decision?.reviewer, 'auto_approve');
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
     toolRegistry: new ToolRegistry(),
     workspace: process.cwd(),
-    aiApprovalReviewer: {
-      async review() { return { decision: 'rejected', reason: 'Not requested by the user' }; },
-    },
   });
 
   const run = manager.createRun(session, { content: 'summarize the file' });
   await waitFor(() => run.status === 'completed');
 });
 
-test('RunManager escalates an AI review to the user', async () => {
+test('RunManager read-only mode auto-approves without publishing an interaction', async () => {
   const session = createSession();
   session.env = {
-    approval_mode: 'ai_review',
+    approval_mode: 'read-only',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: process.cwd() },
   };
   const manager = new RunManager({
@@ -703,21 +691,25 @@ test('RunManager escalates an AI review to the user', async () => {
       async run(input) {
         const decision = await input.context.approveTool?.({ tool: 'execute', input: { command: 'rm' }, callId: 'call_1', reason: 'Run command' });
         assert.equal(decision?.approved, true);
-        assert.equal(decision?.reviewer, 'ai');
+        assert.equal(decision?.reviewer, 'auto_approve');
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
     toolRegistry: new ToolRegistry(), workspace: process.cwd(),
-    aiApprovalReviewer: { async review() { return { decision: 'escalated', reason: 'Destructive action' }; } },
   });
   const run = manager.createRun(session, { content: 'remove it' });
-  await waitFor(() => Boolean(run.pending_approval));
-  assert.equal(manager.approve(run.id, run.pending_approval?.approval_id || '', 'approved').status, 200);
   await waitFor(() => run.status === 'completed');
+  assert.equal(run.pending_approval, undefined);
+  assert.equal(run.events.some((event) => event.type === 'interaction.required'), false);
 });
 
-test('RunManager redacts sensitive tool parameters before publishing a user approval', async () => {
+test('RunManager full-access mode does not publish a legacy approval interaction', async () => {
   const session = createSession();
+  session.env = {
+    approval_mode: 'danger-full-access',
+    system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
+    workspace: { root: process.cwd() },
+  };
   let manager: RunManager;
   manager = new RunManager({
     runs: new Map(),
@@ -733,7 +725,7 @@ test('RunManager redacts sensitive tool parameters before publishing a user appr
     workspace: process.cwd(),
   });
   const run = manager.createRun(session, { content: 'send hello' });
-  await waitFor(() => Boolean(run.pending_approval));
-  assert.equal(run.pending_approval?.action.input.token, '[REDACTED]');
-  manager.cancel(run.id);
+  await waitFor(() => run.status === 'completed');
+  assert.equal(run.pending_approval, undefined);
+  assert.equal(run.events.some((event) => event.type === 'interaction.required'), false);
 });

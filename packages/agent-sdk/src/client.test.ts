@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { AgentEvent, AgentEventInput } from '@moke/agent-protocol';
@@ -69,7 +69,7 @@ test('sessions.create sends the creation-only workspace environment', async () =
   const session = await client.sessions.create({
     title: 'Project A',
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       workspace: { root: 'E:\\work\\project-a' },
     },
   });
@@ -78,7 +78,7 @@ test('sessions.create sends the creation-only workspace environment', async () =
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     title: 'Project A',
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       workspace: { root: 'E:\\work\\project-a' },
     },
   });
@@ -117,7 +117,7 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
     content: 'hello',
     files: [{ name: 'report.pdf', path: 'E:\\reports\\report.pdf' }],
     env: {
-      approval_mode: 'ai_review',
+      approval_mode: 'workspace-write',
       model: { provider_id: 'provider_openai', name: 'gpt-5' },
       reasoningEffort: 'high',
     },
@@ -134,7 +134,7 @@ test('SessionHandle.send maps the message request and returns a RunHandle', asyn
       files: [{ name: 'report.pdf', path: 'E:\\reports\\report.pdf' }],
     },
     env: {
-      approval_mode: 'ai_review',
+      approval_mode: 'workspace-write',
       model: { provider_id: 'provider_openai', name: 'gpt-5' },
       reasoningEffort: 'high',
     },

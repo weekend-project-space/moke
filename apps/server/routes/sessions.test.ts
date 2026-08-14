@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
@@ -120,7 +120,7 @@ test('send API applies and clears session model environment atomically', async (
     messages: [],
     metadata: {},
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
       workspace: { root: 'E:\\work\\test\\moke' },
     },
@@ -196,7 +196,7 @@ test('session list hides hidden sessions unless requested', async () => {
 test('session environment API updates approval mode without changing workspace', async () => {
   const session: Session = {
     id: 'sess_env', title: 'Test', visibility: 'visible', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
-    env: { approval_mode: 'manual', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
+    env: { approval_mode: 'read-only', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
   };
   const router = createRouter<RoutesContext>();
   registerSessionRoutes(router);
@@ -210,11 +210,11 @@ test('session environment API updates approval mode without changing workspace',
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/sessions/${session.id}/env`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-        approval_mode: 'auto_approve',
+        approval_mode: 'danger-full-access',
       }),
     });
     assert.equal(response.status, 200);
-    assert.equal(session.env?.approval_mode, 'auto_approve');
+    assert.equal(session.env?.approval_mode, 'danger-full-access');
     assert.equal(session.env?.workspace.root, 'E:\\work\\test\\moke');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -224,7 +224,7 @@ test('session environment API updates approval mode without changing workspace',
 test('session environment and send APIs reject workspace changes', async () => {
   const session: Session = {
     id: 'sess_env', title: 'Test', visibility: 'visible', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', messages: [], metadata: {},
-    env: { approval_mode: 'manual', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
+    env: { approval_mode: 'read-only', system: { platform: 'windows', arch: 'x64', shell: 'pwsh' }, workspace: { root: 'E:\\work\\test\\moke' } },
   };
   const router = createRouter<RoutesContext>();
   registerSessionRoutes(router);

@@ -41,7 +41,7 @@ const form = reactive<CreateScheduledTaskRequest>({
   cron: '0 9 * * *',
   timezone: localTimezone(),
   workspace_root: props.defaultWorkspace,
-  approval_mode: 'ai_review',
+  approval_mode: 'workspace-write',
   status: 'enabled',
 })
 
@@ -78,7 +78,7 @@ function openCreate() {
     cron: '0 9 * * *',
     timezone: localTimezone(),
     workspace_root: props.defaultWorkspace || props.workspaceOptions[0] || '',
-    approval_mode: 'ai_review' satisfies ApprovalMode,
+    approval_mode: 'workspace-write' satisfies ApprovalMode,
     status: 'enabled' satisfies ScheduledTaskStatus,
   })
   error.value = ''
@@ -310,8 +310,8 @@ onMounted(loadTasks)
           </label>
 
           <div class="scheduled-task-form-grid">
-            <label><span>Approval</span>
-              <select v-model="form.approval_mode"><option value="manual">Manual approval</option><option value="ai_review">AI review</option><option value="auto_approve">Auto approve</option></select>
+            <label><span>Permission</span>
+              <select v-model="form.approval_mode"><option value="read-only">Read-only</option><option value="workspace-write">Workspace write</option><option value="danger-full-access">Full access</option></select>
             </label>
             <label class="scheduled-task-enabled"><input v-model="form.status" type="checkbox" true-value="enabled" false-value="paused" /><span>Enabled</span></label>
           </div>

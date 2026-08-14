@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,7 +48,7 @@ test('persists tasks and starts an agent session when a task is due', () => {
       cron: '1 0 * * *',
       timezone: 'UTC',
       workspace_root: directory,
-      approval_mode: 'ai_review',
+      approval_mode: 'workspace-write',
     }, new Date('2026-07-29T00:00:00.000Z'));
 
     service.tick(new Date('2026-07-29T00:01:00.000Z'));
@@ -84,7 +84,7 @@ test('paused tasks are not executed', () => {
       cron: '* * * * *',
       timezone: 'UTC',
       workspace_root: directory,
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       status: 'paused',
     });
 

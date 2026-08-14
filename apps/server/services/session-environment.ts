@@ -11,11 +11,11 @@ import type {
   UpdateSessionEnvironmentInput,
 } from '@moke/protocol';
 
-const MODES: ApprovalMode[] = ['manual', 'ai_review', 'auto_approve'];
+const MODES: ApprovalMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 const REASONING_EFFORTS: ReasoningEffort[] = ['off', 'low', 'medium', 'high', 'max'];
 
 export function normalizeApprovalMode(value: unknown): ApprovalMode {
-  return typeof value === 'string' && MODES.includes(value as ApprovalMode) ? value as ApprovalMode : 'manual';
+  return typeof value === 'string' && MODES.includes(value as ApprovalMode) ? value as ApprovalMode : 'workspace-write';
 }
 
 export class SessionEnvironmentError extends Error {
@@ -68,7 +68,7 @@ export function applyMutableSessionEnvironmentInput(
   const next: SessionEnvironment = {
     ...baseline,
     approval_mode: input.approval_mode === undefined
-      ? baseline.approval_mode
+      ? normalizeApprovalMode(baseline.approval_mode)
       : normalizeApprovalMode(input.approval_mode),
   };
   if (input.model === null) delete next.model;

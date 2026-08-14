@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/agent-protocol" },
+    { "path": "./packages/shell" },
     { "path": "./packages/agent-tools" },
     { "path": "./packages/agent-core" },
     { "path": "./packages/protocol" },

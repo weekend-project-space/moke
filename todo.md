@@ -44,8 +44,29 @@
 - [ ] 建立 CI：类型检查、测试、Vue 构建、Rust 检查、依赖审计和生成产物校验。
 
 ## 现有功能事项
-- [ ] 定时任务
-- [ ] 修复页面工具调用展示问题。
-- [ ] 简化工具集合和工具说明。
-- [ ] 完成 reface 应用。
-- [ ] 完善左侧会话切换体验。
+- [x] 定时任务
+- [x] 修复页面工具调用展示问题。
+- [x] 简化工具集合和工具说明。
+- [x] 完成 reface 应用。
+- [x] 完善左侧会话切换体验。
+
+## 特性
+- [x] ag-ui
+- [ ] subagent
+- [ ] agent team :ag-ui codex claude pi opencode
+- [ ] 工作区记忆
+- [ ] 上下文压缩
+- [ ] 侧边栏对话框
+- [ ] 语音输入输出
+- [ ] 钩子
+- [ ] 发送消息队列
+
+全新架构设计
+
+<!-- 自定义的LLLModel -->
+llm-client.chat(messages, eventhandler, options)
+llm-client.chat(messages,  options) -> events
+<!-- 创建agent -->
+agent.create(llm-client,toolsRepo, contentManager,env, emiter, options) -> agent
+agent.send(message, options:{modelname,ReasoningEffort}) -> events
+agent.toolcall(callid, result)

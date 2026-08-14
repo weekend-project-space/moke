@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import type { ShellRequest, ShellResult } from '@moke/shell';
 import { LocalSystemBackend } from './local-system-backend.js';
 
 function createBackend(options: { executeDelayMs?: number; rawContent?: Uint8Array } = {}) {
@@ -52,6 +53,115 @@ function createBackend(options: { executeDelayMs?: number; rawContent?: Uint8Arr
 
   return backend;
 }
+
+function completedShellResult(overrides: Partial<ShellResult> = {}): ShellResult {
+  return {
+    status: 'completed',
+    stdout: 'shell stdout',
+    stderr: '',
+    stdoutTruncated: false,
+    stderrTruncated: false,
+    exitCode: 0,
+    durationMs: 12,
+    sandbox: {
+      mode: 'workspace-write',
+      enforced: true,
+      enforcement: 'full',
+      denied: false,
+      runner: 'test',
+    },
+    ...overrides,
+  };
+}
+
+test('execute delegates local commands to ShellExecutor with workspace confinement', async () => {
+  const calls: ShellRequest[] = [];
+  const backend = createBackend();
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, {
+    backend,
+    shellExecutor: {
+      async run(request) {
+        calls.push(request);
+        return completedShellResult();
+      },
+    },
+  });
+  const controller = new AbortController();
+
+  const result = await system.execute('node', ['-e', "process.stdout.write('ok')"], {
+    cwd: 'packages',
+    timeoutMs: 5000,
+    signal: controller.signal,
+  });
+
+  assert.equal(backend.calls.length, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].workdir, path.join(workspace, 'packages'));
+  assert.equal(calls[0].sandbox.mode, 'workspace-write');
+  assert.equal(calls[0].sandbox.workspaceRoot, workspace);
+  assert.equal(calls[0].timeoutMs, 5000);
+  assert.equal(calls[0].signal, controller.signal);
+  assert.equal(result.stdout, 'shell stdout');
+  assert.equal(result.sandbox?.enforced, true);
+});
+
+test('execute preserves structured shell timeout and denial results', async () => {
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, {
+    shellExecutor: {
+      async run() {
+        return completedShellResult({
+          status: 'timed_out',
+          exitCode: undefined,
+          stderr: '',
+          sandbox: {
+            mode: 'workspace-write',
+            enforced: true,
+            enforcement: 'full',
+            denied: true,
+            runner: 'test',
+          },
+          error: { code: 'TIMEOUT', message: 'Command timed out after 5000ms' },
+        });
+      },
+    },
+  });
+
+  const result = await system.execute('Start-Sleep -Seconds 30');
+
+  assert.equal(result.exit_code, 1);
+  assert.equal(result.status, 'timed_out');
+  assert.equal(result.error_code, 'TIMEOUT');
+  assert.equal(result.stderr, 'Command timed out after 5000ms');
+  assert.equal(result.sandbox?.denied, true);
+});
+
+test('danger-full-access does not retain workspace path preflight restrictions', async () => {
+  const calls: ShellRequest[] = [];
+  const workspace = path.resolve('E:/work/test/moke');
+  const system = new LocalSystemBackend(workspace, {
+    shellExecutor: {
+      async run(request) {
+        calls.push(request);
+        return completedShellResult({
+          sandbox: {
+            mode: 'danger-full-access',
+            enforced: false,
+            enforcement: 'none',
+            denied: false,
+            runner: 'test',
+          },
+        });
+      },
+    },
+  });
+
+  await system.execute('Set-Content E:\\outside.txt test', [], undefined, { sandboxMode: 'danger-full-access' });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].sandbox.mode, 'danger-full-access');
+});
 
 test('execute defaults cwd to the workspace root', async () => {
   const backend = createBackend();

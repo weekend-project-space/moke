@@ -11,5 +11,5 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../agent-runtime" }, { "path": "../agent-protocol" }]
+  "references": [{ "path": "../agent-runtime" }, { "path": "../agent-protocol" }, { "path": "../shell" }]
 }

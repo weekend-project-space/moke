@@ -26,9 +26,13 @@ export class ScheduledTaskStore {
     }
 
     this.tasks.clear();
+    const invalidTasks = stored.tasks.filter((task) => !isScheduledTask(task));
     for (const task of stored.tasks) {
-      if (!isScheduledTask(task)) throw new Error('Invalid scheduled task in store');
-      this.tasks.set(task.id, task);
+      if (isScheduledTask(task)) this.tasks.set(task.id, task);
+    }
+    if (invalidTasks.length > 0) {
+      console.warn(`Discarding ${invalidTasks.length} scheduled task(s) with an unsupported permission mode`);
+      this.flush();
     }
   }
 
@@ -75,7 +79,7 @@ function isScheduledTask(value: unknown): value is ScheduledTask {
     && typeof task.timezone === 'string'
     && (task.status === 'enabled' || task.status === 'paused')
     && typeof task.workspace_root === 'string'
-    && (task.approval_mode === 'manual' || task.approval_mode === 'ai_review' || task.approval_mode === 'auto_approve')
+    && (task.approval_mode === 'read-only' || task.approval_mode === 'workspace-write' || task.approval_mode === 'danger-full-access')
     && typeof task.created_at === 'string'
     && typeof task.updated_at === 'string';
 }

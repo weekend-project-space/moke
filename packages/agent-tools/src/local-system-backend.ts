@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { lstat, mkdir, realpath, writeFile as writeLocalFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -28,6 +27,7 @@ import type {
   SystemWriteResult,
 } from '@moke/agent-runtime';
 import { PathRequiresApprovalError } from '@moke/agent-runtime';
+import { ShellExecutor, type SandboxMode } from '@moke/shell';
 import {
   analyzeCommandSafety,
   analyzePowerShellCompatibility,
@@ -38,6 +38,10 @@ import {
 type LocalSystemBackendOptions = Omit<DeepLocalShellBackendOptions, 'rootDir' | 'virtualMode'> & {
   backend?: SandboxBackendProtocolV2;
   rootDir?: string;
+  /** Overrides the bundled executor for embedding and tests. */
+  shellExecutor?: Pick<ShellExecutor, 'run'>;
+  /** Defaults to workspace-write so production commands are confined by default. */
+  sandboxMode?: SandboxMode;
 };
 
 const DEFAULT_READ_LIMIT = 200;
@@ -50,11 +54,15 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   private readonly backend: SandboxBackendProtocolV2;
   private readonly globallyApprovedRoots: string[];
   private readonly useLocalFsWrites: boolean;
+  private readonly shellExecutor?: Pick<ShellExecutor, 'run'>;
+  private readonly defaultSandboxMode: SandboxMode;
 
   constructor(root = DEFAULT_ROOT, options: LocalSystemBackendOptions = {}) {
     this.rootDir = path.resolve(root);
     this.globallyApprovedRoots = [];
     this.useLocalFsWrites = !options.backend;
+    this.shellExecutor = options.shellExecutor ?? (!options.backend ? new ShellExecutor() : undefined);
+    this.defaultSandboxMode = options.sandboxMode ?? 'workspace-write';
 
     if (options.backend) {
       this.backend = options.backend;
@@ -219,15 +227,34 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   async execute(command: string, args: string[] = [], options?: SystemExecuteOptions, access?: SystemAccessOptions): Promise<SystemExecuteResult> {
     const startedAt = Date.now();
-    const cwd = options?.cwd
-      ? await this.toHostPath(options.cwd, access)
-      : await this.approvedPath(this.workspaceRoot(access), access);
-    const commandText = args.length > 0 ? formatCommandText(command, args, this.useLocalFsWrites) : command;
-    this.assertCommandPathsStayInApprovedRoots(commandText, cwd, access);
-    if (this.useLocalFsWrites) {
-      return args.length > 0
-        ? this.executeLocalProcess(command, args, cwd, startedAt, options?.timeoutMs)
-        : this.executeLocalCommand(commandText, cwd, startedAt, options?.timeoutMs);
+    const sandboxMode = access?.sandboxMode ?? this.defaultSandboxMode;
+    const cwd = await this.executionCwd(options?.cwd, access, sandboxMode);
+    const commandText = args.length > 0 ? formatCommandText(command, args) : command;
+    this.assertCommandPathsStayInApprovedRoots(commandText, cwd, access, sandboxMode);
+
+    if (this.shellExecutor) {
+      const result = await this.shellExecutor.run({
+        command: commandText,
+        workdir: cwd,
+        sandbox: { mode: sandboxMode, workspaceRoot: this.workspaceRoot(access) },
+        timeoutMs: options?.timeoutMs,
+        signal: options?.signal,
+      });
+      return {
+        exit_code: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr || result.error?.message || '',
+        duration_ms: result.durationMs,
+        status: result.status,
+        error_code: result.error?.code,
+        stdout_truncated: result.stdoutTruncated,
+        stderr_truncated: result.stderrTruncated,
+        sandbox: {
+          mode: result.sandbox.mode,
+          enforced: result.sandbox.enforced,
+          denied: result.sandbox.denied,
+        },
+      };
     }
 
     const result = await withTimeout(this.backend.execute(`cd ${shellQuote(cwd)} && ${commandText}`), options?.timeoutMs, command);
@@ -239,35 +266,10 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     };
   }
 
-  private async executeLocalCommand(
-    commandText: string,
-    cwd: string,
-    startedAt: number,
-    timeoutMs: number | undefined,
-  ): Promise<SystemExecuteResult> {
-    const result = await runLocalShellCommand(commandText, cwd, timeoutMs);
-    return {
-      exit_code: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      duration_ms: Date.now() - startedAt,
-    };
-  }
-
-  private async executeLocalProcess(
-    command: string,
-    args: string[],
-    cwd: string,
-    startedAt: number,
-    timeoutMs: number | undefined,
-  ): Promise<SystemExecuteResult> {
-    const result = await runLocalProcess(command, args, cwd, timeoutMs);
-    return {
-      exit_code: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      duration_ms: Date.now() - startedAt,
-    };
+  private async executionCwd(requestedPath: string | undefined, access: SystemAccessOptions | undefined, sandboxMode: SandboxMode) {
+    if (!requestedPath) return this.approvedPath(this.workspaceRoot(access), access);
+    if (sandboxMode === 'danger-full-access') return path.resolve(this.workspaceRoot(access), requestedPath);
+    return this.toHostPath(requestedPath, access);
   }
 
   private async toBackendPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
@@ -319,11 +321,17 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     });
   }
 
-  private assertCommandPathsStayInApprovedRoots(commandText: string, cwd: string, access?: SystemAccessOptions) {
+  private assertCommandPathsStayInApprovedRoots(
+    commandText: string,
+    cwd: string,
+    access: SystemAccessOptions | undefined,
+    sandboxMode: SandboxMode,
+  ) {
     if (process.platform === 'win32') {
       const compatibilityIssue = analyzePowerShellCompatibility(commandText).issues[0];
       if (compatibilityIssue) throw new Error(compatibilityIssue.reason);
     }
+    if (sandboxMode === 'danger-full-access') return;
 
     const result = analyzeCommandSafety({
       commandText,
@@ -426,8 +434,8 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function formatCommandText(command: string, args: string[], useLocalShell: boolean) {
-  if (useLocalShell && process.platform === 'win32') {
+function formatCommandText(command: string, args: string[]) {
+  if (process.platform === 'win32') {
     return `& ${[command, ...args].map(powerShellQuote).join(' ')}`;
   }
 
@@ -449,136 +457,6 @@ async function resolveRealPath(candidate: string): Promise<string> {
       return path.join(realParent, path.basename(candidate));
     }
     throw error;
-  }
-}
-
-type LocalCommandResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-};
-
-function runLocalShellCommand(commandText: string, cwd: string, timeoutMs: number | undefined): Promise<LocalCommandResult> {
-  return new Promise((resolve, reject) => {
-    const isWindows = process.platform === 'win32';
-    const windowsCommand = [
-      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-      '$OutputEncoding = [System.Text.Encoding]::UTF8',
-      '$null = chcp.com 65001',
-      commandText,
-    ].join('; ');
-    const child = isWindows
-      ? spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsCommand], {
-          cwd,
-          env: {
-            ...process.env,
-            DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
-            PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
-          },
-          windowsHide: true,
-        })
-      : spawn(commandText, {
-          cwd,
-          env: process.env,
-          detached: true,
-          shell: true,
-        });
-    collectLocalProcessResult(child, timeoutMs, commandText, resolve, reject);
-  });
-}
-
-function runLocalProcess(
-  command: string,
-  args: string[],
-  cwd: string,
-  timeoutMs: number | undefined,
-): Promise<LocalCommandResult> {
-  return new Promise((resolve, reject) => {
-    const isWindows = process.platform === 'win32';
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        DOTNET_CLI_UI_LANGUAGE: process.env.DOTNET_CLI_UI_LANGUAGE || 'en',
-        PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
-      },
-      detached: !isWindows,
-      shell: false,
-      windowsHide: true,
-    });
-
-    collectLocalProcessResult(child, timeoutMs, formatCommandText(command, args, true), resolve, reject);
-  });
-}
-
-function collectLocalProcessResult(
-  child: ReturnType<typeof spawn>,
-  timeoutMs: number | undefined,
-  commandText: string,
-  resolve: (result: LocalCommandResult) => void,
-  reject: (error: Error) => void,
-) {
-  let stdout = '';
-  let stderr = '';
-  let settled = false;
-  let timer: NodeJS.Timeout | undefined;
-
-  child.stdout?.setEncoding('utf8');
-  child.stderr?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk) => {
-    stdout += chunk;
-  });
-  child.stderr?.on('data', (chunk) => {
-    stderr += chunk;
-  });
-  child.on('error', (error) => {
-    if (settled) return;
-    settled = true;
-    if (timer) clearTimeout(timer);
-    reject(error);
-  });
-  child.on('close', (code) => {
-    if (settled) return;
-    settled = true;
-    if (timer) clearTimeout(timer);
-    resolve({
-      exitCode: code ?? 1,
-      stdout,
-      stderr,
-    });
-  });
-
-  if (timeoutMs) {
-    timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      killProcessTree(child.pid);
-      reject(new Error(`Command timed out after ${timeoutMs}ms: ${commandText}`));
-    }, timeoutMs);
-  }
-}
-
-function killProcessTree(pid: number | undefined) {
-  if (!pid) return;
-
-  if (process.platform === 'win32') {
-    spawn('taskkill.exe', ['/pid', String(pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-    }).on('error', () => {
-      // Best-effort cleanup; the timeout error has already been returned to the caller.
-    });
-    return;
-  }
-
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // Best-effort cleanup.
-    }
   }
 }
 

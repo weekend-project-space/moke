@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -11,23 +11,24 @@ import {
 
 test('normalizeSessionEnvironment preserves a persisted workspace root', () => {
   const environment = normalizeSessionEnvironment({
-    approval_mode: 'ai_review',
+    approval_mode: 'workspace-write',
     workspace: { root: 'E:\\work\\project-a' },
   }, 'E:\\work\\default');
 
-  assert.equal(environment.approval_mode, 'ai_review');
+  assert.equal(environment.approval_mode, 'workspace-write');
   assert.equal(environment.workspace.root, path.resolve('E:\\work\\project-a'));
 });
+
 
 test('applyMutableSessionEnvironmentInput updates approval and preserves workspace', () => {
   const current = createSessionEnvironment({
     defaultWorkspaceRoot: 'E:\\work\\default',
-    env: { approval_mode: 'manual', workspace: { root: 'E:\\work\\project-a' } },
+    env: { approval_mode: 'read-only', workspace: { root: 'E:\\work\\project-a' } },
   });
 
   const approvalUpdate = applyMutableSessionEnvironmentInput(
     current,
-    { approval_mode: 'auto_approve' },
+    { approval_mode: 'danger-full-access' },
     'E:\\work\\default',
   );
   const unchangedUpdate = applyMutableSessionEnvironmentInput(
@@ -37,7 +38,7 @@ test('applyMutableSessionEnvironmentInput updates approval and preserves workspa
   );
 
   assert.equal(approvalUpdate.workspace.root, path.resolve('E:\\work\\project-a'));
-  assert.equal(unchangedUpdate.approval_mode, 'auto_approve');
+  assert.equal(unchangedUpdate.approval_mode, 'danger-full-access');
   assert.equal(unchangedUpdate.workspace.root, path.resolve('E:\\work\\project-a'));
 });
 

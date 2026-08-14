@@ -23,7 +23,12 @@ export function createExecuteTool(system: ExecutableSystemBackend): RuntimeTool<
         timeoutMs: input.timeout_ms === undefined
           ? undefined
           : Math.max(input.timeout_ms, MIN_EXECUTE_TIMEOUT_MS),
-      }, { workspaceRoot: context.workspace, approvedRoots: context.workspaceRoots?.() });
+        signal: context.abortSignal,
+      }, {
+        workspaceRoot: context.workspace,
+        approvedRoots: context.workspaceRoots?.(),
+        sandboxMode: context.run?.env.approval_mode,
+      });
     },
   };
 }

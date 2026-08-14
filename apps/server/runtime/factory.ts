@@ -11,7 +11,6 @@ import { registerBrowserTools } from '@moke/browser-tools';
 import { BrowserBridge, BrowserBridgeBackend } from '../services/browser-bridge.js';
 import type { ChatModelSettings } from '../storage/settings.js';
 import { CoreAgentAdapter } from './core-agent-adapter.js';
-import { LlmApprovalReviewer } from './llm-approval-reviewer.js';
 import type { ImageAttachment, ModelSelection, ResolvedImageAttachment, Session } from '@moke/protocol';
 
 export function createToolRegistry(input: {
@@ -69,6 +68,5 @@ export function createRunManager(input: {
     workspaceRoots: input.workspaceRoots,
     resolveImageAttachments: input.resolveImageAttachments,
     onSessionChanged: input.onSessionChanged,
-    aiApprovalReviewer: new LlmApprovalReviewer(input.getModelSettings),
   });
 }

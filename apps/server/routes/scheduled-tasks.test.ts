@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,7 +34,7 @@ test('scheduled task routes create, filter, pause, update, resume, and delete ta
         cron: '0 9 * * *',
         timezone: 'Asia/Shanghai',
         workspace_root: directory,
-        approval_mode: 'ai_review',
+        approval_mode: 'workspace-write',
       }),
     });
     assert.equal(createdResponse.status, 200);

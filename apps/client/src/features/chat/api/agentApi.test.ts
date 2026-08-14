@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { AgentApiError, createAgentApi } from './agentApi'
@@ -15,7 +15,7 @@ test('agentApi creates a session with its immutable workspace environment', asyn
   const api = createAgentApi('http://localhost:4010', fetcher)
 
   assert.equal(await api.createSession('Project A', {
-    approval_mode: 'manual',
+    approval_mode: 'read-only',
     workspace: { root: 'E:\\work\\project-a' },
   }), 'session_1')
 
@@ -24,7 +24,7 @@ test('agentApi creates a session with its immutable workspace environment', asyn
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
     title: 'Project A',
     env: {
-      approval_mode: 'manual',
+      approval_mode: 'read-only',
       workspace: { root: 'E:\\work\\project-a' },
     },
   })
@@ -83,12 +83,12 @@ test('agentApi updates the mutable session approval environment', async () => {
   }) as typeof fetch
   const api = createAgentApi('http://localhost:4010', fetcher)
 
-  await api.updateSessionEnvironment('session_1', { approval_mode: 'ai_review' })
+  await api.updateSessionEnvironment('session_1', { approval_mode: 'workspace-write' })
 
   assert.equal(calls[0]?.url, 'http://localhost:4010/api/sessions/session_1/env')
   assert.equal(calls[0]?.init?.method, 'PATCH')
   assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
-    approval_mode: 'ai_review',
+    approval_mode: 'workspace-write',
   })
 })
 

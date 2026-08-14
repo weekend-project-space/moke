@@ -56,7 +56,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const serverStatus = ref<'checking' | 'online' | 'offline'>('checking')
   const submittingAskId = ref('')
   const submittingApprovalId = ref('')
-  const newSessionDraft = reactive<NewSessionDraft>({ approval_mode: 'manual' })
+  const newSessionDraft = reactive<NewSessionDraft>({ approval_mode: 'workspace-write' })
   const submissionError = ref<MessageSubmissionError | null>(null)
   const sessionRunStates = reactive<Record<string, SessionRunState>>({})
   const currentRun = shallowRef<RunHandle>()
@@ -150,7 +150,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }
 
   function resetNewSessionDraft() {
-    newSessionDraft.approval_mode = 'manual'
+    newSessionDraft.approval_mode = 'workspace-write'
     delete newSessionDraft.workspace
     delete newSessionDraft.model
   }
