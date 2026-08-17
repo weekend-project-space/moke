@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Brain, Check, ChevronDown, Cpu, Eye, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Check, ChevronDown, Cpu, Eye, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, Square, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
 import type { ApprovalMode, FileAttachmentInput, ImageAttachment, ReasoningEffort } from '../model/conversation'
+import ComposerModelControl from './ComposerModelControl.vue'
 import ComposerSelectControl from './ComposerSelectControl.vue'
 
 type ComposerReasoningEffort = 'default' | ReasoningEffort
@@ -94,10 +95,6 @@ const discoveryItems = computed(() => {
   }
   return []
 })
-const modelsByKey = computed(() => new Map(
-  (props.modelOptions || []).map((model) => [modelKey(model), model]),
-))
-
 watch(() => props.inputValue, () => {
   if (dismissedDiscoveryKey.value && dismissedDiscoveryKey.value !== discoveryKey.value) {
     dismissedDiscoveryKey.value = ''
@@ -107,11 +104,6 @@ watch(() => props.inputValue, () => {
 
 watch(() => discoveryItems.value.length, (length) => {
   discoverySelectedIndex.value = length ? Math.min(discoverySelectedIndex.value, length - 1) : 0
-})
-
-const selectedModelKey = computed(() => {
-  const key = `${props.modelProviderId || props.modelProvider}\u0000${props.modelName}`
-  return modelsByKey.value.has(key) ? key : undefined
 })
 
 function chooseDiscoveryItem(item: (typeof discoveryItems.value)[number]) {
@@ -197,21 +189,8 @@ function handleInput(event: Event) {
   })
 }
 
-function reasoningLabel(value: ComposerReasoningEffort) {
-  return value === 'default' ? uiText.composer.thinkingAuto : uiText.composer.thinkingOption(value)
-}
-
-function chooseReasoning(value: string) {
-  emit('update:reasoningEffort', value as ComposerReasoningEffort)
-}
-
-function toggleAutoReasoning() {
-  if (props.reasoningEffort !== 'default') {
-    chooseReasoning('default')
-    return
-  }
-  const manualEffort = props.reasoningOptions.includes('medium') ? 'medium' : props.reasoningOptions[0]
-  if (manualEffort) chooseReasoning(manualEffort)
+function chooseReasoning(value: ComposerReasoningEffort) {
+  emit('update:reasoningEffort', value)
 }
 
 function imageId() {
@@ -345,14 +324,6 @@ function updateModelMenu(value: boolean) {
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
   modelMenuOpen.value = value
-}
-
-function modelKey(model: ComposerModel) {
-  return `${model.provider}\u0000${model.name}`
-}
-
-function modelFromKey(value: string) {
-  return modelsByKey.value.get(value)
 }
 
 function approvalModeLabel(value: ApprovalMode) {
@@ -669,79 +640,19 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
           </div>
           <div class="composer-footer-right">
           <div v-if="props.modelName || props.reasoningOptions.length || props.modelOptions?.length" class="composer-model-context">
-            <ComposerSelectControl
+            <ComposerModelControl
               v-if="props.modelOptions?.length"
               :open="modelMenuOpen"
-              :options="props.modelOptions.map(modelKey)"
-              :selected="selectedModelKey"
-              align="end"
-              menu-class="composer-model-menu"
-              @select="(value) => { const model = modelFromKey(value); if (model) emit('selectModel', model) }"
+              :model-name="props.modelName"
+              :model-provider="props.modelProvider"
+              :model-provider-id="props.modelProviderId"
+              :models="props.modelOptions"
+              :reasoning-effort="props.reasoningEffort"
+              :reasoning-options="props.reasoningOptions"
+              @select-model="emit('selectModel', $event)"
               @update:open="updateModelMenu"
-            >
-              <template #menu-header>Model</template>
-              <template #option-icon><Cpu :size="15" stroke-width="1.8" /></template>
-              <template #option-label="{ option }">
-                <span class="composer-model-option-copy">
-                  <strong>{{ modelFromKey(option)?.name || option }}</strong>
-                  <small>{{ modelFromKey(option)?.providerName || modelFromKey(option)?.provider }}</small>
-                </span>
-              </template>
-              <template #option-selected><Check :size="14" stroke-width="2.2" /></template>
-              <template v-if="props.reasoningOptions.length" #menu-footer>
-                <div class="composer-thinking-section" role="group" :aria-label="uiText.composer.thinking">
-                  <div class="composer-thinking-section-label">
-                    <Brain :size="13" stroke-width="2" />
-                    <span>{{ uiText.composer.thinking }}</span>
-                  </div>
-                  <div class="composer-thinking-auto-row">
-                    <span>{{ reasoningLabel('default') }}</span>
-                    <button
-                      type="button"
-                      class="composer-thinking-auto-switch"
-                      :class="{ active: props.reasoningEffort === 'default' }"
-                      role="switch"
-                      :aria-checked="props.reasoningEffort === 'default'"
-                      :aria-label="reasoningLabel('default')"
-                      @click="toggleAutoReasoning"
-                    >
-                      <span class="composer-thinking-auto-thumb"></span>
-                    </button>
-                  </div>
-                  <div class="composer-thinking-manual-label">Manual</div>
-                  <div class="composer-thinking-options" role="group" aria-label="Manual thinking effort">
-                    <button
-                      v-for="option in props.reasoningOptions"
-                      :key="option"
-                      type="button"
-                      class="composer-thinking-option"
-                      :class="{ active: option === props.reasoningEffort }"
-                      :aria-pressed="option === props.reasoningEffort"
-                      @click="chooseReasoning(option)"
-                    >
-                      {{ reasoningLabel(option) }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-              <template #trigger="{ open, toggle }">
-                <button
-                  class="composer-model-action"
-                  type="button"
-                  :aria-label="uiText.composer.currentModel(props.modelName, props.modelProvider)"
-                  :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
-                  :class="{ active: open }"
-                  @click="toggle"
-                >
-                  <Cpu :size="14" stroke-width="1.8" />
-                  <span class="composer-model-name">{{ props.modelName || 'Select model' }}</span>
-                  <span v-if="props.reasoningOptions.length" class="composer-model-effort">
-                    {{ reasoningLabel(props.reasoningEffort) }}
-                  </span>
-                  <ChevronDown :size="12" stroke-width="2.1" />
-                </button>
-              </template>
-            </ComposerSelectControl>
+              @update:reasoning-effort="chooseReasoning"
+            />
             <div
               v-else-if="props.modelName"
               class="composer-model"
