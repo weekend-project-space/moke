@@ -457,6 +457,7 @@ const sidebar = {
   scheduledTasks: 'Scheduled tasks',
   search: 'Search chats',
   settings: 'Settings',
+  showMore: 'Show more',
   title: 'Moke',
   viewMode: 'Group chats',
   unpin: 'Unpin',

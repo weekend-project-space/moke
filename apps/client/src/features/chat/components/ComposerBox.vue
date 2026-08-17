@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Check, ChevronDown, Cpu, Eye, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Check, ChevronDown, Cpu, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, ShieldCheck, ShieldUser, Square, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -614,8 +614,8 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
             @update:open="updateApprovalMenu"
           >
             <template #option-icon="{ option }">
-              <Eye v-if="option === 'read-only'" :size="15" stroke-width="2.1" />
-              <FolderOpen v-else-if="option === 'workspace-write'" :size="15" stroke-width="2.1" />
+              <ShieldCheck v-if="option === 'read-only'" :size="15" stroke-width="2.1" />
+              <ShieldUser v-else-if="option === 'workspace-write'" :size="15" stroke-width="2.1" />
               <ShieldAlert v-else :size="15" stroke-width="2.1" />
             </template>
             <template #option-selected>
@@ -631,8 +631,8 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
                 :class="{ active: open }"
                 @click="toggle"
               >
-                <Eye v-if="props.approvalMode === 'read-only'" :size="14" stroke-width="2.1" />
-                <FolderOpen v-else-if="props.approvalMode === 'workspace-write'" :size="14" stroke-width="2.1" />
+                <ShieldCheck v-if="props.approvalMode === 'read-only'" :size="14" stroke-width="2.1" />
+                <ShieldUser v-else-if="props.approvalMode === 'workspace-write'" :size="14" stroke-width="2.1" />
                 <ShieldAlert v-else :size="14" stroke-width="2.1" />
               </button>
             </template>

@@ -3,12 +3,16 @@ import { Archive, CalendarClock, Clock3, FolderClosed, FolderOpen, Folders, List
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { SessionSummary } from '../model/conversation'
-import { groupSessionsByProject } from '../presentation/sessionProjects'
+import {
+  groupSessionsByProject,
+  type SessionProjectGroup,
+} from '../presentation/sessionProjects'
 import { uiText } from '../../../text/uiText'
 
 type SessionViewMode = 'recent' | 'projects'
 
 const SESSION_VIEW_STORAGE_KEY = 'moke.sidebar.session-view'
+const PROJECT_SESSION_PREVIEW_LIMIT = 6
 
 const props = defineProps<{
   sessions: SessionSummary[]
@@ -48,6 +52,7 @@ const menuEl = ref<HTMLElement | null>(null)
 const runningSessionIdSet = computed(() => new Set(props.runningSessionIds))
 const viewMode = ref<SessionViewMode>(readSessionViewMode())
 const collapsedProjects = ref(new Set<string>())
+const expandedProjects = ref(new Set<string>())
 
 const filteredSessions = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -82,8 +87,14 @@ function setViewMode(mode: SessionViewMode) {
 
 function toggleProject(key: string) {
   const next = new Set(collapsedProjects.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+    const nextExpanded = new Set(expandedProjects.value)
+    nextExpanded.delete(key)
+    expandedProjects.value = nextExpanded
+  }
   collapsedProjects.value = next
 }
 
@@ -91,16 +102,40 @@ function isProjectCollapsed(key: string) {
   return !searchQuery.value.trim() && collapsedProjects.value.has(key)
 }
 
-watch(() => props.activeSessionId, (activeSessionId) => {
+function visibleProjectSessions(group: SessionProjectGroup) {
+  const showAll = viewMode.value !== 'projects'
+    || Boolean(searchQuery.value.trim())
+    || expandedProjects.value.has(group.key)
+  return showAll ? group.sessions : group.sessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT)
+}
+
+function canShowMoreProjectSessions(group: SessionProjectGroup) {
+  return viewMode.value === 'projects'
+    && !searchQuery.value.trim()
+    && !expandedProjects.value.has(group.key)
+    && group.sessions.length > PROJECT_SESSION_PREVIEW_LIMIT
+}
+
+function showMoreProjectSessions(key: string) {
+  expandedProjects.value = new Set(expandedProjects.value).add(key)
+}
+
+watch([() => props.activeSessionId, allProjectGroups], ([activeSessionId]) => {
   if (!activeSessionId) return
   const activeGroup = allProjectGroups.value.find((group) =>
     group.sessions.some((session) => session.id === activeSessionId),
   )
-  if (!activeGroup || !collapsedProjects.value.has(activeGroup.key)) return
+  if (!activeGroup) return
 
-  const next = new Set(collapsedProjects.value)
-  next.delete(activeGroup.key)
-  collapsedProjects.value = next
+  if (collapsedProjects.value.has(activeGroup.key)) {
+    const nextCollapsed = new Set(collapsedProjects.value)
+    nextCollapsed.delete(activeGroup.key)
+    collapsedProjects.value = nextCollapsed
+  }
+
+  if (activeGroup.sessions.findIndex((session) => session.id === activeSessionId) >= PROJECT_SESSION_PREVIEW_LIMIT) {
+    expandedProjects.value = new Set(expandedProjects.value).add(activeGroup.key)
+  }
 }, { immediate: true })
 
 function clearSearch() {
@@ -339,7 +374,7 @@ onUnmounted(() => {
           </button>
           <div v-show="!isProjectCollapsed(group.key)">
             <article
-              v-for="session in group.sessions"
+              v-for="session in visibleProjectSessions(group)"
               :key="session.id"
               class="session"
               :class="{
@@ -421,6 +456,14 @@ onUnmounted(() => {
                 <MoreHorizontal :size="15" stroke-width="2.1" />
               </button>
             </article>
+            <button
+              v-if="canShowMoreProjectSessions(group)"
+              class="session-project-show-more"
+              type="button"
+              @click="showMoreProjectSessions(group.key)"
+            >
+              {{ uiText.sidebar.showMore }}
+            </button>
           </div>
         </div>
       </div>
