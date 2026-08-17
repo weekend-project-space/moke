@@ -6,6 +6,16 @@ import type { ToolStepViewItem } from './types'
 import { projectToolCalls } from './toolCallProjector'
 import { useConversationDisplay } from './useConversationDisplay'
 
+const approvedOnce = {
+  approval_id: 'approval_1',
+  kind: 'tool' as const,
+  decision: 'approved' as const,
+  scope: 'once' as const,
+  reason: 'Write file',
+  policy_reason: 'Allowed by the read-only permission policy',
+  approval_mode: 'read-only' as const,
+}
+
 function event<T extends AgentEvent['type']>(type: T, fields: Omit<Extract<AgentEvent, { type: T }>, 'eventId' | 'sequence' | 'threadId' | 'runId' | 'timestamp'>, sequence: number): Extract<AgentEvent, { type: T }> {
   return { ...fields, type, eventId: `evt_${sequence}`, sequence, threadId: 'thread_1', runId: 'run_1', timestamp: 1000 + sequence } as Extract<AgentEvent, { type: T }>
 }
@@ -113,6 +123,9 @@ test('live tool result attaches after the assistant tool call is persisted', () 
       event('tool_result.completed', {
         messageId: 'tool_msg_1', toolCallId: 'call_1', toolName: 'write_file',
         content: '{"path":"src/app.ts","bytes":5}', output: { path: 'src/app.ts', bytes: 5 },
+        metadata: {
+          approvals: [approvedOnce],
+        },
       }, 2),
     ]),
     isRunning: ref(true), runtimeNow: ref(2000), runError: ref(''), pendingAsk: ref(null),
@@ -124,5 +137,7 @@ test('live tool result attaches after the assistant tool call is persisted', () 
   const step = group.items.find(item => item.kind === 'tool-step') as ToolStepViewItem
   assert.equal(step.renderer, 'file-change')
   assert.equal(step.outputRaw, JSON.stringify({ path: 'src/app.ts', bytes: 5 }, null, 2))
+  assert.deepEqual(step.approvals, [approvedOnce])
+  assert.deepEqual(step.state, { kind: 'approved', label: 'Allowed once' })
   assert.equal(step.executionStatus, 'completed')
 })

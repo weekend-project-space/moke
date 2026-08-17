@@ -1,5 +1,5 @@
 ﻿import { computed, type Ref } from 'vue'
-import type { AgentEvent, Message, PendingApproval, PendingAsk } from '../model/conversation'
+import type { AgentEvent, Message, PendingApproval, PendingAsk, ToolApprovalRecord } from '../model/conversation'
 import type { DisplayItem, ProcessItem, ProcessNote } from './types'
 import { createProcessGroupView, formatProcessGroupStatus } from './processDisplay'
 import { uiText } from '../../../text/uiText'
@@ -491,6 +491,9 @@ function createToolCompletedEventProcessItem(event: ToolCompletedEvent, callEven
     objectLabel: shortText(detail, 120),
     raw,
     toolCallId: event.toolCallId,
+    approvals: Array.isArray(event.metadata?.approvals)
+      ? event.metadata.approvals as ToolApprovalRecord[]
+      : undefined,
     executionStatus: call?.status || (event.type === 'tool_result.failed' ? 'failed' : 'completed'),
   }
 }
