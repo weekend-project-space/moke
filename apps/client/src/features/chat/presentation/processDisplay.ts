@@ -12,6 +12,18 @@ import { summarizeOutput } from './toolDisplay'
 import { uiText } from '../../../text/uiText'
 
 const DONE = uiText.process.done
+const REASONING_PREVIEW_LENGTH = 100
+
+export function latestReasoningPreview(value = '') {
+  const lastLine = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) || ''
+
+  if (lastLine.length <= REASONING_PREVIEW_LENGTH) return lastLine
+  return `...${lastLine.slice(-(REASONING_PREVIEW_LENGTH - 3))}`
+}
 
 export function createProcessGroupView(items: ProcessItem[]): ProcessGroupView {
   const viewItems = mergeToolSteps(items)
@@ -154,7 +166,7 @@ export function resolveToolStepState(
       : approval.scope === 'session'
         ? uiText.tool.approvalAllowedSession
         : uiText.tool.approvalAllowedOnce
-    return { kind: 'approved', label: approval.reviewer ? `${label} (${approval.reviewer})` : label }
+    return { kind: 'approved', label }
   }
   return undefined
 }

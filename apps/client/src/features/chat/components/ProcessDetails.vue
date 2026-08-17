@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { Check, CircleX, ChevronDown, ChevronRight, Code2, FilePenLine, Plug, Search, Send, ShieldCheck, ShieldX, Sparkles, SquareDashedMousePointer, SquareTerminal } from 'lucide-vue-next'
+import { latestReasoningPreview } from '../presentation/processDisplay'
 import type { ToolCategory, ProcessViewItem } from '../presentation/types'
 import ToolResultDetails from './ToolResultDetails.vue'
 import { uiText } from '../../../text/uiText'
@@ -72,7 +73,7 @@ function iconKind(step: { toolCategory: ToolCategory }) {
       <details
         v-else
         class="process-item"
-        :open="isActive && (processItem.kind === 'reasoning' || (processItem.kind === 'tool-step' && (processItem.executionStatus === 'streaming-args' || processItem.executionStatus === 'executing')))"
+        :open="isActive && processItem.kind === 'tool-step' && (processItem.executionStatus === 'streaming-args' || processItem.executionStatus === 'executing')"
         :class="[
           processItem.tone,
           processItem.kind,
@@ -87,6 +88,12 @@ function iconKind(step: { toolCategory: ToolCategory }) {
             <Sparkles :size="14" stroke-width="1.8" />
           </span>
           <span class="process-reasoning-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
+          <template v-if="latestReasoningPreview(processItem.raw)">
+            <span class="process-tool-separator process-reasoning-separator" aria-hidden="true">·</span>
+            <small class="process-reasoning-preview" :title="latestReasoningPreview(processItem.raw)">
+              {{ latestReasoningPreview(processItem.raw) }}
+            </small>
+          </template>
           <span class="process-step-caret" aria-hidden="true">
             <ChevronRight class="when-closed" :size="15" stroke-width="2" />
             <ChevronDown class="when-open" :size="15" stroke-width="2" />

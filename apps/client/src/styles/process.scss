@@ -160,6 +160,7 @@
 
     .process-reasoning-icon,
     .process-reasoning-title,
+    .process-reasoning-preview,
     .process-step-caret {
       color: color-mix(in srgb, var(--color-text-muted), transparent 12%);
     }
@@ -167,6 +168,7 @@
     &:hover {
       .process-reasoning-icon,
       .process-reasoning-title,
+      .process-reasoning-preview,
       .process-step-caret {
         color: color-mix(in srgb, var(--color-text-secondary), transparent 8%);
       }
@@ -284,21 +286,44 @@
   display: inline-flex;
   width: 17px;
   height: 15px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
 }
 
 .process-reasoning-title {
+  flex: 0 0 auto;
   color: color-mix(in srgb, var(--color-text-muted), transparent 10%);
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: 1.5;
+  white-space: nowrap;
+}
+
+.process-reasoning-preview {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--color-text-muted), transparent 10%);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-item.reasoning[open] {
+  .process-reasoning-separator,
+  .process-reasoning-preview {
+    display: none;
+  }
 }
 
 .process-step-caret {
   display: inline-flex;
   width: 15px;
   height: 15px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   visibility: hidden;
@@ -375,7 +400,7 @@
 }
 
 .process-reasoning-body {
-  max-height: 260px;
+  // max-height: 260px;
   margin: 4px 0 8px;
   padding: 2px 0 4px 10px;
   overflow: auto;

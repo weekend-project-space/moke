@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createProcessGroupView, formatProcessGroupStatus, resolveToolStepState } from './processDisplay'
+import { createProcessGroupView, formatProcessGroupStatus, latestReasoningPreview, resolveToolStepState } from './processDisplay'
 import type { ProcessItem, ToolStepViewItem } from './types'
 
 const group = {
@@ -11,6 +11,15 @@ const group = {
   startedAt: 1_000,
   endedAt: 4_000,
 }
+
+test('reasoning preview shows the tail of the latest non-empty line', () => {
+  assert.equal(latestReasoningPreview('first line\r\n\r\nlatest line\n'), 'latest line')
+
+  const latestLine = 'a'.repeat(120)
+  const preview = latestReasoningPreview(`first line\n${latestLine}`)
+  assert.equal(preview.length, 100)
+  assert.equal(preview, `...${'a'.repeat(97)}`)
+})
 
 test('formatProcessGroupStatus distinguishes active and completed work', () => {
   assert.deepEqual(formatProcessGroupStatus(group, true, 5_000), {
