@@ -24,7 +24,7 @@ export type SystemReadOptions = {
 export type SystemAccessOptions = {
   workspaceRoot?: string;
   approvedRoots?: string[];
-  /** OS-level confinement for shell commands. File tools ignore this setting. */
+  /** Permission policy for shell commands and direct file writes. */
   sandboxMode?: SandboxMode;
 };
 

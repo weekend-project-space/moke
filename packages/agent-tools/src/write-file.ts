@@ -16,7 +16,7 @@ export function createWriteFileTool(system: WritableSystemBackend): RuntimeTool<
     async handler(input, context) {
       return system.writeFile(input.path, input.content, {
         workspaceRoot: context.workspace,
-        approvedRoots: context.workspaceRoots?.(),
+        sandboxMode: context.run?.env.approval_mode,
       });
     },
   };

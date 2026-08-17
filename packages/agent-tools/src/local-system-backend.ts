@@ -191,7 +191,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
   }
 
   async writeFile(filePath: string, content: string, access?: SystemAccessOptions): Promise<SystemWriteResult> {
-    const target = await this.toBackendPath(filePath, access, 'file');
+    const target = await this.toWritablePath(filePath, access);
     if (this.useLocalFsWrites) {
       await writeLocalTextFile(target, content);
       return {
@@ -215,7 +215,7 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
     newString: string,
     options?: { replaceAll?: boolean }, access?: SystemAccessOptions,
   ): Promise<SystemEditResult> {
-    const target = await this.toBackendPath(filePath, access, 'file');
+    const target = await this.toWritablePath(filePath, access);
     const result = await this.backend.edit(target, oldString, newString, options?.replaceAll ?? false);
     if (result.error) throw new Error(result.error);
 
@@ -274,6 +274,26 @@ export class LocalSystemBackend implements ExecutableSystemBackend {
 
   private async toBackendPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {
     return this.toHostPath(requestedPath, access, approvalScope);
+  }
+
+  private async toWritablePath(requestedPath: string, access?: SystemAccessOptions) {
+    const sandboxMode = access?.sandboxMode ?? this.defaultSandboxMode;
+    if (sandboxMode === 'read-only') {
+      throw new Error('Writes are disabled in read-only mode');
+    }
+
+    const workspaceRoot = this.workspaceRoot(access);
+    const fullPath = path.resolve(workspaceRoot, requestedPath);
+    if (sandboxMode === 'danger-full-access') return fullPath;
+
+    if (isInsideRoot(workspaceRoot, fullPath)) {
+      const [realWorkspaceRoot, realTarget] = await Promise.all([
+        resolveRealPath(workspaceRoot),
+        resolveRealPath(fullPath),
+      ]);
+      if (isInsideRoot(realWorkspaceRoot, realTarget)) return fullPath;
+    }
+    throw new Error(`Write path must be inside workspaceRoot for workspace-write: ${fullPath}`);
   }
 
   private async toHostPath(requestedPath: string, access?: SystemAccessOptions, approvalScope: 'file' | 'directory' = 'directory') {

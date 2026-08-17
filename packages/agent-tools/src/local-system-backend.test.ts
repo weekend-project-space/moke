@@ -201,6 +201,72 @@ test('writeFile writes directly when parent is the backend root', async () => {
   }
 });
 
+test('read-only rejects direct file writes and edits', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-read-only-root-'));
+  const target = path.join(root, 'existing.txt');
+  try {
+    writeFileSync(target, 'before');
+    const system = new LocalSystemBackend(root);
+    const access = { workspaceRoot: root, sandboxMode: 'read-only' as const };
+
+    await assert.rejects(
+      () => system.writeFile('created.txt', 'blocked', access),
+      /Writes are disabled in read-only mode/,
+    );
+    await assert.rejects(
+      () => system.editFile('existing.txt', 'before', 'after', undefined, access),
+      /Writes are disabled in read-only mode/,
+    );
+
+    assert.equal(existsSync(path.join(root, 'created.txt')), false);
+    assert.equal(readFileSync(target, 'utf8'), 'before');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('workspace-write rejects writes outside workspace even when the path is approved', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-workspace-write-root-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'moke-workspace-write-outside-'));
+  const target = path.join(outside, 'blocked.txt');
+  try {
+    const system = new LocalSystemBackend(root);
+    system.approveWorkspaceRoot(outside);
+
+    await assert.rejects(
+      () => system.writeFile(target, 'blocked', {
+        workspaceRoot: root,
+        sandboxMode: 'workspace-write',
+      }),
+      /Write path must be inside workspaceRoot for workspace-write/,
+    );
+
+    assert.equal(existsSync(target), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('danger-full-access allows direct file writes outside workspace', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'moke-full-access-root-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'moke-full-access-outside-'));
+  const target = path.join(outside, 'allowed.txt');
+  try {
+    const system = new LocalSystemBackend(root);
+
+    await system.writeFile(target, 'allowed', {
+      workspaceRoot: root,
+      sandboxMode: 'danger-full-access',
+    });
+
+    assert.equal(readFileSync(target, 'utf8'), 'allowed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test('workspace symlinks cannot escape the approved root', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'moke-symlink-root-'));
   const outside = mkdtempSync(path.join(tmpdir(), 'moke-symlink-outside-'));
@@ -211,7 +277,10 @@ test('workspace symlinks cannot escape the approved root', async () => {
     const system = new LocalSystemBackend(root);
 
     await assert.rejects(() => system.readFile('link/secret.txt'), /Path requires approval/);
-    await assert.rejects(() => system.writeFile('link/new.txt', 'outside'), /Path requires approval/);
+    await assert.rejects(
+      () => system.writeFile('link/new.txt', 'outside'),
+      /Write path must be inside workspaceRoot for workspace-write/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
