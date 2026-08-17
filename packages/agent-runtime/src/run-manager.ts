@@ -152,8 +152,6 @@ export class RunManager {
       runId: string;
       resolve: (decision: WorkspacePathApprovalDecision | ToolApprovalDecision) => void;
       reject: (error: Error) => void;
-      reviewer?: 'user' | 'ai' | 'auto_approve';
-      reviewReason?: string;
     }
   >();
   private readonly approvalRecords = new Map<string, Map<string, ToolApprovalRecord[]>>();
@@ -266,7 +264,7 @@ export class RunManager {
           ],
           askUser: (input) => this.askUser(run, eventBus, input),
           approveWorkspacePath: (input) => this.approveWorkspacePath(run, eventBus, input),
-          approveTool: (toolInput) => this.reviewTool(run, toolInput, run.approval_mode),
+          approveTool: (toolInput) => this.authorizeTool(run, toolInput, run.approval_mode),
           consumeApprovals: (callId) => this.consumeApprovalRecords(run.id, callId),
         },
         limits,
@@ -334,13 +332,13 @@ export class RunManager {
 
     if (isPermissionMode(run.approval_mode)) {
       const scope = 'once';
-      const reviewReason = `Approved by the ${run.approval_mode} permission policy`;
+      const policyReason = `Allowed by the ${run.approval_mode} permission policy`;
       const workspaceApproval = this.config.approveWorkspaceRoot?.(
         input.suggestedRoot,
         scope,
         run.session_id,
       );
-      this.recordApproval(run.id, pendingApproval, 'approved', scope, 'auto_approve', reviewReason, run.approval_mode);
+      this.recordApproval(run.id, pendingApproval, 'approved', scope, run.approval_mode, policyReason);
       return Promise.resolve({
         approved: true,
         scope,
@@ -366,7 +364,7 @@ export class RunManager {
     return this.config.defaultWorkspaceRoot || this.config.workspace || process.cwd();
   }
 
-  private async reviewTool(
+  private async authorizeTool(
     run: RuntimeRun,
     input: ToolApprovalRequest,
     approvalMode: ApprovalMode,
@@ -376,53 +374,17 @@ export class RunManager {
       this.recordToolApproval(run.id, input.callId, {
         approvalId,
         decision: 'approved',
-        reviewer: 'auto_approve',
         approvalMode,
-        reviewReason: `Approved by the ${approvalMode} permission policy`,
+        policyReason: `Allowed by the ${approvalMode} permission policy`,
         reason: input.reason,
       });
       return {
         approved: true,
         scope: 'once',
-        reviewer: 'auto_approve',
-        reviewReason: `Approved by the ${approvalMode} permission policy`,
+        policyReason: `Allowed by the ${approvalMode} permission policy`,
       };
     }
     throw new Error(`Unsupported approval mode: ${approvalMode}`);
-  }
-
-  private requestUserToolApproval(
-    run: RuntimeRun,
-    eventBus: EventBus,
-    input: ToolApprovalRequest,
-    approvalId = id('apv'),
-    reviewer: 'user' | 'ai' = 'user',
-    reviewReason?: string,
-  ): Promise<ToolApprovalDecision> {
-    const pendingApproval: PendingApproval = {
-      approval_id: approvalId,
-      ...(input.callId ? { call_id: input.callId } : {}),
-      kind: 'tool',
-      reason: input.reason,
-      action: {
-        tool: input.tool,
-        input: safeApprovalInput(input.input),
-      },
-      created_at: new Date().toISOString(),
-    };
-    run.pending_approval = pendingApproval;
-    this.setStatus(run, 'awaiting_approval');
-
-    return new Promise<ToolApprovalDecision>((resolve, reject) => {
-      this.pendingApprovals.set(approvalId, {
-        runId: run.id,
-        resolve,
-        reject,
-        reviewer,
-        reviewReason,
-      });
-      eventBus.emit({ type: 'interaction.required', interaction: toApprovalInteraction(pendingApproval) });
-    });
   }
 
   private askUser(
@@ -496,8 +458,8 @@ export class RunManager {
     run.pending_approval = undefined;
     this.setStatus(run, 'running');
     const scope = pendingApproval.kind === 'tool' ? 'once' : (options.scope || 'session');
-    this.recordApproval(run.id, pendingApproval, decision, scope, pending.reviewer || 'user', pending.reviewReason, run.approval_mode);
-    const event = new EventBus(run).emit({ type: 'interaction.resolved', interactionId: pendingApproval.approval_id, response: { interactionId: pendingApproval.approval_id, decision, scope, reviewer: pending.reviewer || 'user', reviewReason: pending.reviewReason, idempotencyKey: pendingApproval.approval_id } });
+    this.recordApproval(run.id, pendingApproval, decision, scope, run.approval_mode);
+    const event = new EventBus(run).emit({ type: 'interaction.resolved', interactionId: pendingApproval.approval_id, response: { interactionId: pendingApproval.approval_id, decision, scope, idempotencyKey: pendingApproval.approval_id } });
     this.observers.notify(event, run);
     const workspaceApproval =
       decision === 'approved' && pendingApproval.kind === 'workspace_path' && pendingApproval.suggested_root
@@ -508,8 +470,6 @@ export class RunManager {
       approved: decision === 'approved',
       scope,
       message: options.message,
-      reviewer: pending.reviewer || 'user',
-      reviewReason: pending.reviewReason,
       approvedRoots: workspaceApproval?.approvedRoots,
       cleanup: workspaceApproval?.cleanup,
     });
@@ -604,9 +564,8 @@ export class RunManager {
     approval: PendingApproval,
     decision: 'approved' | 'rejected',
     scope: 'once' | 'session' | 'persistent',
-    reviewer: 'user' | 'ai' | 'auto_approve' = 'user',
-    reviewReason?: string,
     approvalMode: ApprovalMode = 'workspace-write',
+    policyReason?: string,
   ) {
     if (!approval.call_id) return;
 
@@ -622,8 +581,7 @@ export class RunManager {
       decision,
       scope,
       reason: approval.reason,
-      reviewer,
-      ...(reviewReason ? { review_reason: reviewReason } : {}),
+      ...(policyReason ? { policy_reason: policyReason } : {}),
       approval_mode: approvalMode,
     });
     runRecords.set(approval.call_id, records);
@@ -635,9 +593,8 @@ export class RunManager {
     input: {
       approvalId: string;
       decision: 'approved' | 'rejected';
-      reviewer: 'ai' | 'auto_approve';
       approvalMode: ApprovalMode;
-      reviewReason: string;
+      policyReason: string;
       reason: string;
     },
   ) {
@@ -654,8 +611,7 @@ export class RunManager {
       decision: input.decision,
       scope: 'once',
       reason: input.reason,
-      reviewer: input.reviewer,
-      review_reason: input.reviewReason,
+      policy_reason: input.policyReason,
       approval_mode: input.approvalMode,
     });
     runRecords.set(callId, records);
@@ -707,7 +663,7 @@ function snapshotEnvironment(
 }
 
 function isPermissionMode(mode: ApprovalMode) {
-  return mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access';
+  return  mode === 'workspace-write' || mode === 'danger-full-access';
 }
 
 function safeApprovalInput(value: Record<string, unknown>): Record<string, unknown> {

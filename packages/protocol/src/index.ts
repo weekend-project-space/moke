@@ -119,15 +119,12 @@ export type ToolApprovalRecord = {
   decision: 'approved' | 'rejected';
   scope: 'once' | 'session' | 'persistent';
   reason: string;
-  reviewer?: ApprovalReviewer;
-  review_reason?: string;
+  policy_reason?: string;
   approval_mode?: ApprovalMode;
 };
 
 /** Kept under its legacy field name, but now defines the shell permission boundary. */
 export type ApprovalMode = SandboxMode;
-
-export type ApprovalReviewer = 'user' | 'ai' | 'auto_approve';
 
 export type SessionEnvironment = {
   approval_mode: ApprovalMode;

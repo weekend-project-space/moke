@@ -124,7 +124,7 @@ test('ToolRegistry does not execute a required tool when approval is rejected', 
   await assert.rejects(
     () => registry.execute('writes_state', {}, {
       workspace: 'E:\\work\\test\\moke',
-      approveTool: async () => ({ approved: false, message: 'Denied by reviewer' }),
+      approveTool: async () => ({ approved: false, message: 'Denied by permission policy' }),
     }),
     (error: unknown) => {
       assert.equal((error as { output?: { error?: { code?: string } } }).output?.error?.code, 'TOOL_APPROVAL_REJECTED');

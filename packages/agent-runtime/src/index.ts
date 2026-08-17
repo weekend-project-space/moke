@@ -3,12 +3,6 @@ export { EventBus, isPublicAgentEvent } from './event-bus.js';
 export { RunManager, SessionRunActiveError } from './run-manager.js';
 export type { RunOptions } from './run-manager.js';
 export type { RunOrigin, RuntimeRun } from './run-state.js';
-export type {
-  AiApprovalReview,
-  AiApprovalReviewer,
-  ApprovalReviewContext,
-  ToolApprovalReviewRequest,
-} from './approval-reviewer.js';
 export {
   createRuntimeToolResult,
   normalizeRuntimeToolResult,

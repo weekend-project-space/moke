@@ -27,11 +27,15 @@ export class ScheduledTaskStore {
 
     this.tasks.clear();
     const invalidTasks = stored.tasks.filter((task) => !isScheduledTask(task));
+    const unsupportedPermissionTasks = invalidTasks.filter(isUnsupportedPermissionTask);
+    if (unsupportedPermissionTasks.length !== invalidTasks.length) {
+      throw new Error('Invalid scheduled task in store');
+    }
     for (const task of stored.tasks) {
       if (isScheduledTask(task)) this.tasks.set(task.id, task);
     }
-    if (invalidTasks.length > 0) {
-      console.warn(`Discarding ${invalidTasks.length} scheduled task(s) with an unsupported permission mode`);
+    if (unsupportedPermissionTasks.length > 0) {
+      console.warn(`Discarding ${unsupportedPermissionTasks.length} scheduled task(s) with an unsupported permission mode`);
       this.flush();
     }
   }
@@ -69,7 +73,20 @@ export class ScheduledTaskStore {
   }
 }
 
+function isUnsupportedPermissionTask(value: unknown) {
+  if (!hasScheduledTaskFields(value)) return false;
+  const mode = value.approval_mode;
+  return mode === 'manual' || mode === 'ai_review' || mode === 'auto_approve';
+}
+
 function isScheduledTask(value: unknown): value is ScheduledTask {
+  if (!hasScheduledTaskFields(value)) return false;
+  return value.approval_mode === 'read-only'
+    || value.approval_mode === 'workspace-write'
+    || value.approval_mode === 'danger-full-access';
+}
+
+function hasScheduledTaskFields(value: unknown): value is Omit<ScheduledTask, 'approval_mode'> & { approval_mode: unknown } {
   if (!value || typeof value !== 'object') return false;
   const task = value as Partial<ScheduledTask>;
   return typeof task.id === 'string'
@@ -79,7 +96,6 @@ function isScheduledTask(value: unknown): value is ScheduledTask {
     && typeof task.timezone === 'string'
     && (task.status === 'enabled' || task.status === 'paused')
     && typeof task.workspace_root === 'string'
-    && (task.approval_mode === 'read-only' || task.approval_mode === 'workspace-write' || task.approval_mode === 'danger-full-access')
     && typeof task.created_at === 'string'
     && typeof task.updated_at === 'string';
 }

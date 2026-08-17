@@ -277,7 +277,7 @@ test('RunManager records an ask answer as an interaction event instead of chat m
   );
 });
 
-test('RunManager auto-approves tools without publishing an interaction', async () => {
+test('RunManager allows tools by permission policy without publishing an interaction', async () => {
   const session = createSession();
   const runs = new Map();
   let recordedApprovals: ToolApprovalRecord[] = [];
@@ -310,8 +310,7 @@ test('RunManager auto-approves tools without publishing an interaction', async (
     decision: 'approved',
     scope: 'once',
     reason: 'Run tests',
-    reviewer: 'auto_approve',
-    review_reason: 'Approved by the workspace-write permission policy',
+    policy_reason: 'Allowed by the workspace-write permission policy',
     approval_mode: 'workspace-write',
   }]);
 });
@@ -575,14 +574,14 @@ test('RunManager freezes the session environment and uses its workspace for the 
   assert.deepEqual(agentTools, ['workspace_tool']);
 });
 
-test('RunManager auto-approves tool decisions and records the reviewer', async () => {
+test('RunManager allows tool execution through the selected permission policy', async () => {
   const session = createSession();
   session.env = {
     approval_mode: 'danger-full-access',
     system: { platform: 'windows', arch: 'x64', shell: 'pwsh' },
     workspace: { root: process.cwd() },
   };
-  let decision: { approved?: boolean; reviewer?: string } | undefined;
+  let decision: { approved?: boolean; policyReason?: string } | undefined;
   const manager = new RunManager({
     runs: new Map(),
     agent: {
@@ -598,10 +597,10 @@ test('RunManager auto-approves tool decisions and records the reviewer', async (
   const run = manager.createRun(session, { content: 'write a file' });
   await waitFor(() => run.status === 'completed');
   assert.equal(decision?.approved, true);
-  assert.equal(decision?.reviewer, 'auto_approve');
+  assert.equal(decision?.policyReason, 'Allowed by the danger-full-access permission policy');
 });
 
-test('RunManager auto-approves workspace paths once without pausing the run', async () => {
+test('RunManager allows workspace paths once without pausing the run', async () => {
   const session = createSession();
   session.env = {
     approval_mode: 'danger-full-access',
@@ -648,13 +647,12 @@ test('RunManager auto-approves workspace paths once without pausing the run', as
     decision: 'approved',
     scope: 'once',
     reason: 'Path requires approval',
-    reviewer: 'auto_approve',
-     review_reason: 'Approved by the danger-full-access permission policy',
+    policy_reason: 'Allowed by the danger-full-access permission policy',
     approval_mode: 'danger-full-access',
   }]);
 });
 
-test('RunManager workspace-write mode auto-approves tool execution', async () => {
+test('RunManager workspace-write permission policy allows tool execution', async () => {
   const session = createSession();
   session.env = {
     approval_mode: 'workspace-write',
@@ -667,7 +665,7 @@ test('RunManager workspace-write mode auto-approves tool execution', async () =>
       async run(input) {
         const decision = await input.context.approveTool?.({ tool: 'write_file', input: { path: 'a.md' }, callId: 'call_1', reason: 'Write file' });
         assert.equal(decision?.approved, true);
-        assert.equal(decision?.reviewer, 'auto_approve');
+        assert.equal(decision?.policyReason, 'Allowed by the workspace-write permission policy');
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
@@ -679,7 +677,7 @@ test('RunManager workspace-write mode auto-approves tool execution', async () =>
   await waitFor(() => run.status === 'completed');
 });
 
-test('RunManager read-only mode auto-approves without publishing an interaction', async () => {
+test('RunManager read-only permission policy allows execution without publishing an interaction', async () => {
   const session = createSession();
   session.env = {
     approval_mode: 'read-only',
@@ -691,7 +689,7 @@ test('RunManager read-only mode auto-approves without publishing an interaction'
       async run(input) {
         const decision = await input.context.approveTool?.({ tool: 'execute', input: { command: 'rm' }, callId: 'call_1', reason: 'Run command' });
         assert.equal(decision?.approved, true);
-        assert.equal(decision?.reviewer, 'auto_approve');
+        assert.equal(decision?.policyReason, 'Allowed by the read-only permission policy');
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
       },
     },

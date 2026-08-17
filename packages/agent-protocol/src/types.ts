@@ -51,8 +51,6 @@ export type AgentInteractionResponse = {
   answer?: string;
   optionId?: string;
   scope?: 'once' | 'session' | 'persistent';
-  reviewer?: 'user' | 'ai' | 'auto_approve';
-  reviewReason?: string;
   idempotencyKey: string;
 };
 

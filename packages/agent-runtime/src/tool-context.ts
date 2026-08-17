@@ -1,4 +1,4 @@
-import type { ApprovalReviewer, ToolApprovalRecord } from '@moke/protocol';
+import type { ToolApprovalRecord } from '@moke/protocol';
 import type { RuntimeRun } from './run-state.js';
 
 export type RuntimeContextItem = {
@@ -61,8 +61,7 @@ export type ToolApprovalDecision = {
   approved: boolean;
   scope?: 'once' | 'session' | 'persistent';
   message?: string;
-  reviewer?: ApprovalReviewer;
-  reviewReason?: string;
+  policyReason?: string;
 };
 
 export type ToolContext = {
