@@ -87,7 +87,10 @@ function iconKind(step: { toolCategory: ToolCategory }) {
           <span class="process-reasoning-icon" aria-hidden="true">
             <Sparkles :size="14" stroke-width="1.8" />
           </span>
-          <span class="process-reasoning-title">{{ processItem.actionLabel || uiText.process.reasoning }}</span>
+          <span
+            class="process-reasoning-title"
+            :class="{ 'live-text-sweep': isActive && processItem.id === items.at(-1)?.id }"
+          >{{ processItem.actionLabel || uiText.process.reasoning }}</span>
           <template v-if="latestReasoningPreview(processItem.raw)">
             <span class="process-tool-separator process-reasoning-separator" aria-hidden="true">·</span>
             <small class="process-reasoning-preview" :title="latestReasoningPreview(processItem.raw)">
