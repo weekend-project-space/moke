@@ -80,6 +80,7 @@ export class CoreAgentAdapter implements Agent {
       threadId: input.context.run?.session_id ?? randomUUID(),
       runId: input.context.run?.id,
       input: toInput(input.input, input.attachments),
+      instructions: SYSTEM_PROMPT,
       messages: toHistory(input.history ?? []),
       context: buildContext(input),
       limits: {
@@ -118,7 +119,7 @@ class RuntimeToolProvider implements ToolProvider {
     const tools = this.input.toolRegistry.list().map((tool) => ({
       name: tool.name,
       description: tool.description,
-      parameters: tool.input_schema ?? (z.toJSONSchema(tool.schema) as Record<string, unknown>),
+      parameters: normalizeToolSchema(tool.input_schema ?? (z.toJSONSchema(tool.schema) as Record<string, unknown>)),
       approval: tool.approval,
     }));
     const all = [ASK_USER_TOOL, ...tools];
@@ -159,8 +160,8 @@ class RuntimeToolProvider implements ToolProvider {
         metadata: { publicOutput: normalized.publicOutput, durationMs: Date.now() - startedAt, approvals },
         context: normalized.context.map((item) => ({
           description: `${item.authority} tool context`,
-          value: item.content,
-          role: item.authority === 'user' ? 'user' as const : 'developer' as const,
+          value: `<tool_context authority="${item.authority}">\n${item.content}\n</tool_context>`,
+          role: 'user' as const,
         })),
         media: normalized.images.map((image) => ({
           type: 'image' as const,
@@ -188,6 +189,23 @@ class RuntimeToolProvider implements ToolProvider {
 
 }
 
+export function normalizeToolSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === '$schema' || key === 'maxLength') continue;
+    if (Array.isArray(value)) {
+      normalized[key] = value.map(item => item && typeof item === 'object'
+        ? normalizeToolSchema(item as Record<string, unknown>)
+        : item);
+    } else if (value && typeof value === 'object') {
+      normalized[key] = normalizeToolSchema(value as Record<string, unknown>);
+    } else {
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}
+
 export async function forwardCoreEvents(events: AsyncIterable<CoreAgentEvent>, input: Pick<AgentRunInput, 'eventBus'>) {
   const completedMessages = new Map<string, AssistantMessage>();
   for await (const event of events) {
@@ -207,16 +225,15 @@ function toEventInput(event: CoreAgentEvent) {
 
 function buildContext(input: AgentRunInput) {
   const items = [
-    { description: 'System instructions', value: SYSTEM_PROMPT },
     ...(input.context.trustedContext ?? []).map((item) => ({
       description: `${item.authority} runtime context`,
       value: item.content,
-      role: item.authority === 'user' ? 'user' as const : 'developer' as const,
+      role: 'user' as const,
     })),
     ...(input.context.contentManager?.buildInitialContext() ?? []).map((item) => ({
       description: `${item.authority} skill context`,
       value: item.content,
-      role: item.authority === 'user' ? 'user' as const : 'developer' as const,
+      role: 'user' as const,
     })),
   ];
   return items;

@@ -274,6 +274,13 @@
   gap: 9px;
 }
 
+.conversation-turn-spacer {
+  width: 1px;
+  height: 0;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
 .conversation::-webkit-scrollbar,
 .session-list::-webkit-scrollbar,
 .composer textarea::-webkit-scrollbar {

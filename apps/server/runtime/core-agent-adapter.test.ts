@@ -5,7 +5,7 @@ import type { AgentEvent as CoreAgentEvent } from '@moke/agent-protocol';
 import { EventBus, type RuntimeRun } from '@moke/agent-runtime';
 import type { AgentEvent } from '@moke/protocol';
 
-import { forwardCoreEvents, toLlmClientOptions } from './core-agent-adapter.js';
+import { forwardCoreEvents, normalizeToolSchema, toLlmClientOptions } from './core-agent-adapter.js';
 
 test('maps developer messages to system for OpenAI-compatible providers', () => {
   const options = toLlmClientOptions({
@@ -21,6 +21,19 @@ test('maps developer messages to system for OpenAI-compatible providers', () => 
   });
 
   assert.equal(options.compatible?.supportsDeveloperRole, false);
+});
+
+test('keeps compatible tool schemas free of unsupported JSON Schema metadata', () => {
+  assert.deepEqual(normalizeToolSchema({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    properties: { path: { type: 'string', maxLength: 2000 } },
+    additionalProperties: false,
+  }), {
+    type: 'object',
+    properties: { path: { type: 'string' } },
+    additionalProperties: false,
+  });
 });
 
 test('forwards one complete core assistant message and projects its runtime result', async () => {

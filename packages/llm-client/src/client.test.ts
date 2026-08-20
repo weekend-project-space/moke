@@ -199,6 +199,34 @@ test('OpenAI-compatible applies declared compatibility switches', async () => {
   assert.equal(body?.parallel_tool_calls, undefined);
 });
 
+test('OpenAI-compatible merges system context into one leading message', async () => {
+  let body: Record<string, unknown> | undefined;
+  const client = createLlmClient({
+    provider: 'openai-compatible',
+    apiKey: 'local',
+    baseUrl: 'http://localhost:8080/v1',
+    model: 'qwen3.5-2b',
+    compatible: { supportsDeveloperRole: false },
+    fetch: (async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return sseResponse([{ data: { id: 'chat_local', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }] } }, { data: '[DONE]' }]);
+    }) as typeof fetch,
+  });
+
+  await client.complete({
+    input: [
+      { type: 'message', role: 'system', content: 'Rules' },
+      { type: 'message', role: 'developer', content: 'Environment' },
+      { type: 'message', role: 'user', content: 'Hello' },
+    ],
+  });
+  const messages = body?.messages as Array<{ role: string; content: string }>;
+  assert.equal(messages.filter(message => message.role === 'system').length, 1);
+  assert.equal(messages[0]?.role, 'system');
+  assert.match(messages[0]?.content ?? '', /Rules/);
+  assert.match(messages[0]?.content ?? '', /Environment/);
+});
+
 test('Chat Completions preserves refusal output and exposes its raw delta', async () => {
   const rawTypes: string[] = [];
   const client = createLlmClient({

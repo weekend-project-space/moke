@@ -4,7 +4,7 @@ import MarkdownIt from 'markdown-it'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessDetails from './ProcessDetails.vue'
-import { conversationScrollState } from '../presentation/conversationScroll'
+import { conversationScrollState, conversationTurnSpacerHeight } from '../presentation/conversationScroll'
 import type { DisplayItem, TaskTemplate } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
 
@@ -33,6 +33,9 @@ const emit = defineEmits<{
 
 const conversationEl = ref<HTMLElement | null>(null)
 const contentEl = ref<HTMLElement | null>(null)
+const turnSpacerEl = ref<HTMLElement | null>(null)
+let anchoredUserId = ''
+let anchorFrame: number | undefined
 let followLatest = true
 let isJumpingToBottom = false
 let lastScrollHeight = 0
@@ -43,6 +46,8 @@ let lastJumpVisibility: boolean | undefined
 let resizeObserver: ResizeObserver | undefined
 let scrollFrame: number | undefined
 let scrollScheduled = false
+let turnSpacerHeight = 0
+let userScrollIntent = false
 const lastAssistantDisplayItemId = computed(() => {
   for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
     const item = props.displayItems[index]
@@ -130,6 +135,58 @@ function scrollToBottom(force = false) {
   emitJumpVisibility(false)
 }
 
+function setTurnSpacerHeight(height: number) {
+  const nextHeight = Math.max(0, Math.ceil(height))
+  if (nextHeight === turnSpacerHeight) return
+  turnSpacerHeight = nextHeight
+  if (turnSpacerEl.value) turnSpacerEl.value.style.height = `${nextHeight}px`
+}
+
+function clearTurnAnchor() {
+  anchoredUserId = ''
+  setTurnSpacerHeight(0)
+}
+
+function updateTurnAnchor() {
+  const el = conversationEl.value
+  const content = contentEl.value
+  if (!el || !content || !anchoredUserId) return false
+
+  const anchor = content.querySelector<HTMLElement>(`[data-display-item-id="${CSS.escape(anchoredUserId)}"]`)
+  if (!anchor) return false
+
+  const topInset = Number.parseFloat(getComputedStyle(el).paddingTop) || 0
+  const anchorScrollTop = Math.max(0, el.scrollTop + anchor.getBoundingClientRect().top - el.getBoundingClientRect().top - topInset)
+  setTurnSpacerHeight(conversationTurnSpacerHeight({
+    anchorScrollTop,
+    clientHeight: el.clientHeight,
+    currentSpacerHeight: turnSpacerHeight,
+    scrollHeight: el.scrollHeight,
+  }))
+  el.scrollTo({ top: anchorScrollTop, behavior: 'auto' })
+  lastScrollTop = el.scrollTop
+  lastScrollHeight = el.scrollHeight
+  return true
+}
+
+function scheduleTurnAnchor(id: string) {
+  anchoredUserId = id
+  followLatest = false
+  userScrollIntent = false
+  if (anchorFrame !== undefined) window.cancelAnimationFrame(anchorFrame)
+
+  void nextTick(() => {
+    anchorFrame = window.requestAnimationFrame(() => {
+      anchorFrame = undefined
+      if (!updateTurnAnchor()) {
+        clearTurnAnchor()
+        return
+      }
+      emitJumpVisibility(false)
+    })
+  })
+}
+
 function scheduleScrollToBottom(force = false) {
   pendingScrollForce = pendingScrollForce || force
   if (scrollScheduled) return
@@ -149,6 +206,7 @@ function scheduleScrollToBottom(force = false) {
 }
 
 function resetScrollState() {
+  clearTurnAnchor()
   followLatest = true
   isJumpingToBottom = false
   lastScrollTop = 0
@@ -169,11 +227,17 @@ function handleConversationScroll() {
   const el = conversationEl.value
   if (!el) return
 
-  if (el.scrollHeight === lastScrollHeight && el.scrollTop < lastScrollTop) {
+  if (!anchoredUserId && el.scrollHeight === lastScrollHeight && el.scrollTop < lastScrollTop) {
     followLatest = false
   }
   const state = updateScrollState()
-  if (state?.isAtBottom) {
+  if (anchoredUserId) {
+    followLatest = false
+    if (userScrollIntent && state?.isAtBottom) {
+      clearTurnAnchor()
+      followLatest = true
+    }
+  } else if (state?.isAtBottom) {
     followLatest = true
     isJumpingToBottom = false
   }
@@ -186,6 +250,11 @@ function cancelJumpToBottom() {
   isJumpingToBottom = false
   const el = conversationEl.value
   if (el) el.scrollTo({ top: el.scrollTop, behavior: 'auto' })
+}
+
+function handleScrollIntent() {
+  userScrollIntent = true
+  cancelJumpToBottom()
 }
 
 function handleConversationScrollEnd() {
@@ -233,6 +302,7 @@ function jumpToBottom() {
     return
   }
 
+  clearTurnAnchor()
   followLatest = true
   isJumpingToBottom = true
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
@@ -245,7 +315,10 @@ function emitJumpVisibility(visible: boolean) {
 }
 
 function handleContentResize() {
-  if (followLatest) scheduleScrollToBottom()
+  if (anchoredUserId) {
+    if (!updateTurnAnchor()) clearTurnAnchor()
+    updateScrollState()
+  } else if (followLatest) scheduleScrollToBottom()
   else updateScrollState()
 }
 
@@ -267,7 +340,7 @@ watch(
 )
 
 watch(lastUserDisplayItemId, (current) => {
-  if (current) scheduleScrollToBottom(true)
+  if (current && props.isRunning) scheduleTurnAnchor(current)
 })
 
 onMounted(() => {
@@ -275,6 +348,7 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(handleContentResize)
   if (contentEl.value) resizeObserver.observe(contentEl.value)
   if (conversationEl.value) {
+    resizeObserver.observe(conversationEl.value)
     lastScrollTop = conversationEl.value.scrollTop
     lastScrollHeight = conversationEl.value.scrollHeight
   }
@@ -284,6 +358,7 @@ onMounted(() => {
 onUnmounted(() => {
   disposed = true
   resizeObserver?.disconnect()
+  if (anchorFrame !== undefined) window.cancelAnimationFrame(anchorFrame)
   if (scrollFrame !== undefined) window.cancelAnimationFrame(scrollFrame)
   emit('jumpVisibilityChange', false)
 })
@@ -298,11 +373,11 @@ defineExpose({
     ref="conversationEl"
     class="conversation"
     @click="handleConversationClick"
-    @pointerdown.passive="cancelJumpToBottom"
+    @pointerdown.passive="handleScrollIntent"
     @scroll.passive="handleConversationScroll"
     @scrollend="handleConversationScrollEnd"
-    @touchstart.passive="cancelJumpToBottom"
-    @wheel.passive="cancelJumpToBottom"
+    @touchstart.passive="handleScrollIntent"
+    @wheel.passive="handleScrollIntent"
   >
     <div ref="contentEl" class="conversation-content">
     <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
@@ -341,6 +416,7 @@ defineExpose({
         v-else
         :api-base="apiBase"
         :id="item.id"
+        :data-display-item-id="item.id"
         :message="item.message"
         :copied-key="copiedKey"
         :render-markdown="renderMarkdown"
@@ -362,5 +438,6 @@ defineExpose({
       </article>
     </div>
     </div>
+    <div ref="turnSpacerEl" class="conversation-turn-spacer" aria-hidden="true"></div>
   </div>
 </template>

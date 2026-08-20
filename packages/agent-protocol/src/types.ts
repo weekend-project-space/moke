@@ -59,6 +59,7 @@ export type AgentRunInput = {
   runId?: string;
   parentRunId?: string;
   input: string | InputContent[];
+  instructions?: string;
   messages?: AgentMessage[];
   state?: AgentState;
   context?: AgentContext[];

@@ -105,7 +105,7 @@ class Run implements AgentRun {
     this.state = { ...(input.state ?? {}) };
     this.modelHistory = toModelHistory(this.messages);
     for (const context of input.context ?? []) {
-      this.modelHistory.push({ type: 'message', role: context.role ?? 'developer', content: `${context.description}\n${context.value}` });
+      this.modelHistory.push({ type: 'message', role: 'user', content: `${context.description}\n${context.value}` });
     }
     const userMessage = { id: createId('msg'), role: 'user' as const, content: input.input };
     this.messages.push(userMessage);
@@ -170,6 +170,7 @@ class Run implements AgentRun {
         const tools = this.resolveTools();
         const modelRun = this.agent.model.chat({
           input: [...this.modelHistory],
+          instructions: this.input.instructions,
           tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })),
           parallelToolCalls: this.agent.capabilities.tools.parallelCalls,
           reasoning: toReasoning(this.input.metadata?.reasoningEffort),

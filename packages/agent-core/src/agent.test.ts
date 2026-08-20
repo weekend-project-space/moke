@@ -183,6 +183,34 @@ test('forwards tool context, media, and configured reasoning to the next model t
   ]);
 });
 
+test('keeps instructions stable and appends runtime context as user messages', async () => {
+  const requests: ChatRequest[] = [];
+  const llm = model((request: string | ChatRequest) => {
+    requests.push(request as ChatRequest);
+    return fakeRun(response({ text: 'done' }));
+  });
+  await createAgent({ model: llm }).run({
+    threadId: 't1',
+    input: 'current',
+    instructions: 'fixed instructions',
+    messages: [{ id: 'u1', role: 'user', content: 'previous' }],
+    context: [
+      { description: 'instructions', value: 'follow rules' },
+      { description: 'runtime note', value: 'observed', role: 'user' },
+    ],
+  }).result();
+  const input = requests[0]?.input as Array<{ type: string; role?: string; content?: string }>;
+  assert.deepEqual(input.map(item => [item.type, item.role]), [
+    ['message', 'user'],
+    ['message', 'user'],
+    ['message', 'user'],
+    ['message', 'user'],
+  ]);
+  assert.equal(requests[0]?.instructions, 'fixed instructions');
+  assert.match(input[1]?.content ?? '', /instructions\nfollow rules/);
+  assert.match(input[2]?.content ?? '', /runtime note\nobserved/);
+});
+
 test('completes message and tool lifecycles when the provider only returns a final tool call', async () => {
   let turn = 0;
   const call = { callId: 'c1', name: 'read', argumentsJson: '{}', arguments: {} };

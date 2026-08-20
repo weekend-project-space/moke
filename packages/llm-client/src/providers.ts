@@ -437,10 +437,17 @@ function mapChatMessages(request: ResolvedRequest, supportsDeveloperRole: boolea
     ? [{ type: 'message' as const, role: 'user' as const, content: request.input }]
     : request.input;
   const messages: Record<string, unknown>[] = [];
-  if (request.instructions) messages.push({ role: supportsDeveloperRole ? 'developer' : 'system', content: request.instructions });
+  const systemContents: unknown[] = [];
+  if (request.instructions) {
+    if (supportsDeveloperRole) messages.push({ role: 'developer', content: request.instructions });
+    else systemContents.push(request.instructions);
+  }
   for (const item of items) {
     if (item.type === 'message') {
-      messages.push({ role: item.role === 'developer' && !supportsDeveloperRole ? 'system' : item.role, content: mapChatContent(item.content) });
+      const role = item.role === 'developer' && !supportsDeveloperRole ? 'system' : item.role;
+      const content = mapChatContent(item.content);
+      if (role === 'system') systemContents.push(content);
+      else messages.push({ role, content });
     } else if (item.type === 'tool_call') {
       messages.push({
         role: 'assistant',
@@ -450,6 +457,12 @@ function mapChatMessages(request: ResolvedRequest, supportsDeveloperRole: boolea
     } else {
       messages.push({ role: 'tool', tool_call_id: item.callId, content: json(item.output) });
     }
+  }
+  if (systemContents.length) {
+    const content = systemContents.every(item => typeof item === 'string')
+      ? systemContents.join('\n\n')
+      : systemContents.flatMap(item => Array.isArray(item) ? item : [{ type: 'text', text: String(item) }]);
+    messages.unshift({ role: 'system', content });
   }
   return messages;
 }
