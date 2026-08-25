@@ -12,6 +12,7 @@ import { uiText } from '../../../text/uiText'
 type SessionViewMode = 'recent' | 'projects'
 
 const SESSION_VIEW_STORAGE_KEY = 'moke.sidebar.session-view'
+const COLLAPSED_PROJECTS_STORAGE_KEY = 'moke.sidebar.collapsed-projects'
 const PROJECT_SESSION_PREVIEW_LIMIT = 6
 
 const props = defineProps<{
@@ -51,7 +52,7 @@ const editingSession = ref<SessionSummary | null>(null)
 const menuEl = ref<HTMLElement | null>(null)
 const runningSessionIdSet = computed(() => new Set(props.runningSessionIds))
 const viewMode = ref<SessionViewMode>(readSessionViewMode())
-const collapsedProjects = ref(new Set<string>())
+const collapsedProjects = ref(readCollapsedProjects())
 const expandedProjects = ref(new Set<string>())
 
 const filteredSessions = computed(() => {
@@ -84,6 +85,24 @@ function setViewMode(mode: SessionViewMode) {
     // The view still works when browser storage is unavailable.
   }
 }
+
+function readCollapsedProjects() {
+  try {
+    const stored = window.localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY)
+    const keys = stored ? JSON.parse(stored) : []
+    return new Set<string>(Array.isArray(keys) ? keys.filter((key): key is string => typeof key === 'string') : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+watch(collapsedProjects, (projects) => {
+  try {
+    window.localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify([...projects]))
+  } catch {
+    // The sidebar still works when browser storage is unavailable.
+  }
+})
 
 function toggleProject(key: string) {
   const next = new Set(collapsedProjects.value)
