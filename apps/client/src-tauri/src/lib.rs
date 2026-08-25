@@ -713,6 +713,9 @@ fn generate_api_token() -> String {
 
 fn normalize_url(value: Option<&str>) -> Result<Url, String> {
     let raw = value.unwrap_or("about:blank").trim();
+    if Path::new(raw).is_absolute() || is_windows_drive_path(raw) {
+        return Url::from_file_path(raw).map_err(|_| "Invalid local file path".to_string());
+    }
     let with_scheme = if raw.contains("://") || raw == "about:blank" {
         raw.to_string()
     } else {
@@ -720,6 +723,14 @@ fn normalize_url(value: Option<&str>) -> Result<Url, String> {
     };
 
     Url::parse(&with_scheme).map_err(|error| format!("Invalid URL: {error}"))
+}
+
+fn is_windows_drive_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'/' || bytes[2] == b'\\')
 }
 
 fn normalized_bounds(bounds: Option<BrowserBounds>) -> BrowserBounds {
@@ -3363,6 +3374,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::{is_windows_drive_path, normalize_url};
     use super::*;
 
     #[test]
@@ -3388,6 +3400,15 @@ mod tests {
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("window.navigation"));
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoBack"));
         assert!(BROWSER_STATE_QUERY_SCRIPT.contains("canGoForward"));
+    }
+
+    #[test]
+    fn normalizes_windows_drive_paths_as_file_urls() {
+        assert!(is_windows_drive_path("E:/root/login.html"));
+        assert_eq!(
+            normalize_url(Some("E:/root/login.html")).unwrap().to_string(),
+            "file:///E:/root/login.html"
+        );
     }
 
     #[test]
