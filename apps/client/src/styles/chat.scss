@@ -6,6 +6,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   --content-width: min(728px, calc(100% - 48px));
+  --chat-header-divider: color-mix(in srgb, var(--color-bg-content) 82%, var(--color-border-subtle));
   background: var(--color-bg-content);
 }
 
@@ -17,7 +18,7 @@
   column-gap: 12px;
   min-height: 48px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--chat-header-divider);
 }
 
 .topbar-side {
