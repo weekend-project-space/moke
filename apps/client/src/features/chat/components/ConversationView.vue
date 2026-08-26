@@ -205,6 +205,12 @@ function scheduleScrollToBottom(force = false) {
   })
 }
 
+function scheduleLatestUserPosition() {
+  const userId = lastUserDisplayItemId.value
+  if (userId) scheduleTurnAnchor(userId)
+  else scheduleScrollToBottom(true)
+}
+
 function resetScrollState() {
   clearTurnAnchor()
   followLatest = true
@@ -233,10 +239,7 @@ function handleConversationScroll() {
   const state = updateScrollState()
   if (anchoredUserId) {
     followLatest = false
-    if (userScrollIntent && state?.isAtBottom) {
-      clearTurnAnchor()
-      followLatest = true
-    }
+    if (userScrollIntent) scheduleTurnAnchor(anchoredUserId)
   } else if (state?.isAtBottom) {
     followLatest = true
     isJumpingToBottom = false
@@ -332,16 +335,12 @@ function shouldShowProcessDivider(item: DisplayItem, index: number) {
 }
 
 watch(
-  () => props.sessionKey,
-  () => {
-    resetScrollState()
-    scheduleScrollToBottom(true)
+  [() => props.sessionKey, lastUserDisplayItemId],
+  ([sessionKey], previous) => {
+    if (sessionKey !== previous?.[0]) resetScrollState()
+    scheduleLatestUserPosition()
   },
 )
-
-watch(lastUserDisplayItemId, (current) => {
-  if (current && props.isRunning) scheduleTurnAnchor(current)
-})
 
 onMounted(() => {
   emitJumpVisibility(false)
@@ -352,7 +351,7 @@ onMounted(() => {
     lastScrollTop = conversationEl.value.scrollTop
     lastScrollHeight = conversationEl.value.scrollHeight
   }
-  scheduleScrollToBottom(true)
+  scheduleLatestUserPosition()
 })
 
 onUnmounted(() => {
