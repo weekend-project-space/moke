@@ -1052,7 +1052,7 @@ onBeforeUnmount(() => {
 }
 
 .messaging-connection-row.active .settings-list-copy > :last-child {
-  color: rgb(255 255 255 / 74%);
+  color: var(--color-text-on-accent-muted);
 }
 
 .messaging-connection-copy span,
@@ -1197,7 +1197,7 @@ onBeforeUnmount(() => {
 .feishu-region-choice button.active {
   color: var(--color-text-primary);
   background: var(--color-bg-content);
-  box-shadow: 0 0 0 1px var(--color-border-default), 0 1px 2px rgb(31 35 40 / 8%);
+  box-shadow: 0 0 0 1px var(--color-border-default), var(--shadow-control);
 }
 
 .feishu-region-choice button:focus-visible {
@@ -1307,7 +1307,7 @@ onBeforeUnmount(() => {
   height: 216px;
   place-items: center;
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--color-qr-surface);
 }
 
 .weixin-qr-frame img {

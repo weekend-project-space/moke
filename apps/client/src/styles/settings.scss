@@ -70,6 +70,33 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
+.settings-theme-control {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+}
+
+.settings-theme-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-secondary);
+}
+
+.settings-theme-select-wrap select {
+  max-width: 92px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .settings-return-button {
   display: flex;
   width: 100%;
@@ -422,7 +449,7 @@
 
     &.active {
       > small {
-        color: rgb(255 255 255 / 72%);
+        color: var(--color-text-on-accent-muted);
       }
 
       .model-provider-status {
@@ -1094,7 +1121,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.28);
+  background: var(--color-bg-overlay);
 }
 
 .settings-confirm-sheet {
@@ -1194,7 +1221,7 @@
 
   &.active {
     .settings-list-copy > :last-child {
-      color: rgb(255 255 255 / 74%);
+      color: var(--color-text-on-accent-muted);
     }
 
     .settings-row-icon {

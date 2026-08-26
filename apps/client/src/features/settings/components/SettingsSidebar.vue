@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft } from 'lucide-vue-next'
+import { ArrowLeft, Monitor, Moon, Sun } from 'lucide-vue-next'
+import { useTheme, type ThemeMode } from '../../../composables/useTheme'
 import { uiText } from '../../../text/uiText'
 import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
 
@@ -11,6 +12,21 @@ const emit = defineEmits<{
   close: []
   select: [tab: SettingsTab]
 }>()
+
+const { mode, setTheme } = useTheme()
+const themeOptions: Array<{ value: ThemeMode; label: string }> = [
+  { value: 'system', label: uiText.settings.themeSystem },
+  { value: 'light', label: uiText.settings.themeLight },
+  { value: 'dark', label: uiText.settings.themeDark },
+]
+
+function themeIcon(theme: ThemeMode) {
+  return theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor
+}
+
+function onThemeChange(event: Event) {
+  setTheme((event.target as HTMLSelectElement).value as ThemeMode)
+}
 </script>
 
 <template>
@@ -30,6 +46,15 @@ const emit = defineEmits<{
       </button>
     </nav>
     <footer class="settings-navigation-footer">
+      <label class="settings-theme-control">
+        <span>{{ uiText.settings.theme }}</span>
+        <span class="settings-theme-select-wrap">
+          <component :is="themeIcon(mode)" :size="14" aria-hidden="true" />
+          <select :value="mode" :aria-label="uiText.settings.theme" @change="onThemeChange">
+            <option v-for="option in themeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+        </span>
+      </label>
       <button
         type="button"
         class="settings-return-button sidebar-navigation-item"

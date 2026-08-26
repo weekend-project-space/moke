@@ -71,9 +71,7 @@
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-composer);
   background: var(--color-bg-content);
-  box-shadow:
-    0 1px 2px rgb(15 23 42 / 5%),
-    0 8px 24px rgb(15 23 42 / 6%);
+  box-shadow: var(--shadow-composer);
   cursor: default;
   overflow: visible;
 }
@@ -244,12 +242,12 @@
     padding: 0;
     border-radius: var(--radius-pill);
     color: var(--color-bg-content);
-    background: rgb(15 23 42 / 68%);
+    background: var(--color-attachment-dismiss);
     opacity: 1;
 
     &:hover {
       color: var(--color-bg-content);
-      background: rgb(15 23 42 / 82%);
+      background: var(--color-attachment-dismiss-hover);
     }
   }
 }
@@ -286,17 +284,13 @@
 
 .composer-input-row:focus-within {
   border-color: var(--color-border-strong);
-  box-shadow:
-    0 0 0 3px var(--color-focus-ring-muted),
-    0 8px 24px rgb(15 23 42 / 8%);
+  box-shadow: var(--shadow-composer-focus);
 }
 
 .composer-panel.dragging .composer-input-row {
   border-color: var(--color-border-focus);
   background: color-mix(in srgb, var(--color-primary-soft) 45%, var(--color-bg-content));
-  box-shadow:
-    0 0 0 3px var(--color-focus-ring-soft),
-    0 8px 24px rgb(15 23 42 / 8%);
+  box-shadow: var(--shadow-composer-focus);
 }
 
 .composer-footer {
@@ -1014,7 +1008,7 @@
 
 .composer button.primary-action {
   margin-left: 0;
-  color: var(--color-bg-content);
+  color: var(--color-primary-foreground);
   background: var(--color-primary);
   box-shadow: none;
 }
@@ -1024,7 +1018,7 @@
 }
 
 .composer button.primary-action.stop {
-  color: var(--color-bg-content);
+  color: var(--color-primary-foreground);
   background: var(--color-primary);
   box-shadow: none;
 }
@@ -1036,13 +1030,13 @@
   padding: 0;
   border-radius: var(--radius-pill);
   color: var(--color-bg-content);
-  background: rgb(15 23 42 / 68%);
+  background: var(--color-attachment-dismiss);
   opacity: 1;
   box-shadow: none;
 
   &:hover {
     color: var(--color-bg-content);
-    background: rgb(15 23 42 / 82%);
+    background: var(--color-attachment-dismiss-hover);
   }
 }
 
