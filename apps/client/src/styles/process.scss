@@ -28,21 +28,12 @@
 }
 
 .process-group.active .process-toggle {
-  grid-template-columns: auto minmax(0, auto) auto;
   color: color-mix(in srgb, var(--color-text-muted), transparent 4%);
   opacity: 1;
 
   &:hover {
     color: var(--color-text-secondary);
   }
-}
-
-.process-active-indicator {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  animation: process-active-breathe 1.6s ease-in-out infinite;
 }
 
 .process-group.active .process-toggle-label {
@@ -52,19 +43,6 @@
 
 .process-active-label {
   color: var(--color-text-secondary);
-}
-
-@keyframes process-active-breathe {
-  0%,
-  100% {
-    opacity: 0.25;
-    box-shadow: 0 0 0 0 transparent;
-  }
-
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  }
 }
 
 .process-toggle-label {

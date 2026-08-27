@@ -29,7 +29,6 @@ test('conversation display combines tool argument deltas into one tool step', ()
   const display = useConversationDisplay({
     messages: ref([]), events: ref(events), isRunning: ref(true), runtimeNow: ref(2000),
     runError: ref(''), pendingAsk: ref(null), pendingApproval: ref(null), processCollapsed: ref({}),
-    formatTimelineTime: String,
   })
 
   const group = display.displayItems.value.find(item => item.type === 'process-group')
@@ -48,7 +47,7 @@ test('completed assistant text remains before its tool in the process group', ()
       tool_calls: [{ id: 'call_1', name: 'read_file', args: { path: 'a.ts' } }],
     }]),
     events: ref([]), isRunning: ref(false), runtimeNow: ref(2000), runError: ref(''),
-    pendingAsk: ref(null), pendingApproval: ref(null), processCollapsed: ref({}), formatTimelineTime: String,
+    pendingAsk: ref(null), pendingApproval: ref(null), processCollapsed: ref({}),
   })
   const group = display.displayItems.value.find(item => item.type === 'process-group')
   assert.ok(group && group.type === 'process-group')
@@ -61,7 +60,7 @@ test('conversation display updates reasoning while deltas are streaming', () => 
   ])
   const display = useConversationDisplay({
     messages: ref([]), events, isRunning: ref(true), runtimeNow: ref(2000), runError: ref(''),
-    pendingAsk: ref(null), pendingApproval: ref(null), processCollapsed: ref({}), formatTimelineTime: String,
+    pendingAsk: ref(null), pendingApproval: ref(null), processCollapsed: ref({}),
   })
 
   const reasoningRaw = () => {
@@ -85,7 +84,7 @@ test('file change tool row shows a streaming path without exposing arguments', (
     events: ref([events[0]!]),
     toolCalls: ref(projectToolCalls(events)),
     isRunning: ref(true), runtimeNow: ref(2000), runError: ref(''), pendingAsk: ref(null),
-    pendingApproval: ref(null), processCollapsed: ref({}), formatTimelineTime: String,
+    pendingApproval: ref(null), processCollapsed: ref({}),
   })
 
   const group = display.displayItems.value.find(item => item.type === 'process-group')
@@ -102,7 +101,7 @@ test('answered ask is shown in the live user-input tool row', () => {
     events: ref([event('tool_call.started', { toolCallId: 'call_1', toolCallName: 'ask_user' }, 1)]),
     answeredInteractions: ref(new Map([['call_1', 'Frontend']])),
     isRunning: ref(true), runtimeNow: ref(2000), runError: ref(''), pendingAsk: ref(null),
-    pendingApproval: ref(null), processCollapsed: ref({}), formatTimelineTime: String,
+    pendingApproval: ref(null), processCollapsed: ref({}),
   })
 
   const group = display.displayItems.value.find(item => item.type === 'process-group')
@@ -129,7 +128,7 @@ test('live tool result attaches after the assistant tool call is persisted', () 
       }, 2),
     ]),
     isRunning: ref(true), runtimeNow: ref(2000), runError: ref(''), pendingAsk: ref(null),
-    pendingApproval: ref(null), processCollapsed: ref({}), formatTimelineTime: String,
+    pendingApproval: ref(null), processCollapsed: ref({}),
   })
 
   const group = display.displayItems.value.find(item => item.type === 'process-group')

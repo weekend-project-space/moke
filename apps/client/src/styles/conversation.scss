@@ -21,7 +21,8 @@
     }
   }
 
-  &:hover .message-action {
+  &:hover .message-action,
+  &:hover .message-action-time {
     opacity: 1;
   }
 }
@@ -171,8 +172,19 @@
 
 .message-actions {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
   min-height: 30px;
+}
+
+.message-action-time {
+  margin-left: 2px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  white-space: nowrap;
 }
 
 .empty-state {
@@ -217,7 +229,7 @@
 
 .suggestion-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
   gap: 2px 12px;
   margin-top: 8px;
@@ -257,7 +269,8 @@
 }
 
 @media (hover: none), (pointer: coarse) {
-  .message-action {
+  .message-action,
+  .message-action-time {
     opacity: 1;
   }
 }

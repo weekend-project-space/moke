@@ -12,8 +12,6 @@ import {
 } from './toolDisplay'
 import { projectToolCalls, toolCallSummaryArguments, type ToolCallViewState } from './toolCallProjector'
 
-const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000
-
 type ToolCreatedEvent = Extract<AgentEvent, { type: 'tool_call.started' }>
 type ToolCompletedEvent = Extract<AgentEvent, { type: 'tool_result.completed' | 'tool_result.failed' }>
 
@@ -28,7 +26,6 @@ type UseConversationDisplayOptions = {
   pendingAsk: Ref<PendingAsk | null>
   pendingApproval: Ref<PendingApproval | null>
   processCollapsed: Ref<Record<string, boolean>>
-  formatTimelineTime: (time: number) => string
 }
 
 export function useConversationDisplay(options: UseConversationDisplayOptions) {
@@ -141,24 +138,12 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
     const sourceMessages = options.messages.value.filter(
       (message) => message.role !== 'tool' || Boolean(message.content.trim()),
     )
-    let lastTime = 0
     let turnIndex = 0
     let turnStartedAt = 0
     let turnEndedAt = 0
     let processItems: ProcessItem[] = []
     let pendingFinalMessage: { id: string; message: Message } | null = null
     let hasActiveMessageProcessGroup = false
-
-    function pushTime(time: number, index: number) {
-      if (time && (lastTime === 0 || time - lastTime >= MESSAGE_TIME_GAP_MS)) {
-        items.push({
-          type: 'time',
-          id: `time-${index}-${time}`,
-          label: options.formatTimelineTime(time),
-        })
-        lastTime = time
-      }
-    }
 
     function flushAssistantTurn(nextTime = 0) {
       if (!processItems.length && !pendingFinalMessage) return
@@ -194,7 +179,6 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
       }
 
       if (pendingFinalMessage && pendingFinalMessage.message.content.trim()) {
-        pushTime(parseMessageTime(pendingFinalMessage.message) || nextTime, turnIndex)
         items.push({
           type: 'message',
           id: pendingFinalMessage.id,
@@ -223,7 +207,6 @@ export function useConversationDisplay(options: UseConversationDisplayOptions) {
         flushAssistantTurn(time)
         turnStartedAt = time
         turnEndedAt = 0
-        pushTime(time, index)
         items.push({
           type: 'message',
           id: `message-${index}`,

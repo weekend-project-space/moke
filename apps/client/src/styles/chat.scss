@@ -10,6 +10,87 @@
   background: var(--color-bg-content);
 }
 
+.chat-main {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.chat-main.is-empty {
+  position: relative;
+  justify-content: safe center;
+  isolation: isolate;
+  background: var(--color-bg-content);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.chat-main.is-empty::before {
+  position: absolute;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(
+      ellipse 500px 230px at 50% 50%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 2%) 0%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 16%) 38%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 48%) 68%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 82%) 86%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 60% 60% at 50% 50%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 70%) 0%,
+      color-mix(in srgb, var(--color-bg-empty-chat), transparent 86%) 56%,
+      transparent 78%
+    ),
+    var(--color-bg-content);
+  content: '';
+  pointer-events: none;
+}
+
+.chat-main.is-empty .conversation,
+.chat-main.is-empty .composer-zone {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-main.is-empty .conversation {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  scroll-padding-bottom: 0;
+}
+
+.chat-main.is-empty .conversation-content {
+  min-height: 0;
+}
+
+.chat-main.is-empty .empty-state {
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+.chat-main.is-empty .empty-state h3 {
+  font-size: 26px;
+  font-weight: 450;
+  line-height: 1.25;
+}
+
+.chat-main.is-empty .composer {
+  padding: 40px 0 0;
+}
+
+.chat-main.is-empty .suggestion-grid {
+  width: var(--content-width);
+  margin: 8px auto 0;
+}
+
 .topbar {
   flex: 0 0 auto;
   display: grid;

@@ -92,14 +92,7 @@ export type ProcessGroupView = {
   endedAt?: number
 }
 
-export type TaskTemplate = {
-  title: string
-  description: string
-  prompt: string
-}
-
 export type DisplayItem =
-  | { type: 'time'; id: string; label: string }
   | { type: 'message'; id: string; message: Message }
   | {
       type: 'process-group'

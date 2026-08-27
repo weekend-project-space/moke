@@ -22,8 +22,7 @@ import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
 import { createAgentApi } from '../api/agentApi'
-import { formatSessionTime, formatTimelineTime } from '../presentation/timeFormat'
-import type { TaskTemplate } from '../presentation/types'
+import { formatSessionTime } from '../presentation/timeFormat'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
 
 defineOptions({ name: 'ChatWorkspace' })
@@ -320,16 +319,7 @@ async function chooseFiles() {
 
 const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
-const taskTemplates = computed<TaskTemplate[]>(() => (currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters).map((starter) => ({
-  title: starter.title,
-  description: '',
-  prompt: starter.prompt,
-})))
-const sessionSubtitle = computed(() => {
-  if (pendingAsk.value || pendingApproval.value) return ''
-  if (isRunning.value) return uiText.app.working
-  return ''
-})
+const taskTemplates = computed(() => currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters)
 const serverStatusLabel = computed(() => {
   const labels = {
     checking: uiText.app.connecting,
@@ -355,13 +345,11 @@ const {
   pendingAsk,
   pendingApproval,
   processCollapsed,
-  formatTimelineTime,
 })
 const timelineNote = computed(() => {
   if (serverStatus.value === 'checking') return uiText.app.connectingToMoke
   if (serverStatus.value === 'offline') return uiText.app.disconnectedFromMoke
   if (runError.value) return runError.value
-  if (isRunning.value) return ''
   return ''
 })
 const showThinking = computed(() => {
@@ -525,7 +513,7 @@ defineExpose({
     <section v-if="!scheduledTasksActive" class="chat">
       <ChatHeader
         :title="currentTitle"
-        :subtitle="sessionSubtitle"
+        subtitle=""
         :desktop-layout="desktopLayout"
         :sidebar-collapsed="sidebarCollapsed"
         :trace-collapsed="traceCollapsed"
@@ -537,7 +525,8 @@ defineExpose({
         @toggle-workspace="toggleWorkspace"
       />
 
-      <ConversationView
+      <div class="chat-main" :class="{ 'is-empty': showEmptyState }">
+        <ConversationView
         ref="conversationView"
         :api-base="apiBase"
         :copied-key="copiedKey"
@@ -548,7 +537,6 @@ defineExpose({
         :show-last-message-continue="Boolean(lastAssistantMessage) && !isRunning && !pendingAsk && !pendingApproval"
         :show-thinking="showThinking"
         :streaming-text="streamingText"
-        :task-templates="taskTemplates"
         :timeline-note="timelineNote"
         @apply-suggestion="applySuggestion"
         @copy-message="copyMessage($event.key, $event.content)"
@@ -556,8 +544,8 @@ defineExpose({
         @jump-visibility-change="showJumpToBottom = $event"
         @open-link="openLinkInBrowser"
         @toggle-process-group="toggleProcessGroup"
-      />
-      <div class="composer-zone">
+        />
+        <div class="composer-zone">
         <div
           v-if="showJumpToBottom || pendingApproval || pendingAsk || queuedMessageCount"
           class="composer-overlay-stack"
@@ -663,6 +651,12 @@ defineExpose({
           @input="handleInput"
           @add-attachments="addAttachments" @remove-attachment="removeAttachment" @remove-file="removeFile"
           @enter="sendOnEnter" @submit="handlePrimaryAction" />
+        <div v-if="showEmptyState" class="suggestion-grid">
+          <button v-for="template in taskTemplates" :key="template.title" type="button" @click="applySuggestion(template.prompt)">
+            <span>{{ template.title }}</span>
+          </button>
+        </div>
+        </div>
       </div>
     </section>
 

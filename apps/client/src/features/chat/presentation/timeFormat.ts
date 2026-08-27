@@ -13,20 +13,6 @@ export function formatSessionTime(value: string, now = new Date()) {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
 
-export function formatTimelineTime(time: number, now = new Date()) {
-  const date = new Date(time)
-  const today = startOfDay(now)
-  const targetDay = startOfDay(date)
-  const timeLabel = formatTime(date)
-
-  if (targetDay === today) return timeLabel
-  if (targetDay === today - 24 * 60 * 60 * 1000) return `Yesterday ${timeLabel}`
-
-  const dateLabel = formatDate(date)
-  if (date.getFullYear() === now.getFullYear()) return `${dateLabel} ${timeLabel}`
-  return `${date.getFullYear()} ${dateLabel} ${timeLabel}`
-}
-
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 }

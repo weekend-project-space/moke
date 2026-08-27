@@ -2,6 +2,7 @@
 import { apiUrl } from '../../../services/apiAccess'
 import { ArrowRight, Check, Copy, FileText, GitBranchPlus } from 'lucide-vue-next'
 import type { Message, MessageImageAttachment } from '../model/conversation'
+import { formatSessionTime } from '../presentation/timeFormat'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
@@ -83,6 +84,9 @@ const emit = defineEmits<{
       >
         <ArrowRight :size="14" stroke-width="2.2" />
       </button>
+      <time v-if="message.created_at" class="message-action-time" :datetime="message.created_at">
+        {{ formatSessionTime(message.created_at) }}
+      </time>
     </div>
   </article>
 </template>

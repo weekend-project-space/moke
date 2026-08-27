@@ -30,7 +30,6 @@ function iconKind(step: { toolCategory: ToolCategory }) {
 <template>
   <div class="process-group" :class="{ active: isActive, error: hasError }">
     <button class="process-toggle" type="button" :aria-expanded="!collapsed" @click="emit('toggle')">
-      <span v-if="isActive" class="process-active-indicator" aria-hidden="true"></span>
       <span class="process-toggle-label">
         <template v-if="isActive">
           <span class="process-active-label live-text-sweep">{{ uiText.process.working }}</span>

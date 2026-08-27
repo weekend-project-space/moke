@@ -5,7 +5,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import ProcessDetails from './ProcessDetails.vue'
 import { conversationScrollState, conversationTurnSpacerHeight } from '../presentation/conversationScroll'
-import type { DisplayItem, TaskTemplate } from '../presentation/types'
+import type { DisplayItem } from '../presentation/types'
 import { uiText } from '../../../text/uiText'
 
 const props = defineProps<{
@@ -18,7 +18,6 @@ const props = defineProps<{
   showLastMessageContinue: boolean
   showThinking: boolean
   streamingText: string
-  taskTemplates: TaskTemplate[]
   timelineNote: string
 }>()
 
@@ -34,6 +33,7 @@ const emit = defineEmits<{
 const conversationEl = ref<HTMLElement | null>(null)
 const contentEl = ref<HTMLElement | null>(null)
 const turnSpacerEl = ref<HTMLElement | null>(null)
+const emptyTitle = ref(randomEmptyTitle())
 let anchoredUserId = ''
 let anchorFrame: number | undefined
 let followLatest = true
@@ -328,11 +328,24 @@ function handleContentResize() {
 function shouldShowProcessDivider(item: DisplayItem, index: number) {
   if (item.type !== 'process-group') return false
 
-  const nextItem = props.displayItems.slice(index + 1).find((candidate) => candidate.type !== 'time')
+  const nextItem = props.displayItems[index + 1]
   if (nextItem?.type === 'message' && nextItem.message.role === 'assistant') return true
 
   return !nextItem && Boolean(props.streamingText)
 }
+
+function randomEmptyTitle(previous = '') {
+  const candidates = uiText.chat.emptyTitles.filter((title) => title !== previous)
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? uiText.chat.emptyTitles[0]
+}
+
+watch(() => props.sessionKey, () => {
+  if (props.showEmptyState) emptyTitle.value = randomEmptyTitle(emptyTitle.value)
+})
+
+watch(() => props.showEmptyState, (isEmpty, wasEmpty) => {
+  if (isEmpty && !wasEmpty) emptyTitle.value = randomEmptyTitle(emptyTitle.value)
+})
 
 watch(
   [() => props.sessionKey, lastUserDisplayItemId],
@@ -382,13 +395,7 @@ defineExpose({
     <div v-if="timelineNote" class="timeline-note">{{ timelineNote }}</div>
 
     <div v-if="showEmptyState" class="empty-state">
-      <h3>{{ uiText.chat.emptyTitle }}</h3>
-      <p>{{ uiText.chat.emptyDescription }}</p>
-      <div class="suggestion-grid">
-        <button v-for="template in taskTemplates" :key="template.title" type="button" @click="emit('applySuggestion', template.prompt)">
-          <span>{{ template.title }}</span>
-        </button>
-      </div>
+      <h3>{{ emptyTitle }}</h3>
     </div>
 
     <div v-if="streamingText && streamsBeforeActiveProcess" class="message-row assistant">
@@ -398,9 +405,8 @@ defineExpose({
     </div>
 
     <template v-for="(item, index) in displayItems" :key="item.id">
-      <div v-if="item.type === 'time'" class="timeline-note time-note">{{ item.label }}</div>
       <ProcessDetails
-        v-else-if="item.type === 'process-group'"
+        v-if="item.type === 'process-group'"
         :label="item.label"
         :duration-label="item.durationLabel"
         :items="item.items"

@@ -17,7 +17,6 @@ const app = {
   newChat: 'New chat',
   restoreWindow: 'Restore',
   settings: 'Settings',
-  working: 'Working',
 } as const
 
 const browser = {
@@ -53,8 +52,14 @@ const browser = {
 const chat = {
   askOtherPlaceholder: 'Other...',
   continuePrompt: 'Based on the result above, continue and turn it into a clearer next step.',
-  emptyDescription: 'Ask a question, open a page, or work with your files.',
-  emptyTitle: 'Where should we go first?',
+  emptyTitles: [
+    "What's on your mind?",
+    'What would make today easier?',
+    'What matters most right now?',
+    'What can we figure out together?',
+    "Let's talk it through.",
+    'Where can I be useful today?',
+  ],
   webStarters: [
     { title: 'Research a topic', prompt: 'Research this topic across reliable sources and summarize the key findings with links' },
     { title: 'Compare several sources', prompt: 'Compare these webpages and summarize the important differences and trade-offs' },
