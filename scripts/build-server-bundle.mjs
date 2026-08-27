@@ -14,17 +14,23 @@ rmSync(shellOutputDir, { recursive: true, force: true });
 mkdirSync(outputDir, { recursive: true });
 mkdirSync(shellOutputDir, { recursive: true });
 
-if (process.platform === 'win32') {
-  const manifestPath = join(root, 'packages/shell/native/windows-sandbox/Cargo.toml');
+const nativeHelper = process.platform === 'win32'
+  ? { manifest: 'windows-sandbox', binary: 'moke-windows-sandbox.exe', label: 'Windows' }
+  : process.platform === 'darwin'
+    ? { manifest: 'macos-sandbox', binary: 'moke-macos-sandbox', label: 'macOS' }
+    : null;
+
+if (nativeHelper) {
+  const manifestPath = join(root, `packages/shell/native/${nativeHelper.manifest}/Cargo.toml`);
   const result = spawnSync('cargo', ['build', '--release', '--manifest-path', manifestPath], {
     cwd: root,
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`Windows sandbox helper build failed with exit code ${result.status}`);
+  if (result.status !== 0) throw new Error(`${nativeHelper.label} sandbox helper build failed with exit code ${result.status}`);
   copyFileSync(
-    join(root, 'packages/shell/native/windows-sandbox/target/release/moke-windows-sandbox.exe'),
-    join(shellOutputDir, 'moke-windows-sandbox.exe'),
+    join(root, 'packages/shell/native', nativeHelper.manifest, 'target/release', nativeHelper.binary),
+    join(shellOutputDir, nativeHelper.binary),
   );
 }
 

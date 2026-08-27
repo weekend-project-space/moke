@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process';
 
 import { ShellRequestError } from './errors.js';
 import { LocalShellRunner } from './local-runner.js';
+import { MacSandboxRunner } from './macos-sandbox-runner.js';
 import { resolveShellRequest, type ResolvedShellRequest } from './policy.js';
 import type { SandboxRunner, ShellErrorCode, ShellExecutorOptions, ShellRequest, ShellResult } from './types.js';
 import { WindowsSandboxRunner } from './windows-sandbox-runner.js';
 
-const DEFAULT_RUNNERS = [new WindowsSandboxRunner(), new LocalShellRunner()];
+const DEFAULT_RUNNERS = [new WindowsSandboxRunner(), new MacSandboxRunner(), new LocalShellRunner()];
 
 export class ShellExecutor {
   private readonly runners: SandboxRunner[];

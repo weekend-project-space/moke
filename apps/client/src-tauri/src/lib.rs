@@ -643,7 +643,7 @@ fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String
             .map_err(|error| error.to_string())?;
         let server_dir = resource_dir.join("server");
         (
-            server_dir.join("node.exe"),
+            server_dir.join(if cfg!(windows) { "node.exe" } else { "node" }),
             vec!["server.cjs".to_string()],
             server_dir,
             data_dir.clone(),
@@ -661,6 +661,16 @@ fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String
             .resource_dir()
             .map_err(|error| error.to_string())?
             .join("shell/moke-windows-sandbox.exe")
+    };
+
+    #[cfg(target_os = "macos")]
+    let sandbox_helper_path = if tauri::is_dev() {
+        repo_dir().join("packages/shell/native/macos-sandbox/target/release/moke-macos-sandbox")
+    } else {
+        app.path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?
+            .join("shell/moke-macos-sandbox")
     };
 
     ensure_user_env_file(app, &env_path);
@@ -687,6 +697,9 @@ fn start_agent_server(app: &tauri::App, api_token: &str) -> Result<Child, String
 
     #[cfg(windows)]
     command.env("MOKE_WINDOWS_SANDBOX_HELPER", &sandbox_helper_path);
+
+    #[cfg(target_os = "macos")]
+    command.env("MOKE_MACOS_SANDBOX_HELPER", &sandbox_helper_path);
 
     #[cfg(windows)]
     {

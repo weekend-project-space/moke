@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
+    "build:native:macos": "cargo build --release --manifest-path native/macos-sandbox/Cargo.toml",
+    "build:native": "node scripts/build-native.mjs",
     "build:native:windows": "cargo build --release --manifest-path native/windows-sandbox/Cargo.toml",
     "clean": "tsc -b --clean"
   },
