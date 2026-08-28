@@ -11,7 +11,7 @@
     "build:server": "npm --prefix ../.. run build:server",
     "preview": "vite preview",
     "tauri": "tauri",
-    "desktop": "tauri dev"
+    "desktop": "npm run build:server & tauri dev"
   },
   "dependencies": {
     "@moke/agent-sdk": "0.1.0",
