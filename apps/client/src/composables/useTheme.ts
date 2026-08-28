@@ -12,7 +12,9 @@ type NativeThemeWindow = {
 }
 
 function loadMode(): ThemeMode {
-  const value = localStorage.getItem(STORAGE_KEY)
+  if (typeof window === 'undefined') return 'system'
+
+  const value = window.localStorage.getItem(STORAGE_KEY)
   return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
 }
 
@@ -22,16 +24,20 @@ function updateSystemPreference() {
 }
 
 function applyTheme() {
+  if (typeof window === 'undefined') return
+
   const resolved = mode.value === 'system' ? (systemDark.value ? 'dark' : 'light') : mode.value
   document.documentElement.dataset.theme = resolved
   document.documentElement.style.colorScheme = resolved
-  const nativeWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
+  const nativeWindow = (window.__TAURI__ as {
     window?: { getCurrentWindow(): NativeThemeWindow }
-  }).window?.getCurrentWindow()
+  } | undefined)?.window?.getCurrentWindow()
   void nativeWindow?.setTheme(mode.value === 'system' ? null : resolved).catch(() => undefined)
 }
 
 function initializeTheme() {
+  if (typeof window === 'undefined') return
+
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   updateSystemPreference()
   mediaQuery.addEventListener('change', updateSystemPreference)
