@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Moke",
+        "titleBarStyle": "Transparent",
         "hiddenTitle": true,
         "shadow": true,
         "width": 1280,
