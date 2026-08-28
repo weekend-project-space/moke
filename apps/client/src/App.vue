@@ -19,8 +19,9 @@ const lastChatPath = ref('/chat')
 const nativeAppWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
   window?: { getCurrentWindow(): NativeAppWindow }
 })?.window?.getCurrentWindow()
-const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
+const isMacOs = Boolean(nativeAppWindow && (/Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')))
 const showCustomTitlebar = Boolean(nativeAppWindow && !isMacOs)
+document.documentElement.classList.toggle('platform-macos', isMacOs)
 let unlistenCloseRequested: (() => void) | null = null
 let unlistenMenuEvents: Array<() => void> = []
 let appDisposed = false
