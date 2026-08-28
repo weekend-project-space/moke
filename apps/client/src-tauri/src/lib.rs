@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::webview::{DownloadEvent, NewWindowResponse, WebviewBuilder};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, Runtime, WebviewUrl};
 use tauri_plugin_decorum::WebviewWindowExt;
@@ -3323,6 +3325,25 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_decorum::init())
+        .on_menu_event(|app, event| {
+            #[cfg(target_os = "macos")]
+            {
+                let event_name = match event.id().as_ref() {
+                    "app-menu-new-chat" => Some("app-menu:new-chat"),
+                    "app-menu-settings" => Some("app-menu:settings"),
+                    _ => None,
+                };
+                if let Some(event_name) = event_name {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.emit(event_name, ());
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app, event);
+            }
+        })
         .manage(BrowserState {
             pages: Mutex::new(Vec::new()),
             active_page_id: Mutex::new(None),
@@ -3367,6 +3388,19 @@ pub fn run() {
             agent_api_token,
         ])
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                let new_chat =
+                    MenuItemBuilder::with_id("app-menu-new-chat", "New chat").build(app)?;
+                let settings =
+                    MenuItemBuilder::with_id("app-menu-settings", "Settings").build(app)?;
+                let file_menu = SubmenuBuilder::with_id(app, "app-menu-file", "File")
+                    .item(&new_chat)
+                    .item(&settings)
+                    .build()?;
+                let menu = MenuBuilder::new(app).item(&file_menu).build()?;
+                app.set_menu(menu)?;
+            }
             app.get_webview_window("main")
                 .expect("main window is not available")
                 .create_overlay_titlebar()

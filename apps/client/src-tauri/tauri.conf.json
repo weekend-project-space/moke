@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Moke",
+        "hiddenTitle": true,
         "shadow": true,
         "width": 1280,
         "height": 820,

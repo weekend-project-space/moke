@@ -19,7 +19,10 @@ const lastChatPath = ref('/chat')
 const nativeAppWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
   window?: { getCurrentWindow(): NativeAppWindow }
 })?.window?.getCurrentWindow()
+const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
+const showCustomTitlebar = Boolean(nativeAppWindow && !isMacOs)
 let unlistenCloseRequested: (() => void) | null = null
+let unlistenMenuEvents: Array<() => void> = []
 let appDisposed = false
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
@@ -109,25 +112,39 @@ function handleAppKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleAppKeydown)
-  if (!nativeAppWindow) return
-  const unlisten = await nativeAppWindow.onCloseRequested(async (event) => {
-    if (!settingsDirty.value) return
-    event.preventDefault()
-    if (!window.confirm(uiText.settings.confirmDiscardModelChanges)) return
-    await nativeAppWindow.destroy()
-  })
-  if (appDisposed) unlisten()
-  else unlistenCloseRequested = unlisten
+  if (nativeAppWindow) {
+    const unlisten = await nativeAppWindow.onCloseRequested(async (event) => {
+      if (!settingsDirty.value) return
+      event.preventDefault()
+      if (!window.confirm(uiText.settings.confirmDiscardModelChanges)) return
+      await nativeAppWindow.destroy()
+    })
+    if (appDisposed) unlisten()
+    else unlistenCloseRequested = unlisten
+  }
+
+  if (isMacOs) {
+    const listen = window.__TAURI__?.event?.listen
+    if (listen) {
+      const menuUnlisteners = await Promise.all([
+        listen('app-menu:new-chat', () => void newChatFromMenu()),
+        listen('app-menu:settings', () => void openSettings()),
+      ])
+      if (appDisposed) menuUnlisteners.forEach((unlisten) => unlisten())
+      else unlistenMenuEvents = menuUnlisteners
+    }
+  }
 })
 onUnmounted(() => {
   appDisposed = true
   unlistenCloseRequested?.()
+  unlistenMenuEvents.forEach((unlisten) => unlisten())
   window.removeEventListener('keydown', handleAppKeydown)
 })
 </script>
 
 <template>
-  <header v-if="nativeAppWindow" class="app-titlebar" data-tauri-decorum-tb>
+  <header v-if="showCustomTitlebar" class="app-titlebar" data-tauri-decorum-tb>
     <div class="app-menu">
       <button ref="fileMenuTrigger" type="button" class="app-menu-trigger" aria-haspopup="menu" :aria-expanded="fileMenu" @click="toggleFileMenu">
         {{ uiText.app.fileMenu }}
