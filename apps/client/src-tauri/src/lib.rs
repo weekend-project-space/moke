@@ -3401,6 +3401,7 @@ pub fn run() {
                 let menu = MenuBuilder::new(app).item(&file_menu).build()?;
                 app.set_menu(menu)?;
             }
+            #[cfg(not(target_os = "macos"))]
             app.get_webview_window("main")
                 .expect("main window is not available")
                 .create_overlay_titlebar()
