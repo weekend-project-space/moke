@@ -15,7 +15,8 @@ body {
   background: transparent;
 }
 
-html.platform-macos {
+html.platform-macos,
+html.platform-macos body {
   background: var(--color-bg-frame);
 }
 
