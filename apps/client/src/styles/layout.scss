@@ -107,10 +107,6 @@
   background: var(--color-bg-frame);
 }
 
-html.platform-macos .shell {
-  margin-top: 8px;
-}
-
 .shell.trace-collapsed {
   grid-template-columns: var(--sidebar-width, 268px) 1px minmax(420px, 1fr) 0 0;
 }

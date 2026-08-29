@@ -38,6 +38,13 @@ button:disabled {
   flex-direction: column;
 }
 
+html.platform-macos #app::after {
+  order: -1;
+  flex: 0 0 8px;
+  background: var(--color-bg-frame);
+  content: '';
+}
+
 @media (max-width: 980px) {
   html,
   body {
