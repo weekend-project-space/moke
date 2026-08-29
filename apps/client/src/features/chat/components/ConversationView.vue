@@ -47,7 +47,6 @@ let resizeObserver: ResizeObserver | undefined
 let scrollFrame: number | undefined
 let scrollScheduled = false
 let turnSpacerHeight = 0
-let userScrollIntent = false
 const lastAssistantDisplayItemId = computed(() => {
   for (let index = props.displayItems.length - 1; index >= 0; index -= 1) {
     const item = props.displayItems[index]
@@ -172,7 +171,6 @@ function updateTurnAnchor() {
 function scheduleTurnAnchor(id: string) {
   anchoredUserId = id
   followLatest = false
-  userScrollIntent = false
   if (anchorFrame !== undefined) window.cancelAnimationFrame(anchorFrame)
 
   void nextTick(() => {
@@ -185,6 +183,14 @@ function scheduleTurnAnchor(id: string) {
       emitJumpVisibility(false)
     })
   })
+}
+
+function releaseTurnAnchor() {
+  if (anchorFrame !== undefined) {
+    window.cancelAnimationFrame(anchorFrame)
+    anchorFrame = undefined
+  }
+  clearTurnAnchor()
 }
 
 function scheduleScrollToBottom(force = false) {
@@ -237,9 +243,12 @@ function handleConversationScroll() {
     followLatest = false
   }
   const state = updateScrollState()
+  if (anchoredUserId && el.scrollTop !== lastScrollTop) {
+    releaseTurnAnchor()
+    followLatest = false
+  }
   if (anchoredUserId) {
     followLatest = false
-    if (userScrollIntent) scheduleTurnAnchor(anchoredUserId)
   } else if (state?.isAtBottom) {
     followLatest = true
     isJumpingToBottom = false
@@ -256,7 +265,8 @@ function cancelJumpToBottom() {
 }
 
 function handleScrollIntent() {
-  userScrollIntent = true
+  followLatest = false
+  releaseTurnAnchor()
   cancelJumpToBottom()
 }
 
