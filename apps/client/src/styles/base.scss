@@ -15,6 +15,10 @@ body {
   background: transparent;
 }
 
+html.platform-macos {
+  background: var(--color-bg-frame);
+}
+
 button {
   border: 0;
   cursor: pointer;
