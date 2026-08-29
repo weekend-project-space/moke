@@ -8,6 +8,8 @@ import { uiText } from './text/uiText'
 type NativeAppWindow = {
   destroy(): Promise<void>
   onCloseRequested(handler: (event: { preventDefault(): void }) => void | Promise<void>): Promise<() => void>
+  onResized(handler: () => void): Promise<() => void>
+  isFullscreen(): Promise<boolean>
 }
 
 const settingsDirty = ref(false)
@@ -24,6 +26,7 @@ const showCustomTitlebar = Boolean(nativeAppWindow && !isMacOs)
 document.documentElement.classList.toggle('platform-macos', isMacOs)
 let unlistenCloseRequested: (() => void) | null = null
 let unlistenMenuEvents: Array<() => void> = []
+let unlistenWindowResize: (() => void) | null = null
 let appDisposed = false
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
@@ -111,6 +114,11 @@ function handleAppKeydown(event: KeyboardEvent) {
   void closeSettings()
 }
 
+async function syncMacFullscreenInset() {
+  const isFullscreen = await nativeAppWindow!.isFullscreen()
+  if (!appDisposed) document.documentElement.classList.toggle('platform-macos-fullscreen', isFullscreen)
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', handleAppKeydown)
   if (nativeAppWindow) {
@@ -124,7 +132,12 @@ onMounted(async () => {
     else unlistenCloseRequested = unlisten
   }
 
-  if (isMacOs) {
+  if (isMacOs && nativeAppWindow) {
+    void syncMacFullscreenInset()
+    const unlistenResize = await nativeAppWindow.onResized(() => void syncMacFullscreenInset())
+    if (appDisposed) unlistenResize()
+    else unlistenWindowResize = unlistenResize
+
     const listen = window.__TAURI__?.event?.listen
     if (listen) {
       const menuUnlisteners = await Promise.all([
@@ -140,6 +153,8 @@ onUnmounted(() => {
   appDisposed = true
   unlistenCloseRequested?.()
   unlistenMenuEvents.forEach((unlisten) => unlisten())
+  unlistenWindowResize?.()
+  document.documentElement.classList.remove('platform-macos-fullscreen')
   window.removeEventListener('keydown', handleAppKeydown)
 })
 </script>

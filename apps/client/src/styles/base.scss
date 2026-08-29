@@ -49,6 +49,10 @@ html.platform-macos #app::after {
   content: '';
 }
 
+html.platform-macos.platform-macos-fullscreen #app::after {
+  display: none;
+}
+
 @media (max-width: 980px) {
   html,
   body {
