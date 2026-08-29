@@ -49,7 +49,7 @@ html.platform-macos #app::after {
   content: '';
 }
 
-html.platform-macos.platform-macos-fullscreen #app::after {
+html.platform-macos.platform-macos-window-expanded #app::after {
   display: none;
 }
 

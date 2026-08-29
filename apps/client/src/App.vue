@@ -10,6 +10,7 @@ type NativeAppWindow = {
   onCloseRequested(handler: (event: { preventDefault(): void }) => void | Promise<void>): Promise<() => void>
   onResized(handler: () => void): Promise<() => void>
   isFullscreen(): Promise<boolean>
+  isMaximized(): Promise<boolean>
 }
 
 const settingsDirty = ref(false)
@@ -114,9 +115,12 @@ function handleAppKeydown(event: KeyboardEvent) {
   void closeSettings()
 }
 
-async function syncMacFullscreenInset() {
-  const isFullscreen = await nativeAppWindow!.isFullscreen()
-  if (!appDisposed) document.documentElement.classList.toggle('platform-macos-fullscreen', isFullscreen)
+async function syncMacTopInset() {
+  const [isFullscreen, isMaximized] = await Promise.all([
+    nativeAppWindow!.isFullscreen(),
+    nativeAppWindow!.isMaximized(),
+  ])
+  if (!appDisposed) document.documentElement.classList.toggle('platform-macos-window-expanded', isFullscreen || isMaximized)
 }
 
 onMounted(async () => {
@@ -133,8 +137,8 @@ onMounted(async () => {
   }
 
   if (isMacOs && nativeAppWindow) {
-    void syncMacFullscreenInset()
-    const unlistenResize = await nativeAppWindow.onResized(() => void syncMacFullscreenInset())
+    void syncMacTopInset()
+    const unlistenResize = await nativeAppWindow.onResized(() => void syncMacTopInset())
     if (appDisposed) unlistenResize()
     else unlistenWindowResize = unlistenResize
 
@@ -154,7 +158,7 @@ onUnmounted(() => {
   unlistenCloseRequested?.()
   unlistenMenuEvents.forEach((unlisten) => unlisten())
   unlistenWindowResize?.()
-  document.documentElement.classList.remove('platform-macos-fullscreen')
+  document.documentElement.classList.remove('platform-macos-window-expanded')
   window.removeEventListener('keydown', handleAppKeydown)
 })
 </script>
