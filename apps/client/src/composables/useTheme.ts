@@ -9,20 +9,6 @@ let mediaQuery: MediaQueryList | null = null
 
 type NativeThemeWindow = {
   setTheme(theme?: 'light' | 'dark' | null): Promise<void>
-  setBackgroundColor?(color: string): Promise<void>
-}
-
-const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
-
-function nativeFrameColor() {
-  const probe = document.createElement('span')
-  probe.style.backgroundColor = 'var(--color-bg-frame)'
-  document.documentElement.appendChild(probe)
-  const color = getComputedStyle(probe).backgroundColor
-  probe.remove()
-  const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number)
-  if (!channels || channels.length !== 3) return null
-  return `#${channels.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`
 }
 
 function loadMode(): ThemeMode {
@@ -47,10 +33,6 @@ function applyTheme() {
     window?: { getCurrentWindow(): NativeThemeWindow }
   } | undefined)?.window?.getCurrentWindow()
   void nativeWindow?.setTheme(mode.value === 'system' ? null : resolved).catch(() => undefined)
-  if (isMacOs) {
-    const frameColor = nativeFrameColor()
-    if (frameColor) void nativeWindow?.setBackgroundColor?.(frameColor)?.catch(() => undefined)
-  }
 }
 
 function initializeTheme() {
