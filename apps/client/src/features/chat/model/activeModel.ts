@@ -17,10 +17,13 @@ export function activeModelFromSettings(value: unknown): ActiveModelInfo | null 
   const providers = settings.providers.map(toRecord).filter((provider) => provider !== null)
   const activeProviderId = typeof settings.activeProviderId === 'string' ? settings.activeProviderId : ''
   const provider = providers.find((item) => item.id === activeProviderId) || providers[0]
-  if (!provider || typeof provider.model !== 'string' || !provider.model.trim()) return null
-
+  if (!provider) return null
+  const configuredModel = typeof provider.defaultModel === 'string' && provider.defaultModel.trim()
+    ? provider.defaultModel.trim()
+    : (typeof provider.model === 'string' ? provider.model.trim() : '')
+  if (!configuredModel) return null
   return {
-    model: provider.model.trim(),
+    model: configuredModel,
     providerId: typeof provider.id === 'string' ? provider.id : '',
     providerName: typeof provider.name === 'string' ? provider.name.trim() : '',
   }

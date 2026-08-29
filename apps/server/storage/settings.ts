@@ -27,10 +27,17 @@ export type ModelProviderProfile = {
   apiBaseUrl: string;
   maxRetries: number;
   model: string;
+  models: ProviderModel[];
+  defaultModel: string;
   reasoningEffort: ReasoningEffort;
   reasoningProvider: ReasoningProvider;
   showRawReasoning: boolean;
   timeoutMs: number;
+};
+
+export type ProviderModel = {
+  name: string;
+  alias: string;
 };
 
 export type RuntimeSettings = {
@@ -46,6 +53,8 @@ export type ModelProviderInput = {
   apiBaseUrl?: unknown;
   maxRetries?: unknown;
   model?: unknown;
+  models?: unknown;
+  defaultModel?: unknown;
   reasoningEffort?: unknown;
   reasoningProvider?: unknown;
   showRawReasoning?: unknown;
@@ -118,7 +127,22 @@ export function normalizeProviderType(input: unknown, fallback: ModelProviderTyp
   return input === 'openai-compatible' || input === 'openai-responses' ? input : fallback;
 }
 
+function normalizeProviderModels(input: unknown, legacyModel: string): ProviderModel[] {
+  const raw = Array.isArray(input) ? input : [];
+  const models = raw.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const value = item as Record<string, unknown>;
+    const name = typeof value.name === 'string' ? value.name.trim() : '';
+    if (!name) return null;
+    return { name, alias: typeof value.alias === 'string' ? value.alias.trim() : '' };
+  }).filter((item): item is ProviderModel => Boolean(item?.name));
+  if (models.length) return models.filter((model, index) => models.findIndex((candidate) => candidate.name === model.name) === index);
+  return legacyModel ? [{ name: legacyModel, alias: '' }] : [];
+}
+
 function defaultProvider(): ModelProviderProfile {
+  const model = process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL;
+  const reasoningProvider = normalizeProviderReasoningProvider(process.env.OPENAI_REASONING_PROVIDER);
   return {
     id: createProviderId(),
     name: process.env.OPENAI_PROVIDER_NAME || MODEL_PROVIDER_DEFAULT_NAME,
@@ -126,9 +150,11 @@ function defaultProvider(): ModelProviderProfile {
     apiKey: process.env.OPENAI_API_KEY || MODEL_PROVIDER_DEFAULT_API_KEY,
     apiBaseUrl: process.env.OPENAI_BASE_URL || MODEL_PROVIDER_DEFAULT_BASE_URL,
     maxRetries: normalizeProviderMaxRetries(process.env.OPENAI_MAX_RETRIES),
-    model: process.env.OPENAI_MODEL || MODEL_PROVIDER_DEFAULT_MODEL,
+    model,
+    models: [{ name: model, alias: '' }],
+    defaultModel: model,
     reasoningEffort: normalizeProviderReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
-    reasoningProvider: normalizeProviderReasoningProvider(process.env.OPENAI_REASONING_PROVIDER),
+    reasoningProvider,
     showRawReasoning: normalizeProviderShowRawReasoning(process.env.OPENAI_SHOW_RAW_REASONING),
     timeoutMs: normalizeProviderTimeoutMs(process.env.OPENAI_TIMEOUT_MS),
   };
@@ -139,7 +165,7 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
     apiKey: provider.apiKey,
     apiBaseUrl: provider.apiBaseUrl,
     maxRetries: provider.maxRetries,
-    model: provider.model,
+    model: provider.defaultModel || provider.model,
     type: provider.type,
     reasoningEffort: provider.reasoningEffort,
     reasoningProvider: provider.reasoningProvider,
@@ -150,6 +176,11 @@ export function providerToModelSettings(provider: ModelProviderProfile): ChatMod
 
 export function normalizeProvider(input: ModelProviderInput = {}, fallback = defaultProvider()): ModelProviderProfile {
   const type = normalizeProviderType(input.type, fallback.type);
+  const reasoningProvider = normalizeProviderReasoningProvider(input.reasoningProvider, fallback.reasoningProvider);
+  const legacyModel = typeof input.model === 'string' && input.model.trim() ? input.model.trim() : fallback.model;
+  const models = normalizeProviderModels(input.models, legacyModel);
+  const requestedDefault = typeof input.defaultModel === 'string' ? input.defaultModel.trim() : '';
+  const defaultModel = models.some((item) => item.name === requestedDefault) ? requestedDefault : (models[0]?.name || legacyModel);
 
   return {
     id: typeof input.id === 'string' && input.id.trim() ? input.id.trim() : fallback.id || createProviderId(),
@@ -158,9 +189,11 @@ export function normalizeProvider(input: ModelProviderInput = {}, fallback = def
     apiKey: typeof input.apiKey === 'string' ? input.apiKey.trim() : fallback.apiKey,
     apiBaseUrl: typeof input.apiBaseUrl === 'string' && input.apiBaseUrl.trim() ? input.apiBaseUrl.trim() : fallback.apiBaseUrl,
     maxRetries: normalizeProviderMaxRetries(input.maxRetries, fallback.maxRetries),
-    model: typeof input.model === 'string' && input.model.trim() ? input.model.trim() : fallback.model,
+    model: defaultModel,
+    models,
+    defaultModel,
     reasoningEffort: normalizeProviderReasoningEffort(input.reasoningEffort, fallback.reasoningEffort),
-    reasoningProvider: normalizeProviderReasoningProvider(input.reasoningProvider, fallback.reasoningProvider),
+    reasoningProvider,
     showRawReasoning: normalizeProviderShowRawReasoning(input.showRawReasoning, fallback.showRawReasoning),
     timeoutMs: normalizeProviderTimeoutMs(input.timeoutMs, fallback.timeoutMs),
   };

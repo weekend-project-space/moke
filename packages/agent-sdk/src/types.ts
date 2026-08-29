@@ -74,6 +74,7 @@ export type SkillSummary = {
 
 export type ModelSummary = {
   name: string;
+  alias?: string;
   supportsReasoning?: boolean;
 };
 

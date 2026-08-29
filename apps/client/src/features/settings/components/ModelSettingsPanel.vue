@@ -11,6 +11,8 @@ type ModelProviderProfile = {
   name: string
   type: 'openai-compatible' | 'openai-responses'
   model: string
+  models: ProviderModel[]
+  defaultModel: string
   apiBaseUrl: string
   apiKey: string
   maxRetries: number
@@ -18,6 +20,11 @@ type ModelProviderProfile = {
   reasoningEffort: 'off' | 'low' | 'medium' | 'high' | 'max'
   reasoningProvider: 'none' | 'llama.cpp'
   showRawReasoning: boolean
+}
+
+type ProviderModel = {
+  name: string
+  alias: string
 }
 
 const props = defineProps<{ apiBase: string }>()
@@ -85,6 +92,7 @@ function adjustRetries(delta: number) {
 }
 
 function createProvider(): ModelProviderProfile {
+  const model = 'qwen3.6-35BA3B'
   return {
     id: `provider_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
     name: 'Local Qwen',
@@ -92,7 +100,9 @@ function createProvider(): ModelProviderProfile {
     apiKey: '',
     apiBaseUrl: 'http://localhost:8080/v1',
     maxRetries: 3,
-    model: 'qwen3.6-35BA3B',
+    model,
+    models: [{ name: model, alias: '' }],
+    defaultModel: model,
     reasoningEffort: 'medium',
     reasoningProvider: 'none',
     showRawReasoning: false,
@@ -106,8 +116,19 @@ function normalizeReasoningEffort(input: unknown): ModelProviderProfile['reasoni
 }
 
 function normalizeProvider(provider: ModelProviderProfile): ModelProviderProfile {
+  const legacyModel = typeof provider.model === 'string' ? provider.model.trim() : ''
+  const models = Array.isArray(provider.models) && provider.models.length
+    ? provider.models.map((model) => ({
+      name: String(model.name || '').trim(),
+      alias: String(model.alias || '').trim(),
+    })).filter((model) => model.name)
+    : (legacyModel ? [{ name: legacyModel, alias: '' }] : [])
+  const defaultModel = models.some((model) => model.name === provider.defaultModel) ? provider.defaultModel : (models[0]?.name || legacyModel)
   return {
     ...provider,
+    model: defaultModel,
+    models,
+    defaultModel,
     maxRetries: Number.isFinite(Number(provider.maxRetries)) ? Number(provider.maxRetries) : 3,
     timeoutMs: Number.isFinite(Number(provider.timeoutMs)) ? Number(provider.timeoutMs) : 30 * 60 * 1000,
     reasoningEffort: normalizeReasoningEffort(provider.reasoningEffort),
@@ -121,6 +142,8 @@ function providerEquals(left: ModelProviderProfile, right: ModelProviderProfile)
     && left.name === right.name
     && left.type === right.type
     && left.model === right.model
+    && left.defaultModel === right.defaultModel
+    && JSON.stringify(left.models) === JSON.stringify(right.models)
     && left.apiBaseUrl === right.apiBaseUrl
     && left.apiKey === right.apiKey
     && left.maxRetries === right.maxRetries
@@ -132,6 +155,27 @@ function providerEquals(left: ModelProviderProfile, right: ModelProviderProfile)
 
 function copyProvider(provider: ModelProviderProfile) {
   Object.assign(editingProvider, normalizeProvider(provider))
+}
+
+function syncLegacyModel() {
+  if (!editingProvider.models.some((model) => model.name === editingProvider.defaultModel)) {
+    editingProvider.defaultModel = editingProvider.models[0]?.name || ''
+  }
+  editingProvider.model = editingProvider.defaultModel || editingProvider.models[0]?.name || ''
+}
+
+function addModel() {
+  const name = `model-${editingProvider.models.length + 1}`
+  editingProvider.models.push({ name, alias: '' })
+  syncLegacyModel()
+}
+
+function removeModel(index: number) {
+  if (editingProvider.models.length <= 1) return
+  const removesDefault = editingProvider.models[index]?.name === editingProvider.defaultModel
+  editingProvider.models.splice(index, 1)
+  if (removesDefault) editingProvider.defaultModel = editingProvider.models[0]?.name || ''
+  syncLegacyModel()
 }
 
 function syncEditingProvider() {
@@ -198,6 +242,7 @@ async function persistModelProviders(
 }
 
 async function saveModelProviders() {
+  syncLegacyModel()
   const nextProviders = providers.value.map((provider) =>
     provider.id === editingProvider.id ? { ...editingProvider } : provider,
   )
@@ -381,7 +426,7 @@ onBeforeUnmount(() => emit('dirtyChange', false))
               <strong>{{ provider.name }}</strong>
               <span v-if="provider.id === activeProviderId" class="model-provider-status">{{ uiText.settings.defaultProvider }}</span>
             </span>
-            <small :title="provider.model || provider.type">{{ provider.model || provider.type }}</small>
+            <small :title="provider.defaultModel || provider.type">{{ provider.defaultModel || provider.type }}</small>
           </button>
         </div>
         <footer class="settings-record-source-footer">
@@ -447,19 +492,30 @@ onBeforeUnmount(() => emit('dirtyChange', false))
           </section>
 
           <section class="settings-group model-detail-group">
-            <header class="model-group-caption"><h3>{{ uiText.settings.model }}</h3></header>
+            <header class="model-group-caption">
+              <h3>{{ uiText.settings.model }}</h3>
+              <button type="button" class="settings-secondary" :title="uiText.settings.loadModels" :disabled="loadingModels" @click.prevent="loadModelOptions">
+                <RotateCw :size="14" :class="{ spinning: loadingModels }" />
+                {{ loadingModels ? uiText.settings.loading : uiText.settings.loadModels }}
+              </button>
+            </header>
             <div class="model-group-card">
-            <label class="settings-row">
-              <span>{{ uiText.settings.model }}</span>
-              <div class="settings-stacked-control">
-                <div class="settings-inline-control">
-                  <input v-model="editingProvider.model" list="model-options" type="text" spellcheck="false" />
-                  <button type="button" class="settings-icon-button" :title="uiText.settings.loadModels" :aria-label="uiText.settings.loadModels" :disabled="loadingModels" @click.prevent="loadModelOptions"><RotateCw :size="14" :class="{ spinning: loadingModels }" /></button>
-                </div>
-                <small v-if="modelListMessage" aria-live="polite">{{ modelListMessage }}</small>
-                <datalist id="model-options"><option v-for="model in modelOptions" :key="model" :value="model" /></datalist>
+            <div v-for="(model, index) in editingProvider.models" :key="`${model.name}-${index}`" class="provider-model-row">
+              <div class="provider-model-fields">
+                <input v-model="model.name" list="model-options" type="text" placeholder="Model ID" spellcheck="false" @input="syncLegacyModel" />
+                <input v-model="model.alias" type="text" placeholder="Alias (optional)" spellcheck="false" />
+                <label class="provider-model-default">
+                  <input v-model="editingProvider.defaultModel" type="radio" :value="model.name" :aria-label="`Set ${model.name} as default`" @change="syncLegacyModel" />
+                  <span v-if="editingProvider.defaultModel === model.name">Default</span>
+                </label>
+                <button v-if="editingProvider.models.length > 1" type="button" class="settings-icon-button provider-model-remove" title="Remove model" aria-label="Remove model" @click="removeModel(index)"><Trash2 :size="14" /></button>
               </div>
-            </label>
+            </div>
+            <div class="settings-inline-control provider-model-actions">
+              <button type="button" class="settings-secondary" @click="addModel"><Plus :size="14" /> Add model</button>
+            </div>
+            <small v-if="modelListMessage" aria-live="polite">{{ modelListMessage }}</small>
+            <datalist id="model-options"><option v-for="model in modelOptions" :key="model" :value="model" /></datalist>
             </div>
           </section>
 

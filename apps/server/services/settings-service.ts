@@ -50,7 +50,7 @@ export class SettingsService {
     if (!provider) throw new ModelProviderNotFoundError(selection?.provider_id || this.settings.activeProviderId);
     return {
       provider_id: provider.id,
-      name: selection?.name?.trim() || provider.model,
+      name: selection?.name?.trim() || provider.defaultModel || provider.model,
     };
   }
 

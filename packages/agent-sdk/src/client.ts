@@ -612,6 +612,7 @@ function requireModelProviderModels(value: unknown): ModelProviderModels[] {
         if (typeof item.name !== 'string') throw new MokeProtocolError('Model response is invalid');
         return {
           name: item.name,
+          ...(typeof item.alias === 'string' ? { alias: item.alias } : {}),
           ...(typeof item.supports_reasoning === 'boolean'
             ? { supportsReasoning: item.supports_reasoning }
             : {}),

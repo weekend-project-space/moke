@@ -165,6 +165,11 @@ export const providerInputSchema = z.object({
   apiBaseUrl: nonEmptyText.max(2000).optional(),
   maxRetries: z.number().int().min(0).max(6).optional(),
   model: nonEmptyText.max(200).optional(),
+  defaultModel: nonEmptyText.max(200).optional(),
+  models: z.array(z.object({
+    name: nonEmptyText.max(200),
+    alias: z.string().trim().max(200).optional(),
+  }).strict()).optional(),
   reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max', 'ultra']).optional(),
   reasoningProvider: z.enum(['none', 'llama.cpp']).optional(),
   showRawReasoning: z.boolean().optional(),

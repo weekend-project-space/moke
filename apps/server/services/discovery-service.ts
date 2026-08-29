@@ -76,10 +76,11 @@ export class DiscoveryService {
     return providers.map((provider) => ({
       provider: provider.id,
       provider_name: provider.name,
-      models: provider.model ? [{
-        name: provider.model,
+      models: (provider.models || (provider.model ? [{ name: provider.model, alias: '' }] : [])).map((model) => ({
+        name: model.name,
+        ...(model.alias ? { alias: model.alias } : {}),
         supports_reasoning: provider.type === 'openai-responses' || provider.reasoningProvider === 'llama.cpp',
-      }] : [],
+      })),
     }));
   }
 

@@ -33,6 +33,7 @@ const submenuSide = ref<'left' | 'right'>('right')
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 
 const selectedModelKey = computed(() => `${props.modelProviderId || props.modelProvider}\u0000${props.modelName}`)
+const selectedModelLabel = computed(() => props.models.find((model) => modelKey(model) === selectedModelKey.value)?.alias || props.modelName)
 const modelsByProvider = computed(() => {
   const groups = new Map<string, { provider: string; label: string; models: ComposerModel[] }>()
   for (const model of props.models) {
@@ -140,7 +141,7 @@ onUnmounted(() => {
           @keydown.right.prevent="activateSubmenu('model')"
         >
           <span>Model</span>
-          <span class="composer-model-menu-value">{{ modelName || 'Select model' }}</span>
+          <span class="composer-model-menu-value">{{ selectedModelLabel || 'Select model' }}</span>
           <ChevronRight :size="15" stroke-width="2" />
         </button>
         <button
@@ -184,7 +185,7 @@ onUnmounted(() => {
                 :class="{ active: modelKey(model) === selectedModelKey }"
                 @click="selectModel(model)"
               >
-                <span>{{ model.name }}</span>
+                <span>{{ model.alias || model.name }}</span>
                 <Check v-if="modelKey(model) === selectedModelKey" :size="15" stroke-width="2.2" />
               </button>
             </div>
@@ -232,7 +233,7 @@ onUnmounted(() => {
       @click="toggle"
     >
       <Cpu :size="14" stroke-width="1.8" />
-      <span class="composer-model-name">{{ modelName || 'Select model' }}</span>
+      <span class="composer-model-name">{{ selectedModelLabel || 'Select model' }}</span>
       <span v-if="reasoningOptions.length" class="composer-model-effort">{{ reasoningLabel(reasoningEffort) }}</span>
       <ChevronDown :size="12" stroke-width="2.1" />
     </button>
