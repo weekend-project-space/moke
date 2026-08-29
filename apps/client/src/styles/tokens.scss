@@ -201,8 +201,8 @@
   --color-secondary-border: #414141;
   --color-secondary-foreground: #ededed;
 
-  --color-bg-canvas: #0f0f0f;
   --color-bg-frame: #1f1f1f;
+  --color-bg-canvas: var(--color-bg-frame);
   --color-bg-content: #141414;
   --color-bg-empty-chat: #203a62;
   --color-bg-input: #1f1f1f;
