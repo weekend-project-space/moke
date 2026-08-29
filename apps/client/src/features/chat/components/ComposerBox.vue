@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Check, ChevronDown, Cpu, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, ShieldCheck, ShieldUser, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Check, ChevronDown, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, ShieldCheck, ShieldUser, Square, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -658,7 +658,6 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
               class="composer-model"
               :title="uiText.composer.currentModel(props.modelName, props.modelProvider)"
             >
-              <Cpu :size="14" stroke-width="1.8" />
               <span>{{ props.modelName }}</span>
             </div>
           </div>

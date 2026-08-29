@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, ChevronDown, ChevronRight, Cpu } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -232,7 +232,6 @@ onUnmounted(() => {
       :class="{ active: open }"
       @click="toggle"
     >
-      <Cpu :size="14" stroke-width="1.8" />
       <span class="composer-model-name">{{ selectedModelLabel || 'Select model' }}</span>
       <span v-if="reasoningOptions.length" class="composer-model-effort">{{ reasoningLabel(reasoningEffort) }}</span>
       <ChevronDown :size="12" stroke-width="2.1" />
