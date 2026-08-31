@@ -31,7 +31,7 @@ test('run lifecycle route sends current and subsequent statuses across sessions'
     runs,
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
   const session: Session = {
     id: 'sess_1',

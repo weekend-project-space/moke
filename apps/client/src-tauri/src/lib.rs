@@ -2972,41 +2972,6 @@ async fn browser_handle_dialog(
 }
 
 #[tauri::command]
-async fn list_pages(state: tauri::State<'_, BrowserState>) -> Result<BrowserResult, String> {
-    browser_result(&state)
-}
-
-#[tauri::command]
-async fn create_page(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    url: Option<String>,
-    visible: Option<bool>,
-    bounds: Option<BrowserBounds>,
-) -> Result<BrowserResult, String> {
-    browser_open(
-        app,
-        state,
-        BrowserPageOptions {
-            page_id: None,
-            url,
-            visible,
-            bounds,
-        },
-    )
-    .await
-}
-
-#[tauri::command]
-async fn navigate_page(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    options: BrowserNavigateOptions,
-) -> Result<BrowserResult, String> {
-    browser_navigate(app, state, options).await
-}
-
-#[tauri::command]
 async fn select_page(
     state: tauri::State<'_, BrowserState>,
     page_id: u32,
@@ -3035,33 +3000,6 @@ async fn resize_page(
     apply_webview_bounds(&webview, Some(bounds))?;
     let _ = resolve_browser_bounds(&state, Some(bounds))?;
     browser_result(&state)
-}
-
-#[tauri::command]
-async fn show_browser(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    page_id: Option<u32>,
-    bounds: Option<BrowserBounds>,
-) -> Result<BrowserResult, String> {
-    browser_show(app, state, page_id, bounds).await
-}
-
-#[tauri::command]
-async fn hide_browser(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-) -> Result<BrowserResult, String> {
-    browser_hide(app, state).await
-}
-
-#[tauri::command]
-async fn close_page(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    page_id: u32,
-) -> Result<BrowserResult, String> {
-    browser_close(app, state, page_id).await
 }
 
 #[tauri::command]
@@ -3374,14 +3312,8 @@ pub fn run() {
             browser_show,
             browser_hide,
             browser_close,
-            list_pages,
-            create_page,
-            navigate_page,
             select_page,
             resize_page,
-            show_browser,
-            hide_browser,
-            close_page,
             list_workspace_openers,
             open_workspace_with,
             read_local_image,

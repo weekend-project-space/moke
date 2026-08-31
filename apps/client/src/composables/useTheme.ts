@@ -13,17 +13,10 @@ type NativeThemeWindow = {
 
 const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
 
-function syncNativeFrameColor(resolved: Exclude<ThemeMode, 'system'>) {
+function syncNativeFrameColor() {
   requestAnimationFrame(() => {
-    if (document.documentElement.dataset.theme !== resolved) return
-
-    const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-frame').trim()
-    const invoke = window.__TAURI__?.core?.invoke
-    if (!color || !invoke) return
-
-    void invoke('plugin:window|set_background_color', { value: color }).catch((error) => {
-      console.error('Could not sync the native window background', error)
-    })
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-frame').trim()
+    if (value) void window.__TAURI__?.core?.invoke('plugin:window|set_background_color', { value })?.catch(() => undefined)
   })
 }
 
@@ -49,7 +42,7 @@ function applyTheme() {
     window?: { getCurrentWindow(): NativeThemeWindow }
   } | undefined)?.window?.getCurrentWindow()
   void nativeWindow?.setTheme(mode.value === 'system' ? null : resolved).catch(() => undefined)
-  if (isMacOs) syncNativeFrameColor(resolved)
+  if (isMacOs) syncNativeFrameColor()
 }
 
 function initializeTheme() {

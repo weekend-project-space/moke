@@ -87,7 +87,6 @@ function diffStats(lines: string[]) {
 <template>
   <div class="tool-detail">
     <section v-if="step.outputRaw !== undefined" class="tool-stage">
-      <!-- <span class="tool-stage-label">{{ uiText.process.output }}</span> -->
     <template v-if="step.renderer === 'search' || step.renderer === 'directory'">
       <div class="tool-panel-card tool-result-console" :class="{ error: step.tone === 'error' }">
         <div class="tool-panel-header">

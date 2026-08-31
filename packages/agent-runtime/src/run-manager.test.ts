@@ -54,7 +54,7 @@ test('RunManager exposes messaging origin to in-process observers', async () => 
       return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
     },
   };
-  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), defaultWorkspaceRoot: process.cwd() });
   const observed: string[] = [];
   manager.addObserver((event, run) => {
     if (event.type === 'run.completed') observed.push(run.origin.kind);
@@ -80,7 +80,7 @@ test('RunManager calls beforeStart before agent execution can emit events', asyn
       return { toolCalls: 0, message: message({ role: 'assistant', content: 'done' }) };
     },
   };
-  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), defaultWorkspaceRoot: process.cwd() });
   let attachedRunId = '';
   manager.addObserver((_event, run) => {
     assert.equal(attachedRunId, run.id);
@@ -107,7 +107,7 @@ test('RunManager fails a run when skill context initialization fails', async () 
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
     createSkillContentManager: async () => {
       throw new Error('skill catalog unavailable');
     },
@@ -136,7 +136,7 @@ test('RunManager emits the simplified lifecycle whenever a run status changes', 
       return { toolCalls: 1, message: message({ role: 'assistant', content: selected?.label || '' }) };
     },
   };
-  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), workspace: process.cwd() });
+  const manager = new RunManager({ runs, agent, toolRegistry: new ToolRegistry(), defaultWorkspaceRoot: process.cwd() });
   const observed: RunLifecycleEvent[] = [];
   manager.addLifecycleObserver((event) => observed.push(event));
 
@@ -186,7 +186,7 @@ test('RunManager allows only one active run per session', async () => {
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const first = manager.createRun(session, { content: 'first' });
@@ -223,7 +223,7 @@ test('RunManager times out the whole run and aborts the agent', async () => {
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'start' }, { timeout_ms: 20 });
@@ -259,7 +259,7 @@ test('RunManager records an ask answer as an interaction event instead of chat m
     runs,
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'start' });
@@ -297,7 +297,7 @@ test('RunManager allows tools by permission policy without publishing an interac
     runs,
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'start' });
@@ -332,7 +332,7 @@ test('RunManager persists a returned final message after intermediate tool messa
     runs: new Map(),
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'start' });
@@ -365,7 +365,7 @@ test('RunManager carries internal session context into the next run history', as
     runs: new Map(),
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const firstRun = manager.createRun(session, { content: 'start' });
@@ -402,7 +402,7 @@ test('RunManager shutdown waits for execution and ignores late messages', async 
     runs: new Map(),
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
     onSessionChanged: () => changes++,
   });
 
@@ -432,7 +432,7 @@ test('RunManager marks an explicit cancellation as user initiated', async () => 
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
   const run = manager.createRun(session, { content: 'start' });
   await waitFor(() => run.status === 'running');
@@ -468,7 +468,7 @@ test('RunManager resolves persisted image attachments before sending history to 
     runs: new Map(),
     agent,
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
     resolveImageAttachments: (attachments) => attachments.map((item) => ({
       ...item,
       data_url: 'data:image/png;base64,AA==',
@@ -496,7 +496,7 @@ test('RunManager resumes an ask with custom text', async () => {
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
   manager.addObserver((event, run) => {
     if (event.type === 'interaction.required' && event.interaction.type === 'question') {
@@ -591,7 +591,7 @@ test('RunManager allows tool execution through the selected permission policy', 
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'write a file' });
@@ -627,7 +627,7 @@ test('RunManager allows workspace paths once without pausing the run', async () 
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
     approveWorkspaceRoot(root, scope, sessionId) {
       granted.push({ root, scope, sessionId });
       return { approved: true, scope, approvedRoots: [root] };
@@ -670,7 +670,7 @@ test('RunManager workspace-write permission policy allows tool execution', async
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
 
   const run = manager.createRun(session, { content: 'summarize the file' });
@@ -693,7 +693,7 @@ test('RunManager read-only permission policy allows execution without publishing
         return { toolCalls: 1, message: message({ role: 'assistant', content: 'done' }) };
       },
     },
-    toolRegistry: new ToolRegistry(), workspace: process.cwd(),
+    toolRegistry: new ToolRegistry(), defaultWorkspaceRoot: process.cwd(),
   });
   const run = manager.createRun(session, { content: 'remove it' });
   await waitFor(() => run.status === 'completed');
@@ -720,7 +720,7 @@ test('RunManager full-access mode does not publish a legacy approval interaction
       },
     },
     toolRegistry: new ToolRegistry(),
-    workspace: process.cwd(),
+    defaultWorkspaceRoot: process.cwd(),
   });
   const run = manager.createRun(session, { content: 'send hello' });
   await waitFor(() => run.status === 'completed');

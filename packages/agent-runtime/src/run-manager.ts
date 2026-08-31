@@ -38,8 +38,6 @@ type RunManagerConfig = {
   agent: Agent;
   toolRegistry: ToolRegistry;
   defaultWorkspaceRoot?: string;
-  /** @deprecated Use defaultWorkspaceRoot. */
-  workspace?: string;
   createSkillContentManager?: (workspace: string) => RuntimeContentManager | Promise<RuntimeContentManager>;
   resolveToolRegistry?: (workspace: string) => ToolRegistry | Promise<ToolRegistry>;
   approveWorkspaceRoot?: (root: string, scope: 'once' | 'session' | 'persistent', sessionId: string) => WorkspacePathApprovalDecision | void;
@@ -361,7 +359,7 @@ export class RunManager {
   }
 
   private defaultWorkspaceRoot() {
-    return this.config.defaultWorkspaceRoot || this.config.workspace || process.cwd();
+    return this.config.defaultWorkspaceRoot || process.cwd();
   }
 
   private async authorizeTool(
@@ -663,7 +661,7 @@ function snapshotEnvironment(
 }
 
 function isPermissionMode(mode: ApprovalMode) {
-  return  mode === 'workspace-write' || mode === 'danger-full-access';
+  return mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access';
 }
 
 function safeApprovalInput(value: Record<string, unknown>): Record<string, unknown> {
