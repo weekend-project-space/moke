@@ -114,8 +114,24 @@ async function syncMacTopInset() {
   if (!appDisposed) document.documentElement.classList.toggle('platform-macos-window-expanded', isFullscreen || isMaximized)
 }
 
+async function registerMacMenuListeners() {
+  const registrations = await Promise.allSettled([
+    tauriListen('app-menu:new-chat', () => void newChatFromMenu()),
+    tauriListen('app-menu:settings', () => void openSettings()),
+  ])
+  const unlisteners: Array<() => void> = []
+  for (const registration of registrations) {
+    if (registration.status === 'fulfilled') unlisteners.push(registration.value)
+    else console.error('Failed to register native menu listener', registration.reason)
+  }
+  if (appDisposed) unlisteners.forEach((unlisten) => unlisten())
+  else unlistenMenuEvents = unlisteners
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', handleAppKeydown)
+  if (isMacOs) void registerMacMenuListeners()
+
   if (nativeAppWindow) {
     const unlisten = await nativeAppWindow.onCloseRequested(async (event) => {
       if (!settingsDirty.value) return
@@ -132,13 +148,6 @@ onMounted(async () => {
     const unlistenResize = await nativeAppWindow.onResized(() => void syncMacTopInset())
     if (appDisposed) unlistenResize()
     else unlistenWindowResize = unlistenResize
-
-    const menuUnlisteners = await Promise.all([
-      tauriListen('app-menu:new-chat', () => void newChatFromMenu()),
-      tauriListen('app-menu:settings', () => void openSettings()),
-    ])
-    if (appDisposed) menuUnlisteners.forEach((unlisten) => unlisten())
-    else unlistenMenuEvents = menuUnlisteners
   }
 })
 onUnmounted(() => {
