@@ -395,10 +395,9 @@ defineExpose({
     ref="conversationEl"
     class="conversation"
     @click="handleConversationClick"
-    @pointerdown.passive="handleScrollIntent"
     @scroll.passive="handleConversationScroll"
     @scrollend="handleConversationScrollEnd"
-    @touchstart.passive="handleScrollIntent"
+    @touchmove.passive="handleScrollIntent"
     @wheel.passive="handleScrollIntent"
   >
     <div ref="contentEl" class="conversation-content">
