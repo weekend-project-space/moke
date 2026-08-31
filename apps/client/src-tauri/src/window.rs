@@ -1,4 +1,5 @@
 use tauri::Manager;
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_decorum::WebviewWindowExt;
 
 #[cfg(target_os = "macos")]

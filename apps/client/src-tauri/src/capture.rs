@@ -1,13 +1,19 @@
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::sync::mpsc;
+#[cfg(windows)]
 use std::time::Duration;
 
 use base64::Engine;
 use serde::Serialize;
+#[cfg(not(windows))]
+use tauri::Manager;
 
-use crate::browser::{browser_webview, BrowserBounds, BrowserDataKind, BrowserState};
+#[cfg(windows)]
+use crate::browser::browser_webview;
+use crate::browser::{BrowserBounds, BrowserDataKind, BrowserState};
 use crate::downloads::unique_download_path;
 
 #[derive(Serialize)]
@@ -17,6 +23,7 @@ pub(crate) struct LocalImage {
     pub(crate) data_url: String,
 }
 
+#[cfg(windows)]
 pub(crate) fn clear_browser_data_with_webview(
     webview: &tauri::Webview,
     kind: BrowserDataKind,

@@ -1,6 +1,6 @@
-use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::{fs, process::Command};
 
 use serde::Serialize;
 
