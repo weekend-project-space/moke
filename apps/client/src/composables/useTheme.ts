@@ -9,20 +9,22 @@ let mediaQuery: MediaQueryList | null = null
 
 type NativeThemeWindow = {
   setTheme(theme?: 'light' | 'dark' | null): Promise<void>
-  setBackgroundColor?(color: string): Promise<void>
 }
 
 const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
 
-function nativeFrameColor() {
-  const probe = document.createElement('span')
-  probe.style.backgroundColor = 'var(--color-bg-frame)'
-  document.documentElement.appendChild(probe)
-  const color = getComputedStyle(probe).backgroundColor
-  probe.remove()
-  const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number)
-  if (!channels || channels.length !== 3) return null
-  return `#${channels.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`
+function syncNativeFrameColor(resolved: Exclude<ThemeMode, 'system'>) {
+  requestAnimationFrame(() => {
+    if (document.documentElement.dataset.theme !== resolved) return
+
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-frame').trim()
+    const invoke = window.__TAURI__?.core?.invoke
+    if (!color || !invoke) return
+
+    void invoke('plugin:window|set_background_color', { value: color }).catch((error) => {
+      console.error('Could not sync the native window background', error)
+    })
+  })
 }
 
 function loadMode(): ThemeMode {
@@ -47,10 +49,7 @@ function applyTheme() {
     window?: { getCurrentWindow(): NativeThemeWindow }
   } | undefined)?.window?.getCurrentWindow()
   void nativeWindow?.setTheme(mode.value === 'system' ? null : resolved).catch(() => undefined)
-  if (isMacOs) {
-    const frameColor = nativeFrameColor()
-    if (frameColor) void nativeWindow?.setBackgroundColor?.(frameColor)?.catch(() => undefined)
-  }
+  if (isMacOs) syncNativeFrameColor(resolved)
 }
 
 function initializeTheme() {
