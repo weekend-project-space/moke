@@ -243,10 +243,6 @@ function handleConversationScroll() {
     followLatest = false
   }
   const state = updateScrollState()
-  if (anchoredUserId && el.scrollTop !== lastScrollTop) {
-    releaseTurnAnchor()
-    followLatest = false
-  }
   if (anchoredUserId) {
     followLatest = false
   } else if (state?.isAtBottom) {
@@ -268,6 +264,14 @@ function handleScrollIntent() {
   followLatest = false
   releaseTurnAnchor()
   cancelJumpToBottom()
+}
+
+function handleConversationPointerDown(event: PointerEvent) {
+  const el = conversationEl.value
+  if (!el || event.target !== el) return
+
+  const scrollbarWidth = Math.max(8, el.offsetWidth - el.clientWidth)
+  if (event.clientX >= el.getBoundingClientRect().right - scrollbarWidth) handleScrollIntent()
 }
 
 function handleConversationScrollEnd() {
@@ -395,6 +399,7 @@ defineExpose({
     ref="conversationEl"
     class="conversation"
     @click="handleConversationClick"
+    @pointerdown.passive="handleConversationPointerDown"
     @scroll.passive="handleConversationScroll"
     @scrollend="handleConversationScrollEnd"
     @touchmove.passive="handleScrollIntent"
