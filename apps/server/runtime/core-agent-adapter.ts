@@ -36,7 +36,7 @@ const ASK_USER_TOOL = {
   },
 } as const;
 
-const SYSTEM_PROMPT = `You are Moke, a local-first tool-using agent.
+const SYSTEM_PROMPT = `You are a local-first tool-using agent.
 Answer directly when no tool is needed. Use tools only when the request requires them.
 Prefer Chinese when the user writes Chinese. Never invent file contents you did not observe.
 Do not expose hidden chain-of-thought or <think> blocks. Use ask_user only when a decision is required to continue.`;
