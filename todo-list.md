@@ -36,16 +36,20 @@
   - 微信登录、钉钉与飞书注册、手动凭据配置统一由配置子组件承载展示。
 - [x] 将 `ChatWorkspace.vue` 中的工作区与技能发现逻辑提取为独立 composable。
   - 新增 `useWorkspaceDiscovery`，父组件仅负责工作区选择和 Composer 事件转发。
-- [ ] 按职责拆分 `apps/client/src-tauri/src/lib.rs`。
+- [x] 按职责拆分 `apps/client/src-tauri/src/lib.rs`。
   - 浏览器状态与命令。
   - 页面捕获。
   - sidecar 生命周期。
   - 工作区打开逻辑。
-- [ ] 按持久化职责拆分 `messaging-store.ts`。
+  - 入口文件仅保留 Tauri Builder、状态注册、命令注册和退出清理。
+  - 实现拆分到 `browser.rs`、`capture.rs`、`downloads.rs`、`sidecar.rs`、`workspace.rs` 和 `window.rs`。
+- [x] 按持久化职责拆分 `messaging-store.ts`。
   - 连接与密钥。
   - 绑定与入站任务。
   - 发件箱与交互。
   - 数据迁移。
+  - 根文件保留 `JsonMessagingStore`、`MessagingStore` 及腐败数据错误的兼容导出。
+  - 实现拆分到 `apps/server/storage/messaging/` 下的类型、文件读写、职责 store 和迁移模块。
 - [ ] 明确最低可升级版本，再决定是否删除以下兼容逻辑。
   - 会话状态迁移。
   - 消息队列与适配器迁移。
