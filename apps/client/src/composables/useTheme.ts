@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getCurrentTauriWindow, isTauriAvailable, tauriInvoke } from '../services/tauri'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -7,16 +8,12 @@ const mode = ref<ThemeMode>(loadMode())
 const systemDark = ref(false)
 let mediaQuery: MediaQueryList | null = null
 
-type NativeThemeWindow = {
-  setTheme(theme?: 'light' | 'dark' | null): Promise<void>
-}
-
 const isMacOs = /Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')
 
 function syncNativeFrameColor() {
   requestAnimationFrame(() => {
     const value = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-frame').trim()
-    if (value) void window.__TAURI__?.core?.invoke('plugin:window|set_background_color', { value })?.catch(() => undefined)
+    if (value && isTauriAvailable()) void tauriInvoke('plugin:window|set_background_color', { value }).catch(() => undefined)
   })
 }
 
@@ -38,9 +35,7 @@ function applyTheme() {
   const resolved = mode.value === 'system' ? (systemDark.value ? 'dark' : 'light') : mode.value
   document.documentElement.dataset.theme = resolved
   document.documentElement.style.colorScheme = resolved
-  const nativeWindow = (window.__TAURI__ as {
-    window?: { getCurrentWindow(): NativeThemeWindow }
-  } | undefined)?.window?.getCurrentWindow()
+  const nativeWindow = getCurrentTauriWindow()
   void nativeWindow?.setTheme(mode.value === 'system' ? null : resolved).catch(() => undefined)
   if (isMacOs) syncNativeFrameColor()
 }

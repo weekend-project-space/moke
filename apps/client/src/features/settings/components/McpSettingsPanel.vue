@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Plus, RotateCw, Save, Server, ShieldCheck, Trash2, Undo2 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { uiText } from '../../../text/uiText'
-import { apiFetch } from '../../../services/apiAccess'
+import { requestSettingsJson } from '../api/settingsApi'
+import { useSettingsDiscardFlow } from '../composables/useSettingsDiscardFlow'
 import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
 
 type McpServerSummary = {
@@ -48,7 +49,6 @@ const serverDeleting = ref(false)
 const serverDraft = reactive({ id: '', command: '', args: '', timeoutMs: '30000' })
 const savedServerDraft = ref('')
 const returnServerId = ref('')
-const pendingNavigation = ref<PendingNavigation | null>(null)
 savedServerDraft.value = draftSnapshot()
 
 const selectedServer = computed(() => servers.value.find((server) => server.id === selectedServerId.value) || null)
@@ -62,6 +62,16 @@ const serverDraftValid = computed(() => {
     && timeoutMs > 0
 })
 const serverDraftCanSave = computed(() => serverDraftValid.value && (addingServer.value || serverDraftDirty.value))
+const {
+  pendingAction: pendingNavigation,
+  runAfterDiscard,
+  cancelDiscard: cancelPendingNavigation,
+  confirmDiscard: discardPendingNavigation,
+} = useSettingsDiscardFlow({
+  dirty: hasUnsavedChanges,
+  discard: discardMcpChanges,
+  onDirtyChange: (dirty) => emit('dirtyChange', dirty),
+})
 
 const statusText = computed(() => {
   if (loading.value) return uiText.settings.loading
@@ -73,11 +83,6 @@ function toRecord(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {}
-}
-
-function readApiError(data: unknown, status: number) {
-  const errorValue = toRecord(toRecord(data).error).message
-  return typeof errorValue === 'string' ? errorValue : `HTTP ${status}`
 }
 
 function isServerSummary(value: unknown): value is McpServerSummary {
@@ -135,9 +140,7 @@ async function loadMcpSettings() {
   error.value = ''
   message.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp`)
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
+    const data = await requestSettingsJson<unknown>(props.apiBase, '/api/settings/mcp')
     applyResult(data)
     savedRawConfig.value = rawConfig.value
     if (!addingServer.value) syncSelectedServer()
@@ -154,13 +157,11 @@ async function saveMcpSettings() {
   error.value = ''
   message.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp`, {
+    const data = await requestSettingsJson<unknown>(props.apiBase, '/api/settings/mcp', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw: rawConfig.value }),
     })
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
     const result = applyResult(data)
     if (!result.valid) return
     savedRawConfig.value = rawConfig.value
@@ -184,11 +185,9 @@ async function setServerTrust(server: McpServerSummary) {
   error.value = ''
   message.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/${encodeURIComponent(server.id)}/trust`, {
+    const data = await requestSettingsJson<unknown>(props.apiBase, `/api/settings/mcp/${encodeURIComponent(server.id)}/trust`, {
       method: server.trusted ? 'DELETE' : 'POST',
     })
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
     syncSelectedServer()
     message.value = uiText.mcp.trustGranted
@@ -227,11 +226,7 @@ function syncSelectedServer() {
 }
 
 function requestNavigation(next: PendingNavigation) {
-  if (hasUnsavedChanges.value) {
-    pendingNavigation.value = next
-    return
-  }
-  commitNavigation(next)
+  runAfterDiscard(() => commitNavigation(next))
 }
 
 function commitNavigation(next: PendingNavigation) {
@@ -244,15 +239,8 @@ function commitNavigation(next: PendingNavigation) {
   if (server) beginSelectServer(server)
 }
 
-async function discardPendingNavigation() {
-  const next = pendingNavigation.value
-  pendingNavigation.value = null
+async function discardMcpChanges() {
   if (hasUnsavedConfig.value) await loadMcpSettings()
-  if (next) commitNavigation(next)
-}
-
-function cancelPendingNavigation() {
-  pendingNavigation.value = null
 }
 
 function openAddServer() {
@@ -296,7 +284,7 @@ async function saveServer() {
   error.value = ''
   message.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/servers${addingServer.value ? '' : `/${encodeURIComponent(selectedServerId.value)}`}`, {
+    const data = await requestSettingsJson<unknown>(props.apiBase, `/api/settings/mcp/servers${addingServer.value ? '' : `/${encodeURIComponent(selectedServerId.value)}`}`, {
       method: addingServer.value ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -306,8 +294,6 @@ async function saveServer() {
         timeout_ms: timeoutMs,
       }),
     })
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
     addingServer.value = false
     selectedServerId.value = serverDraft.id.trim()
@@ -325,13 +311,11 @@ async function toggleServer(server: McpServerSummary) {
   serverSaving.value = true
   error.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/servers/${encodeURIComponent(server.id)}/status`, {
+    const data = await requestSettingsJson<unknown>(props.apiBase, `/api/settings/mcp/servers/${encodeURIComponent(server.id)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !server.enabled }),
     })
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
     applySavedResult(data)
     syncSelectedServer()
     message.value = uiText.mcp.restartRequired
@@ -358,9 +342,7 @@ async function confirmDeleteServer() {
   serverDeleting.value = true
   error.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/mcp/servers/${encodeURIComponent(target.id)}`, { method: 'DELETE' })
-    const data = await response.json() as unknown
-    if (!response.ok) throw new Error(readApiError(data, response.status))
+    const data = await requestSettingsJson<unknown>(props.apiBase, `/api/settings/mcp/servers/${encodeURIComponent(target.id)}`, { method: 'DELETE' })
     applySavedResult(data)
     serverDeleteTarget.value = null
     addingServer.value = false
@@ -377,8 +359,6 @@ async function confirmDeleteServer() {
 onMounted(() => {
   void loadMcpSettings()
 })
-watch(hasUnsavedChanges, (dirty) => emit('dirtyChange', dirty), { immediate: true })
-onBeforeUnmount(() => emit('dirtyChange', false))
 </script>
 
 <template>

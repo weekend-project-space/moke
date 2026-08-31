@@ -1,4 +1,4 @@
-type TauriInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
+import { isTauriAvailable, tauriInvoke } from './tauri'
 
 let apiToken = ''
 let initialization: Promise<void> | undefined
@@ -10,10 +10,9 @@ export async function initializeApiAccess() {
 }
 
 async function initializeApiAccessInternal() {
-  const invoke = (window.__TAURI__ as { core?: { invoke?: TauriInvoke } } | undefined)?.core?.invoke
-  if (!invoke) return
+  if (!isTauriAvailable()) return
 
-  const token = await invoke('agent_api_token')
+  const token = await tauriInvoke<unknown>('agent_api_token')
   if (typeof token !== 'string' || token.length < 32) {
     throw new Error('Agent server token is unavailable')
   }

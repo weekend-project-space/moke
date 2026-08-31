@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ChevronRight, Eye, EyeOff, Minus, Plus, RotateCw, Save, Trash2, Undo2 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import { uiText } from '../../../text/uiText'
-import { apiFetch } from '../../../services/apiAccess'
+import { requestSettingsJson } from '../api/settingsApi'
+import { useSettingsDiscardFlow } from '../composables/useSettingsDiscardFlow'
 import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
 
 type ModelProviderProfile = {
@@ -27,6 +28,17 @@ type ProviderModel = {
   alias: string
 }
 
+type ModelSettingsResponse = {
+  providers?: ModelProviderProfile[]
+  activeProviderId?: string
+}
+
+type ModelProbeResponse = {
+  ok?: boolean
+  message?: string
+  models?: string[]
+}
+
 const props = defineProps<{ apiBase: string }>()
 const emit = defineEmits<{
   dirtyChange: [dirty: boolean]
@@ -47,7 +59,6 @@ const modelTestMessage = ref('')
 const modelListMessage = ref('')
 const saving = ref(false)
 const deleteConfirmationOpen = ref(false)
-const pendingProviderAction = ref<(() => void) | null>(null)
 const newProviderId = ref('')
 const apiKeyVisible = ref(false)
 const requestBehaviorExpanded = ref(false)
@@ -55,6 +66,16 @@ let modelTestRequest = 0
 let modelListRequest = 0
 const selectedProvider = computed(() => providers.value.find((provider) => provider.id === selectedProviderId.value) || null)
 const isDirty = computed(() => loaded.value && (newProviderId.value === editingProvider.id || !selectedProvider.value || !providerEquals(editingProvider, selectedProvider.value)))
+const {
+  pendingAction: pendingProviderAction,
+  runAfterDiscard,
+  cancelDiscard: cancelDiscardChanges,
+  confirmDiscard: confirmDiscardChanges,
+} = useSettingsDiscardFlow({
+  dirty: isDirty,
+  discard: discardEditingProvider,
+  onDirtyChange: (dirty) => emit('dirtyChange', dirty),
+})
 const isOpenAIResponsesProvider = computed(() => editingProvider.type === 'openai-responses')
 const isLlamaCppReasoning = computed(() => editingProvider.reasoningProvider === 'llama.cpp')
 const showsReasoningEffort = computed(() => isOpenAIResponsesProvider.value || isLlamaCppReasoning.value)
@@ -188,11 +209,10 @@ function syncEditingProvider() {
 async function loadSettings() {
   modelError.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
-    const hasProviders = Array.isArray(data.providers) && data.providers.length > 0
-    providers.value = hasProviders ? data.providers.map(normalizeProvider) : [createProvider()]
+    const data = await requestSettingsJson<ModelSettingsResponse>(props.apiBase, '/api/settings')
+    const loadedProviders = Array.isArray(data.providers) ? data.providers : []
+    const hasProviders = loadedProviders.length > 0
+    providers.value = hasProviders ? loadedProviders.map(normalizeProvider) : [createProvider()]
     newProviderId.value = hasProviders ? '' : providers.value[0].id
     activeProviderId.value = hasProviders ? data.activeProviderId || providers.value[0].id : ''
     selectedProviderId.value = activeProviderId.value || providers.value[0].id
@@ -217,13 +237,11 @@ async function persistModelProviders(
   modelError.value = ''
   saving.value = true
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/model-providers`, {
+    const data = await requestSettingsJson<ModelSettingsResponse>(props.apiBase, '/api/settings/model-providers', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activeProviderId: nextActiveProviderId, providers: nextProviders }),
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
     const persistedProviders = Array.isArray(data.providers) && data.providers.length > 0 ? data.providers : nextProviders
     providers.value = persistedProviders.map(normalizeProvider)
     activeProviderId.value = data.activeProviderId || nextActiveProviderId
@@ -278,23 +296,6 @@ function addProvider() {
   })
 }
 
-function runAfterDiscard(action: () => void) {
-  if (isDirty.value) pendingProviderAction.value = action
-  else action()
-}
-
-function cancelDiscardChanges() {
-  pendingProviderAction.value = null
-}
-
-function confirmDiscardChanges() {
-  const action = pendingProviderAction.value
-  if (!action) return
-  discardEditingProvider()
-  pendingProviderAction.value = null
-  action()
-}
-
 function discardEditingProvider() {
   if (newProviderId.value === editingProvider.id) {
     providers.value = providers.value.filter((provider) => provider.id !== editingProvider.id)
@@ -344,14 +345,13 @@ async function testModel() {
   modelTest.value = 'checking'
   modelTestMessage.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/model/test`, {
+    const data = await requestSettingsJson<ModelProbeResponse>(props.apiBase, '/api/settings/model/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingProvider),
     })
-    const data = await response.json()
     if (request !== modelTestRequest || providerId !== editingProvider.id) return
-    modelTest.value = response.ok && data.ok ? 'ok' : 'error'
+    modelTest.value = data.ok ? 'ok' : 'error'
     modelTestMessage.value = data.message || (data.ok ? uiText.settings.modelAvailable : uiText.settings.modelTestFailed)
     if (Array.isArray(data.models)) modelOptions.value = data.models
   } catch {
@@ -367,14 +367,13 @@ async function loadModelOptions() {
   loadingModels.value = true
   modelListMessage.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/model/list`, {
+    const data = await requestSettingsJson<ModelProbeResponse>(props.apiBase, '/api/settings/model/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingProvider),
     })
-    const data = await response.json()
     if (request !== modelListRequest || providerId !== editingProvider.id) return
-    if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`)
+    if (!data.ok) throw new Error(data.message || uiText.settings.modelLoadFailed)
     modelOptions.value = data.models || []
     modelListMessage.value = modelOptions.value.length > 0 ? uiText.settings.modelsLoaded(modelOptions.value.length) : uiText.settings.noModels
   } catch (error) {
@@ -393,12 +392,7 @@ watch(editingProvider, () => {
   modelTest.value = 'idle'
   modelTestMessage.value = ''
 }, { deep: true })
-watch(isDirty, (dirty) => {
-  emit('dirtyChange', dirty)
-}, { immediate: true })
-
 onMounted(() => { void loadSettings() })
-onBeforeUnmount(() => emit('dirtyChange', false))
 </script>
 
 <template>

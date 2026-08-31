@@ -1,3 +1,5 @@
+import { isTauriAvailable, tauriInvoke, tauriListen } from '../../../services/tauri'
+
 export type BrowserPage = {
   pageId: number
   label: string
@@ -72,15 +74,6 @@ export type BrowserBounds = {
 export type BrowserLinkOpenMode = 'current' | 'new-tab'
 export type BrowserDataKind = 'cache' | 'cookies'
 
-type TauriGlobal = {
-  core?: {
-    invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
-  }
-  event?: {
-    listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<() => void>
-  }
-}
-
 type NavigateOptions = {
   pageId?: number
   type: 'url' | 'back' | 'forward' | 'reload'
@@ -90,36 +83,17 @@ type NavigateOptions = {
 
 type BrowserAutomationOptions = Record<string, unknown>
 
-declare global {
-  interface Window {
-    __TAURI__?: TauriGlobal
-  }
-}
-
-function tauriInvoke<T>(command: string, args?: Record<string, unknown>) {
-  const invoke = window.__TAURI__?.core?.invoke
-  if (!invoke) throw new Error('Tauri API is not available')
-
-  return invoke<T>(command, args)
-}
-
 export function isNativeBrowserAvailable() {
-  return Boolean(window.__TAURI__?.core?.invoke)
+  return isTauriAvailable()
 }
 
 export const browserApi = {
   listenStateChanged(handler: (change: BrowserStateChange) => void) {
-    const listen = window.__TAURI__?.event?.listen
-    if (!listen) return Promise.resolve(() => undefined)
-
-    return listen<BrowserStateChange>('browser_state_change', (event) => handler(event.payload))
+    return tauriListen<BrowserStateChange>('browser_state_change', handler)
   },
 
   listenDownloadChanges(handler: (change: BrowserDownloadChange) => void) {
-    const listen = window.__TAURI__?.event?.listen
-    if (!listen) return Promise.resolve(() => undefined)
-
-    return listen<BrowserDownloadChange>('browser_download_change', (event) => handler(event.payload))
+    return tauriListen<BrowserDownloadChange>('browser_download_change', handler)
   },
 
   state() {

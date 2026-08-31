@@ -3,7 +3,6 @@ import { Cookie, Database, Folder, FolderX, RotateCw, Trash2 } from 'lucide-vue-
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
-import { apiFetch } from '../../../services/apiAccess'
 import McpSettingsPanel from './McpSettingsPanel.vue'
 import ModelSettingsPanel from './ModelSettingsPanel.vue'
 import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
@@ -17,12 +16,17 @@ import {
   type BrowserPreferences,
 } from '../../browser'
 import { browserApi, isNativeBrowserAvailable, type BrowserDataKind } from '../../browser/api/browser'
+import { requestSettingsJson } from '../api/settingsApi'
 import { uiText } from '../../../text/uiText'
 import { settingsNavigationItems, type SettingsTab } from '../model/settingsNavigation'
 
 type WorkspaceRootPermission = {
   path: string
   added_at: string
+}
+
+type WorkspaceRootPermissionsResponse = {
+  workspace_roots?: WorkspaceRootPermission[]
 }
 
 const props = defineProps<{
@@ -73,9 +77,7 @@ async function loadPermissions() {
   loadingPermissions.value = true
   permissionError.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/permissions`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
+    const data = await requestSettingsJson<WorkspaceRootPermissionsResponse>(props.apiBase, '/api/settings/permissions')
     permissions.value = data.workspace_roots || []
   } catch {
     permissionError.value = uiText.settings.permissionsLoadFailed
@@ -101,13 +103,11 @@ async function confirmPermissionRevoke() {
   revokingPermission.value = true
   permissionError.value = ''
   try {
-    const response = await apiFetch(`${props.apiBase}/api/settings/permissions/revoke`, {
+    const data = await requestSettingsJson<WorkspaceRootPermissionsResponse>(props.apiBase, '/api/settings/permissions/revoke', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: permission.path }),
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
     permissions.value = data.workspace_roots || []
     permissionToRevoke.value = null
   } catch {

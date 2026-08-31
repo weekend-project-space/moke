@@ -27,15 +27,15 @@
 
 ## 二、需要重构或版本决策
 
-- [ ] 建立统一的 Tauri 平台桥，集中封装类型化 `invoke`、`listen` 和可用性检查。
-- [ ] 集中处理设置页面重复的 JSON 请求、响应解析和错误转换逻辑。
-- [ ] 合并模型、MCP 和消息设置中重复的脏数据检测与放弃修改确认流程，避免引入过度通用的 composable。
-- [ ] 按工作流拆分 `MessagingSettingsPanel.vue`。
+- [x] 建立统一的 Tauri 平台桥，集中封装类型化 `invoke`、`listen` 和可用性检查。
+- [x] 集中处理设置页面重复的 JSON 请求、响应解析和错误转换逻辑。
+- [x] 合并模型、MCP 和消息设置中重复的脏数据检测与放弃修改确认流程，避免引入过度通用的 composable。
+  - 新增 `useSettingsDiscardFlow`，仅统一脏状态通知、待执行操作和确认流程。
+- [x] 按工作流拆分 `MessagingSettingsPanel.vue`。
   - 连接列表与详情。
-  - 微信登录。
-  - 钉钉与飞书注册。
-  - 手动凭据配置。
-- [ ] 将 `ChatWorkspace.vue` 中的工作区与技能发现逻辑提取为独立 composable。
+  - 微信登录、钉钉与飞书注册、手动凭据配置统一由配置子组件承载展示。
+- [x] 将 `ChatWorkspace.vue` 中的工作区与技能发现逻辑提取为独立 composable。
+  - 新增 `useWorkspaceDiscovery`，父组件仅负责工作区选择和 Composer 事件转发。
 - [ ] 按职责拆分 `apps/client/src-tauri/src/lib.rs`。
   - 浏览器状态与命令。
   - 页面捕获。

@@ -2,7 +2,6 @@
 import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { SkillSummary, WorkspaceContext, WorkspaceEntry } from '@moke/agent-sdk'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
 import { BrowserPanel, useBrowserWorkspace } from '../../browser'
 import { ScheduledTasksWorkspace } from '../../scheduled-tasks'
@@ -21,9 +20,9 @@ import { useRecentWorkspaces } from '../composables/useRecentWorkspaces'
 import { useSessionNavigation } from '../composables/useSessionNavigation'
 import type { ApprovalMode, Message, ReasoningEffort, SessionSummary } from '../model/conversation'
 import { isNativeWorkspacePickerAvailable, isSupportedImagePath, pickLocalFiles, pickWorkspaceDirectory, readLocalImage } from '../services/workspacePicker'
-import { createAgentApi } from '../api/agentApi'
 import { formatSessionTime } from '../presentation/timeFormat'
 import { isVisibleMessage, useConversationDisplay } from '../presentation/useConversationDisplay'
+import { useWorkspaceDiscovery } from '../composables/useWorkspaceDiscovery'
 
 defineOptions({ name: 'ChatWorkspace' })
 
@@ -39,9 +38,6 @@ const showJumpToBottom = ref(false)
 const processCollapsed = ref<Record<string, boolean>>({})
 const runtimeNow = ref(Date.now())
 const nativeWorkspacePicker = ref(isNativeWorkspacePickerAvailable())
-const workspaceEntries = ref<WorkspaceEntry[]>([])
-const workspaceSkills = ref<SkillSummary[]>([])
-const draftWorkspaceContext = ref<WorkspaceContext | null>(null)
 const route = useRoute()
 const router = useRouter()
 const workspaceActive = computed(() => route.name === 'chat' || route.name === 'tasks')
@@ -68,7 +64,6 @@ const {
 const apiBase =
   import.meta.env.VITE_API_BASE_URL ||
   (window.location.hostname === 'tauri.localhost' ? 'http://127.0.0.1:4010' : '')
-const discoveryApi = createAgentApi(apiBase)
 let sendNextQueuedMessage: () => Promise<void> = async () => undefined
 const {
   cancelRun,
@@ -178,6 +173,16 @@ const {
 })
 sendNextQueuedMessage = sendQueuedMessageIfReady
 const {
+  workspaceEntries,
+  workspaceSkills,
+} = useWorkspaceDiscovery({
+  apiBase,
+  input,
+  sessionId,
+  currentWorkspaceRoot,
+  getDraftWorkspaceRoot: () => newSessionDraft.workspace?.root,
+})
+const {
   disposeBrowserWorkspace,
   initBrowserWorkspace,
   openLinkInBrowser,
@@ -229,63 +234,10 @@ async function updateApprovalMode(mode: ApprovalMode) {
 }
 
 function updateDraftWorkspace(root: string) {
-  const previousRoot = newSessionDraft.workspace?.root
   if (setDraftWorkspace(root)) {
-    if (newSessionDraft.workspace?.root !== previousRoot) draftWorkspaceContext.value = null
     rememberWorkspace(root)
   }
 }
-
-let discoveryTimer: number | undefined
-let discoveryRequestVersion = 0
-
-async function discoveryContext() {
-  if (sessionId.value) return { sessionId: sessionId.value }
-  const root = newSessionDraft.workspace?.root
-  if (!root) return null
-  const current = draftWorkspaceContext.value
-  if (current?.root === root && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())) {
-    return { contextId: current.id }
-  }
-  const context = await discoveryApi.workspace.createContext({ workspaceRoot: root })
-  if (newSessionDraft.workspace?.root !== root || sessionId.value) return null
-  draftWorkspaceContext.value = context
-  return { contextId: context.id }
-}
-
-watch([input, sessionId, currentWorkspaceRoot], () => {
-  if (discoveryTimer) window.clearTimeout(discoveryTimer)
-  const requestVersion = ++discoveryRequestVersion
-  workspaceEntries.value = []
-  workspaceSkills.value = []
-  const match = input.value.match(/(?:^|\s)([@/])([^\s]*)$/)
-  if (!match || !currentWorkspaceRoot.value) return
-  discoveryTimer = window.setTimeout(async () => {
-    discoveryTimer = undefined
-    try {
-      const context = await discoveryContext()
-      if (!context || requestVersion !== discoveryRequestVersion) return
-      if (match[1] === '@') {
-        const entries = await discoveryApi.workspace.entries({
-          ...context,
-          query: match[2],
-          includeDirectories: false,
-        })
-        if (requestVersion !== discoveryRequestVersion) return
-        workspaceEntries.value = entries
-      } else {
-        const skills = await discoveryApi.skills.list({
-          ...context,
-          enabledOnly: true,
-        })
-        if (requestVersion !== discoveryRequestVersion) return
-        workspaceSkills.value = skills
-      }
-    } catch {
-      // Results were cleared before this request started.
-    }
-  }, 120)
-})
 
 async function chooseDraftWorkspaceDirectory() {
   try {
@@ -473,7 +425,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (discoveryTimer) window.clearTimeout(discoveryTimer)
   window.clearInterval(runtimeTimer)
   window.removeEventListener('keydown', handleChatKeydown)
   window.removeEventListener('resize', handleWindowResize)

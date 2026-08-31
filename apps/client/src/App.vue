@@ -3,15 +3,8 @@ import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { isNavigationFailure, RouterView, useRoute, useRouter } from 'vue-router'
 import { ChatWorkspace } from './features/chat'
 import { isChatRoute, router } from './router'
+import { getCurrentTauriWindow, tauriListen } from './services/tauri'
 import { uiText } from './text/uiText'
-
-type NativeAppWindow = {
-  destroy(): Promise<void>
-  onCloseRequested(handler: (event: { preventDefault(): void }) => void | Promise<void>): Promise<() => void>
-  onResized(handler: () => void): Promise<() => void>
-  isFullscreen(): Promise<boolean>
-  isMaximized(): Promise<boolean>
-}
 
 const settingsDirty = ref(false)
 const chatWorkspace = ref<InstanceType<typeof ChatWorkspace> | null>(null)
@@ -19,9 +12,7 @@ const fileMenu = ref(false)
 const fileMenuElement = ref<HTMLElement | null>(null)
 const fileMenuTrigger = ref<HTMLButtonElement | null>(null)
 const lastChatPath = ref('/chat')
-const nativeAppWindow = (window.__TAURI__ as typeof window.__TAURI__ & {
-  window?: { getCurrentWindow(): NativeAppWindow }
-})?.window?.getCurrentWindow()
+const nativeAppWindow = getCurrentTauriWindow()
 const isMacOs = Boolean(nativeAppWindow && (/Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')))
 const showCustomTitlebar = Boolean(nativeAppWindow && !isMacOs)
 document.documentElement.classList.toggle('platform-macos', isMacOs)
@@ -142,15 +133,12 @@ onMounted(async () => {
     if (appDisposed) unlistenResize()
     else unlistenWindowResize = unlistenResize
 
-    const listen = window.__TAURI__?.event?.listen
-    if (listen) {
-      const menuUnlisteners = await Promise.all([
-        listen('app-menu:new-chat', () => void newChatFromMenu()),
-        listen('app-menu:settings', () => void openSettings()),
-      ])
-      if (appDisposed) menuUnlisteners.forEach((unlisten) => unlisten())
-      else unlistenMenuEvents = menuUnlisteners
-    }
+    const menuUnlisteners = await Promise.all([
+      tauriListen('app-menu:new-chat', () => void newChatFromMenu()),
+      tauriListen('app-menu:settings', () => void openSettings()),
+    ])
+    if (appDisposed) menuUnlisteners.forEach((unlisten) => unlisten())
+    else unlistenMenuEvents = menuUnlisteners
   }
 })
 onUnmounted(() => {

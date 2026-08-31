@@ -12,6 +12,7 @@ import {
   SquareTerminal,
 } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
+import { isTauriAvailable, tauriInvoke } from '../../../services/tauri'
 import { uiText } from '../../../text/uiText'
 
 type WorkspaceOpener = {
@@ -50,7 +51,7 @@ const preferredWorkspaceOpenerId = ref(readPreferredWorkspaceOpener())
 const sidebarToggleLabel = computed(() =>
   props.desktopLayout && !props.sidebarCollapsed ? uiText.header.collapseChatList : uiText.header.expandChatList,
 )
-const nativeWorkspaceOpening = computed(() => typeof window !== 'undefined' && Boolean(window.__TAURI__?.core?.invoke))
+const nativeWorkspaceOpening = computed(() => isTauriAvailable())
 const currentWorkspaceOpener = computed(() =>
   workspaceOpeners.value.find((opener) => opener.id === preferredWorkspaceOpenerId.value)
   || workspaceOpeners.value.find((opener) => opener.id === 'explorer')
@@ -81,8 +82,7 @@ function workspaceOpenerIcon(id: string) {
 
 async function loadWorkspaceOpeners() {
   const root = props.workspaceRoot
-  const invoke = window.__TAURI__?.core?.invoke
-  if (!root || !invoke) {
+  if (!root || !isTauriAvailable()) {
     workspaceOpeners.value = []
     return
   }
@@ -90,7 +90,7 @@ async function loadWorkspaceOpeners() {
   workspaceOpenersLoading.value = true
   workspaceOpenError.value = ''
   try {
-    const openers = await invoke<WorkspaceOpener[]>('list_workspace_openers', { root })
+    const openers = await tauriInvoke<WorkspaceOpener[]>('list_workspace_openers', { root })
     if (root !== props.workspaceRoot) return
     workspaceOpeners.value = openers
     if (workspaceMenuOpen.value) void nextTick(() => enabledWorkspaceMenuItems()[0]?.focus())
@@ -151,13 +151,12 @@ function handleWorkspaceMenuKeydown(event: KeyboardEvent) {
 }
 
 async function openWorkspace(opener = currentWorkspaceOpener.value) {
-  const invoke = window.__TAURI__?.core?.invoke
-  if (!invoke || !props.workspaceRoot || !opener || openingWorkspaceWith.value) return
+  if (!isTauriAvailable() || !props.workspaceRoot || !opener || openingWorkspaceWith.value) return
 
   openingWorkspaceWith.value = opener.id
   workspaceOpenError.value = ''
   try {
-    await invoke('open_workspace_with', { root: props.workspaceRoot, openerId: opener.id })
+    await tauriInvoke('open_workspace_with', { root: props.workspaceRoot, openerId: opener.id })
     preferredWorkspaceOpenerId.value = opener.id
     try {
       window.localStorage.setItem(WORKSPACE_OPENER_KEY, opener.id)

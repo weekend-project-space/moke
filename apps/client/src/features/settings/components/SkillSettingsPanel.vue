@@ -3,7 +3,7 @@ import { Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 
 import { pickSkillFile } from '../../chat/services/workspacePicker'
-import { apiFetch } from '../../../services/apiAccess'
+import { requestSettingsJson } from '../api/settingsApi'
 import { uiText } from '../../../text/uiText'
 import SettingsConfirmSheet from './SettingsConfirmSheet.vue'
 
@@ -43,21 +43,11 @@ function isSkillSummary(value: unknown): value is SkillSummary {
     && typeof item.valid === 'boolean')
 }
 
-async function requestJson(url: string, init?: RequestInit) {
-  const response = await apiFetch(url, init)
-  const data = await response.json().catch(() => ({})) as Record<string, unknown>
-  if (!response.ok) {
-    const apiError = data.error as { message?: unknown } | undefined
-    throw new Error(typeof apiError?.message === 'string' ? apiError.message : `HTTP ${response.status}`)
-  }
-  return data
-}
-
 async function loadSkills() {
   loading.value = true
   error.value = ''
   try {
-    const data = await requestJson(`${props.apiBase}/api/settings/skills`)
+    const data = await requestSettingsJson<Record<string, unknown>>(props.apiBase, '/api/settings/skills')
     skills.value = Array.isArray(data.skills) ? data.skills.filter(isSkillSummary) : []
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : uiText.skills.loadFailed
@@ -73,7 +63,7 @@ async function importSkill() {
   error.value = ''
   message.value = ''
   try {
-    const data = await requestJson(`${props.apiBase}/api/settings/skills/import`, {
+    const data = await requestSettingsJson<Record<string, unknown>>(props.apiBase, '/api/settings/skills/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: sourcePath }),
@@ -96,7 +86,7 @@ async function toggleSkill(skill: SkillSummary) {
   updatingId.value = skill.id
   error.value = ''
   try {
-    const data = await requestJson(`${props.apiBase}/api/settings/skills/${encodeURIComponent(skill.id)}/status`, {
+    const data = await requestSettingsJson<Record<string, unknown>>(props.apiBase, `/api/settings/skills/${encodeURIComponent(skill.id)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !skill.enabled }),
@@ -125,7 +115,7 @@ async function confirmDelete() {
   deleting.value = true
   error.value = ''
   try {
-    await requestJson(`${props.apiBase}/api/settings/skills/${encodeURIComponent(target.id)}`, { method: 'DELETE' })
+    await requestSettingsJson<Record<string, unknown>>(props.apiBase, `/api/settings/skills/${encodeURIComponent(target.id)}`, { method: 'DELETE' })
     skills.value = skills.value.filter((skill) => skill.id !== target.id)
     deleteTarget.value = null
     message.value = uiText.skills.deleted

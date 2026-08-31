@@ -1,13 +1,12 @@
 import { open } from '@tauri-apps/plugin-dialog'
 
 import type { ImageAttachment } from '../model/conversation'
-
-type TauriInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
+import { isTauriAvailable, tauriInvoke } from '../../../services/tauri'
 
 type LocalImage = Omit<ImageAttachment, 'id' | 'kind'>
 
 export function isNativeWorkspacePickerAvailable() {
-  return typeof window !== 'undefined' && Boolean(window.__TAURI__?.core?.invoke)
+  return isTauriAvailable()
 }
 
 export async function pickWorkspaceDirectory(defaultPath?: string) {
@@ -47,7 +46,6 @@ export function isSupportedImagePath(path: string) {
 }
 
 export async function readLocalImage(path: string): Promise<LocalImage> {
-  const invoke = (window.__TAURI__ as { core?: { invoke?: TauriInvoke } } | undefined)?.core?.invoke
-  if (!invoke) throw new Error('Native image reader is unavailable')
-  return await invoke('read_local_image', { path }) as LocalImage
+  if (!isTauriAvailable()) throw new Error('Native image reader is unavailable')
+  return await tauriInvoke<LocalImage>('read_local_image', { path })
 }
