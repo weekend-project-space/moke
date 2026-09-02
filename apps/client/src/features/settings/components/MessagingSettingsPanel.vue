@@ -538,7 +538,6 @@ function selectConnection(connection: MessagingConnection) {
 async function beginAddChannel() {
   if (hasActiveLogin.value || hasActiveRegistrationLogin.value || savingDingTalk.value || savingFeishu.value) return
   if (setupChannel.value) await closeSetup()
-  selectedConnectionId.value = ''
   channelPickerOpen.value = true
   error.value = ''
 }
@@ -688,37 +687,38 @@ onBeforeUnmount(() => {
         @add="startAddChannel"
       />
 
-        <section class="settings-record-detail" :aria-label="uiText.messaging.availableChannels">
-    <p v-if="error && !setupChannel" class="messaging-feedback error" role="alert">{{ error }}</p>
-    <MessagingSetupPanel
-      :state="setupPanelState"
-      @field-change="updateSetupField"
-      @close-picker="closeChannelPicker"
-      @open-weixin="openWeixinSetup"
-      @open-dingtalk="openDingTalkSetup"
-      @open-feishu="openFeishuSetup"
-      @request-close="requestCloseSetup"
-      @close-setup="closeSetup"
-      @retry-weixin="beginLogin"
-      @verify="submitVerifyCode"
-      @set-registration-mode="setRegistrationSetupMode"
-      @retry-registration="beginRegistrationLogin"
-      @set-feishu-domain="setFeishuDomain"
-      @save-dingtalk="saveDingTalkConnection"
-      @revert-dingtalk="revertDingTalkDraft"
-      @save-feishu="saveFeishuConnection"
-    />
+        <section class="settings-record-detail" :aria-label="channelPickerOpen || setupChannel ? uiText.messaging.addChannel : uiText.messaging.yourChannels">
+          <p v-if="error && !setupChannel" class="messaging-feedback error" role="alert">{{ error }}</p>
+          <MessagingSetupPanel
+            :state="setupPanelState"
+            @field-change="updateSetupField"
+            @close-picker="closeChannelPicker"
+            @open-weixin="openWeixinSetup"
+            @open-dingtalk="openDingTalkSetup"
+            @open-feishu="openFeishuSetup"
+            @request-close="requestCloseSetup"
+            @close-setup="closeSetup"
+            @retry-weixin="beginLogin"
+            @verify="submitVerifyCode"
+            @set-registration-mode="setRegistrationSetupMode"
+            @retry-registration="beginRegistrationLogin"
+            @set-feishu-domain="setFeishuDomain"
+            @save-dingtalk="saveDingTalkConnection"
+            @revert-dingtalk="revertDingTalkDraft"
+            @save-feishu="saveFeishuConnection"
+          />
 
-    <MessagingConnectionDetail
-      :connection="selectedConnection"
-      :busy-connection-id="busyConnectionId"
-      :has-active-login="Boolean(hasActiveLogin)"
-      :has-active-registration-login="Boolean(hasActiveRegistrationLogin)"
-      @add="startAddChannel"
-      @delete="requestDeleteConnection"
-      @configure="editDingTalk"
-      @action="connectionAction"
-    />
+          <MessagingConnectionDetail
+            v-if="!channelPickerOpen && !setupChannel"
+            :connection="selectedConnection"
+            :busy-connection-id="busyConnectionId"
+            :has-active-login="Boolean(hasActiveLogin)"
+            :has-active-registration-login="Boolean(hasActiveRegistrationLogin)"
+            @add="startAddChannel"
+            @delete="requestDeleteConnection"
+            @configure="editDingTalk"
+            @action="connectionAction"
+          />
         </section>
       </div>
   </section>
