@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUp, Box, Check, ChevronDown, FileText, FolderOpen, FolderPlus, Paperclip, Plus, ShieldAlert, ShieldCheck, ShieldUser, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Box, Check, ChevronDown, FileText, FolderOpen, FolderPlus, Plus, ShieldAlert, ShieldCheck, ShieldUser, Square, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ModelSummary, SkillSummary, WorkspaceEntry } from '@moke/agent-sdk'
 import { uiText } from '../../../text/uiText'
@@ -47,7 +47,6 @@ const emit = defineEmits<{
   selectModel: [model: ComposerModel]
 }>()
 
-const addMenuOpen = ref(false)
 const attachmentError = ref('')
 const composerEl = ref<HTMLFormElement | null>(null)
 const discoveryMenu = ref<HTMLElement | null>(null)
@@ -157,7 +156,6 @@ function handleTextareaKeydown(event: KeyboardEvent) {
 const MAX_IMAGE_ATTACHMENTS = 4
 const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_TOTAL_BYTES = 5 * 1024 * 1024
-const addOptions = ['attachment']
 const approvalOptions: ApprovalMode[] = ['read-only', 'workspace-write', 'danger-full-access']
 
 function resize() {
@@ -300,27 +298,18 @@ function hasFileDataTransfer(dataTransfer: DataTransfer | null) {
   return dataTransfer.files.length > 0
 }
 
-function chooseImages() {
-  addMenuOpen.value = false
-  fileInput.value?.click()
-}
-
-function chooseAddAction(value: string) {
-  if (value !== 'attachment') return
-  if (!props.nativeWorkspacePicker) return chooseImages()
-  addMenuOpen.value = false
-  emit('chooseFiles')
-}
-
-function updateAddMenu(value: boolean) {
+function chooseAttachment() {
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
   modelMenuOpen.value = false
-  addMenuOpen.value = value
+  if (props.nativeWorkspacePicker) {
+    emit('chooseFiles')
+    return
+  }
+  fileInput.value?.click()
 }
 
 function updateModelMenu(value: boolean) {
-  addMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
   modelMenuOpen.value = value
@@ -331,7 +320,6 @@ function approvalModeLabel(value: ApprovalMode) {
 }
 
 function updateApprovalMenu(value: boolean) {
-  addMenuOpen.value = false
   workspaceMenuOpen.value = false
   modelMenuOpen.value = false
   approvalMenuOpen.value = value
@@ -342,7 +330,6 @@ function chooseApprovalMode(value: string) {
 }
 
 function updateWorkspaceMenu(value: boolean) {
-  addMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = value
   workspaceCustomOpen.value = false
@@ -384,22 +371,21 @@ function applyWorkspace() {
   workspaceCustomOpen.value = false
 }
 
-function closeAddMenuOnOutsideClick(event: PointerEvent) {
-  if (!addMenuOpen.value && !approvalMenuOpen.value && !workspaceMenuOpen.value && !modelMenuOpen.value) return
+function closeMenusOnOutsideClick(event: PointerEvent) {
+  if (!approvalMenuOpen.value && !workspaceMenuOpen.value && !modelMenuOpen.value) return
   const target = event.target
   if (target instanceof Node && composerEl.value?.contains(target)) return
-  addMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
   modelMenuOpen.value = false
 }
 
 onMounted(() => {
-  document.addEventListener('pointerdown', closeAddMenuOnOutsideClick)
+  document.addEventListener('pointerdown', closeMenusOnOutsideClick)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('pointerdown', closeAddMenuOnOutsideClick)
+  document.removeEventListener('pointerdown', closeMenusOnOutsideClick)
 })
 
 function handleFileChange(event: Event) {
@@ -422,7 +408,6 @@ function handleDragEnter(event: DragEvent) {
   event.preventDefault()
   dragDepth.value += 1
   isDraggingImage.value = true
-  addMenuOpen.value = false
   approvalMenuOpen.value = false
   workspaceMenuOpen.value = false
 }
@@ -579,31 +564,15 @@ defineExpose({ addLocalImages, focus, openWorkspaceEditor, resize })
         </div>
         <div class="composer-footer">
           <div class="composer-footer-left">
-          <ComposerSelectControl
-            :open="addMenuOpen"
-            :options="addOptions"
-            menu-class="composer-add-menu"
-            @select="chooseAddAction"
-            @update:open="updateAddMenu"
+          <button
+            class="composer-secondary-action"
+            type="button"
+            :aria-label="uiText.composer.add"
+            :title="uiText.composer.addFilesOrImages"
+            @click="chooseAttachment"
           >
-            <template #option-icon>
-              <Paperclip :size="15" stroke-width="2.1" />
-            </template>
-            <template #option-label>{{ uiText.composer.addFilesOrImages }}</template>
-            <template #trigger="{ open, toggle }">
-              <button
-                class="composer-secondary-action"
-                type="button"
-                :aria-label="uiText.composer.add"
-                :title="uiText.composer.add"
-                :aria-expanded="open"
-                :class="{ active: open }"
-                @click="toggle"
-              >
-                <Plus :size="17" stroke-width="2.2" />
-              </button>
-            </template>
-          </ComposerSelectControl>
+            <Plus :size="17" stroke-width="2.2" />
+          </button>
           <ComposerSelectControl
             v-if="props.approvalMode"
             :open="approvalMenuOpen"

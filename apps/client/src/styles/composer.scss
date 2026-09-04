@@ -506,8 +506,8 @@
   span {
     min-width: 0;
     overflow: hidden;
-    font-size: var(--font-size-ui);
-    font-weight: 430;
+    font-size: var(--font-size-meta);
+    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -521,19 +521,20 @@
   display: inline-flex;
   width: auto;
   min-width: 0;
-  max-width: min(220px, 42vw);
+  max-width: min(200px, 40vw);
   height: 30px;
   align-items: center;
   gap: 5px;
   padding: 0 9px;
   border: 0;
   border-radius: var(--radius-pill);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   background: transparent;
   box-shadow: none;
 }
 
 .composer button.composer-model-action:hover,
+.composer button.composer-model-action:focus-visible,
 .composer button.composer-model-action.active {
   color: var(--color-text-primary);
   background: var(--color-secondary);
@@ -543,8 +544,8 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: var(--font-size-ui);
-  font-weight: 430;
+  font-size: var(--font-size-meta);
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -652,15 +653,32 @@
   background: var(--color-secondary-active);
 }
 
-.composer-add-menu {
-  width: 210px;
-}
-
-.composer-approval-menu {
+.composer-option-list.composer-approval-menu {
   bottom: calc(100% + 6px);
   left: 0;
   width: 210px;
   transform: none;
+  padding: 5px;
+  background: var(--color-bg-popover);
+  box-shadow: var(--shadow-menu);
+}
+
+.composer .composer-option-list.composer-approval-menu button {
+  height: 32px;
+  color: var(--color-text-primary);
+}
+
+.composer .composer-option-list.composer-approval-menu button span {
+  font-size: var(--font-size-meta);
+}
+
+.composer .composer-option-list.composer-approval-menu button.active,
+.composer .composer-option-list.composer-approval-menu button:active {
+  background: var(--color-secondary-hover);
+}
+
+.composer-option-list.composer-approval-menu .composer-option-check {
+  color: var(--color-text-secondary);
 }
 
 .composer-approval-menu button:has(.lucide-shield-alert) .composer-option-icon {
