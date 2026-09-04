@@ -59,10 +59,9 @@ html.platform-custom-titlebar .workspace-window-actions {
 }
 
 html.platform-macos:not(.platform-macos-window-fullscreen) {
-  .sidebar-primary-actions > button:first-child,
-  .settings-navigation nav > button:first-child {
-    width: calc(100% - 70px);
-    margin-left: 70px;
+  .sidebar-primary-actions,
+  .settings-navigation nav {
+    padding-top: 42px;
   }
 
   .shell.sidebar-collapsed .topbar,

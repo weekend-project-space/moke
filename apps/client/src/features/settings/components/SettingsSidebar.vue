@@ -31,7 +31,7 @@ function onThemeChange(event: Event) {
 
 <template>
   <aside class="settings-navigation" @contextmenu.prevent>
-    <nav aria-label="Settings sections">
+    <nav aria-label="Settings sections" data-tauri-drag-region>
       <button
         v-for="item in settingsNavigationItems"
         :key="item.id"

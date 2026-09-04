@@ -303,7 +303,7 @@ onUnmounted(() => {
 
 <template>
   <aside class="sidebar" @click="closeContextMenu()" @contextmenu.prevent>
-    <nav class="sidebar-primary-actions" aria-label="Workspace">
+    <nav class="sidebar-primary-actions" aria-label="Workspace" data-tauri-drag-region>
       <button type="button" class="sidebar-navigation-item" :class="{ active: newSessionActive }" :disabled="disabled" @click.stop="emit('newSession')">
         <SquarePen :size="15" stroke-width="2.1" />
         <span>{{ uiText.sidebar.newChat }}</span>
