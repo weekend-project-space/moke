@@ -97,9 +97,17 @@
   grid-template-columns: minmax(96px, 1fr) minmax(0, 520px) minmax(96px, 1fr);
   align-items: center;
   column-gap: 12px;
-  min-height: 48px;
-  padding: 7px 16px;
+  min-height: 40px;
+  padding: 4px 16px;
   border-bottom: 1px solid var(--chat-header-divider);
+}
+
+.shell.trace-collapsed .topbar {
+  padding-right: 54px;
+}
+
+html.platform-custom-titlebar .shell.trace-collapsed .topbar {
+  padding-right: 192px;
 }
 
 .topbar-side {
@@ -111,6 +119,7 @@
 
 .topbar-left {
   justify-content: flex-start;
+  transform: translateX(-8px);
 }
 
 .topbar-right {
@@ -189,7 +198,7 @@
   border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
 }
 
-.topbar-right .trace-summary {
+.workspace-window-actions .trace-summary {
   border-radius: var(--radius-sm);
 }
 
@@ -402,7 +411,7 @@
   .topbar {
     grid-template-columns: minmax(72px, 1fr) minmax(0, 1.8fr) minmax(72px, 1fr);
     column-gap: 8px;
-    padding: 9px 12px;
+    padding: 4px 12px;
   }
 
   .chat {
@@ -425,8 +434,3 @@
     height: 9px;
   }
 }
-
-
-
-
-

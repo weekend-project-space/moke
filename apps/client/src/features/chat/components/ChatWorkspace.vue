@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ArrowDown, SkipForward, Trash2, X } from 'lucide-vue-next'
+import { ArrowDown, PanelRight, SkipForward, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkspaceLayout from '../../../components/layout/WorkspaceLayout.vue'
@@ -269,7 +269,7 @@ async function chooseFiles() {
   }
 }
 
-const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : uiText.app.newChat)
+const currentTitle = computed(() => currentSession.value ? sessionLabel(currentSession.value) : '')
 const currentApprovalMode = computed(() => currentSession.value?.env?.approval_mode || newSessionDraft.approval_mode)
 const taskTemplates = computed(() => currentWorkspaceRoot.value ? uiText.chat.workspaceStarters : uiText.chat.webStarters)
 const serverStatusLabel = computed(() => {
@@ -451,6 +451,18 @@ defineExpose({
     sidebar-label="Resize chat list"
     @close-sidebar="closeSidebar"
   >
+    <template v-if="!scheduledTasksActive" #windowActions>
+      <button
+        class="trace-summary"
+        type="button"
+        :aria-label="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
+        :title="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
+        @click="toggleWorkspace"
+      >
+        <PanelRight :size="16" stroke-width="1.9" />
+      </button>
+    </template>
+
     <template #sidebar>
       <ChatSidebar :sessions="sortedSessions" :active-session-id="scheduledTasksActive ? '' : sessionId"
         :disabled="serverStatus !== 'online'" :running-session-ids="runningSessionIds" :settings-active="false"
@@ -467,13 +479,11 @@ defineExpose({
         subtitle=""
         :desktop-layout="desktopLayout"
         :sidebar-collapsed="sidebarCollapsed"
-        :trace-collapsed="traceCollapsed"
         :server-status="serverStatus"
         :server-status-label="serverStatusLabel"
         :workspace-root="currentWorkspaceRoot"
         @new-session="startNewSession"
         @toggle-sidebar="toggleSidebar"
-        @toggle-workspace="toggleWorkspace"
       />
 
       <div class="chat-main" :class="{ 'is-empty': showEmptyState }">

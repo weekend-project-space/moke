@@ -220,12 +220,12 @@ onMounted(loadTasks)
 
 <template>
   <section class="scheduled-tasks-workspace">
-    <header class="scheduled-tasks-header">
+    <header class="scheduled-tasks-header" data-tauri-drag-region>
       <button class="sidebar-toggle" type="button" aria-label="Toggle chat list" title="Toggle chat list" @click="emit('toggleSidebar')">
         <PanelLeft :size="17" stroke-width="2.1" />
       </button>
-      <h1>Scheduled tasks</h1>
-      <button class="scheduled-task-primary" type="button" @click="openCreate">
+      <h1 data-tauri-drag-region>Scheduled tasks</h1>
+      <button class="scheduled-task-create" type="button" @click="openCreate">
         <Plus :size="15" stroke-width="2.2" />
         New task
       </button>

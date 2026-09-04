@@ -284,8 +284,8 @@ defineExpose({
 <template>
   <section class="browser-panel" :class="{ 'browser-panel-unavailable': !nativeAvailable }" @contextmenu.prevent>
     <div v-if="nativeAvailable" class="browser-controls">
-      <div class="browser-tabs-row">
-        <nav ref="tabsElement" class="browser-tabs" :aria-label="uiText.browser.pages" @wheel="handleTabsWheel">
+      <div class="browser-tabs-row" data-tauri-drag-region>
+        <nav ref="tabsElement" class="browser-tabs" data-tauri-drag-region :aria-label="uiText.browser.pages" @wheel="handleTabsWheel">
           <div v-for="tab in tabs" :key="tabKey(tab)" class="browser-tab" :class="{ active: tabKey(tab) === activeTabKey }" @contextmenu.prevent.stop="openTabMenu($event, tab)">
             <button type="button" class="browser-tab-select" @click="selectTab(tab)">
               <img v-if="faviconSource(tab)" class="browser-tab-favicon" :src="faviconSource(tab)" alt="" aria-hidden="true" draggable="false" referrerpolicy="no-referrer" @error="handleFaviconError(tab, faviconSource(tab))" />

@@ -210,9 +210,9 @@ onMounted(() => {
     </template>
 
       <section class="settings-content">
-        <header class="settings-content-header">
-          <div class="settings-content-frame settings-content-header-inner">
-            <h2>{{ activeSettingsItem.label }}</h2>
+        <header class="settings-content-header" data-tauri-drag-region>
+          <div class="settings-content-frame settings-content-header-inner" data-tauri-drag-region>
+            <h2 data-tauri-drag-region>{{ activeSettingsItem.label }}</h2>
           </div>
         </header>
 

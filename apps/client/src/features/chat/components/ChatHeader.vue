@@ -7,7 +7,6 @@ import {
   FolderOpen,
   GitBranch,
   PanelLeft,
-  PanelRight,
   SquarePen,
   SquareTerminal,
 } from 'lucide-vue-next'
@@ -27,7 +26,6 @@ const props = defineProps<{
   subtitle: string
   desktopLayout: boolean
   sidebarCollapsed: boolean
-  traceCollapsed: boolean
   serverStatus: 'checking' | 'online' | 'offline'
   serverStatusLabel: string
   workspaceRoot: string
@@ -36,7 +34,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   newSession: []
   toggleSidebar: []
-  toggleWorkspace: []
 }>()
 
 const workspaceMenuEl = ref<HTMLElement | null>(null)
@@ -181,7 +178,7 @@ watch(() => props.workspaceRoot, () => {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" data-tauri-drag-region>
     <div class="topbar-side topbar-left">
       <button class="sidebar-toggle" type="button" :aria-label="sidebarToggleLabel" :title="sidebarToggleLabel" @click="emit('toggleSidebar')">
         <PanelLeft :size="17" stroke-width="2.1" />
@@ -197,9 +194,9 @@ watch(() => props.workspaceRoot, () => {
         <SquarePen :size="16" stroke-width="2.1" />
       </button>
     </div>
-    <div class="chat-title-block">
-      <h2>{{ title }}</h2>
-      <p v-if="subtitle">{{ subtitle }}</p>
+    <div class="chat-title-block" data-tauri-drag-region>
+      <h2 v-if="title" data-tauri-drag-region>{{ title }}</h2>
+      <p v-if="subtitle" data-tauri-drag-region>{{ subtitle }}</p>
     </div>
     <div class="topbar-side topbar-right">
       <div v-if="nativeWorkspaceOpening" class="workspace-open-control">
@@ -252,15 +249,6 @@ watch(() => props.workspaceRoot, () => {
           <p v-else-if="!workspaceOpeners.length">{{ uiText.header.noWorkspaceApps }}</p>
         </div>
       </div>
-      <button
-        class="trace-summary"
-        type="button"
-        :aria-label="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
-        :title="traceCollapsed ? uiText.header.showBrowser : uiText.header.hideBrowser"
-        @click="emit('toggleWorkspace')"
-      >
-        <PanelRight :size="16" stroke-width="1.9" />
-      </button>
       <span v-if="serverStatus !== 'online'" class="server-pill" :class="serverStatus">
         <i aria-hidden="true"></i>
         {{ serverStatusLabel }}

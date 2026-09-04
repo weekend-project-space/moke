@@ -8,14 +8,12 @@ import { uiText } from './text/uiText'
 
 const settingsDirty = ref(false)
 const chatWorkspace = ref<InstanceType<typeof ChatWorkspace> | null>(null)
-const fileMenu = ref(false)
-const fileMenuElement = ref<HTMLElement | null>(null)
-const fileMenuTrigger = ref<HTMLButtonElement | null>(null)
 const lastChatPath = ref('/chat')
 const nativeAppWindow = getCurrentTauriWindow()
 const isMacOs = Boolean(nativeAppWindow && (/Macintosh|Mac OS X/.test(navigator.userAgent) || navigator.platform.startsWith('Mac')))
 const showCustomTitlebar = Boolean(nativeAppWindow && !isMacOs)
 document.documentElement.classList.toggle('platform-macos', isMacOs)
+document.documentElement.classList.toggle('platform-custom-titlebar', showCustomTitlebar)
 let unlistenCloseRequested: (() => void) | null = null
 let unlistenMenuEvents: Array<() => void> = []
 let unlistenWindowResize: (() => void) | null = null
@@ -43,7 +41,6 @@ router.afterEach((to, from) => {
 })
 
 async function openSettings() {
-  closeFileMenu()
   if (isChatRoute(route)) lastChatPath.value = route.fullPath
   await routeNavigator.push({ name: 'settings', params: { tab: 'model' } })
   await nextTick()
@@ -51,48 +48,9 @@ async function openSettings() {
 }
 
 async function newChatFromMenu() {
-  closeFileMenu()
   if (route.name === 'settings' && !(await closeSettings())) return
   await nextTick()
   await chatWorkspace.value?.newSession()
-}
-
-function toggleFileMenu() {
-  fileMenu.value = !fileMenu.value
-  if (fileMenu.value) void nextTick(() => enabledFileMenuItems()[0]?.focus())
-}
-
-function closeFileMenu(restoreFocus = false) {
-  fileMenu.value = false
-  if (restoreFocus) void nextTick(() => fileMenuTrigger.value?.focus())
-}
-
-function enabledFileMenuItems() {
-  return Array.from(fileMenuElement.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') || [])
-}
-
-function handleFileMenuKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    closeFileMenu(true)
-    return
-  }
-  if (event.key === 'Tab') {
-    closeFileMenu()
-    return
-  }
-
-  const items = enabledFileMenuItems()
-  if (!items.length) return
-  const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
-  let nextIndex: number | undefined
-  if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length
-  if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length
-  if (event.key === 'Home') nextIndex = 0
-  if (event.key === 'End') nextIndex = items.length - 1
-  if (nextIndex === undefined) return
-  event.preventDefault()
-  items[nextIndex]?.focus()
 }
 
 async function closeSettings() {
@@ -161,19 +119,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header v-if="showCustomTitlebar" class="app-titlebar" data-tauri-decorum-tb>
-    <div class="app-menu">
-      <button ref="fileMenuTrigger" type="button" class="app-menu-trigger" aria-haspopup="menu" :aria-expanded="fileMenu" @click="toggleFileMenu">
-        {{ uiText.app.fileMenu }}
-      </button>
-      <div v-if="fileMenu" class="app-menu-backdrop" @click="closeFileMenu()"></div>
-      <div v-if="fileMenu" ref="fileMenuElement" class="app-menu-popover" role="menu" :aria-label="uiText.app.fileMenu" @keydown="handleFileMenuKeydown">
-        <button type="button" role="menuitem" @click="newChatFromMenu">{{ uiText.app.newChat }}</button>
-        <button type="button" role="menuitem" @click="openSettings">{{ uiText.app.settings }}</button>
-      </div>
-    </div>
-    <div class="app-titlebar-drag" data-tauri-drag-region></div>
-  </header>
+  <header v-if="showCustomTitlebar" class="app-titlebar" data-tauri-decorum-tb />
   <RouterView v-slot="{ Component }">
     <KeepAlive :include="['ChatWorkspace']">
       <component

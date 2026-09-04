@@ -288,6 +288,10 @@ onBeforeUnmount(() => {
       @click="emit('closeSidebar')"
     ></button>
 
+    <div v-if="$slots.windowActions" class="workspace-window-actions">
+      <slot name="windowActions" />
+    </div>
+
     <div class="sidebar-host" :class="{ 'sidebar-preview': sidebarPreview }">
       <slot name="sidebar" />
     </div>

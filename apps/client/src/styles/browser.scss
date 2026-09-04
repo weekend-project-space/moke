@@ -14,8 +14,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 2px;
+  padding: 0 8px 4px;
   background: var(--color-bg-content);
 }
 
@@ -24,8 +24,14 @@
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  min-height: 40px;
+  align-items: center;
   gap: 6px;
+  padding-right: 44px;
+}
+
+html.platform-custom-titlebar .browser-tabs-row {
+  padding-right: 182px;
 }
 
 .browser-tabs {

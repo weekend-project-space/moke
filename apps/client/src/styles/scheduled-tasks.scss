@@ -10,10 +10,10 @@
 .scheduled-tasks-header {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
-  min-height: 48px;
+  min-height: 40px;
   align-items: center;
   gap: 12px;
-  padding: 7px 16px;
+  padding: 3px 16px;
   border-bottom: 1px solid var(--color-border-subtle);
 
   h1 {
@@ -24,21 +24,34 @@
   }
 }
 
-.scheduled-task-primary {
+.scheduled-tasks-header > .sidebar-toggle {
+  transform: translateX(-8px);
+}
+
+html.platform-custom-titlebar .scheduled-tasks-header {
+  padding-right: 154px;
+}
+
+.scheduled-task-create {
   display: inline-flex;
-  height: 32px;
+  height: 30px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 11px;
-  border-radius: var(--radius-md);
-  color: var(--color-primary-foreground);
-  background: var(--color-primary);
-  font-size: var(--font-size-ui);
-  font-weight: 600;
+  gap: 5px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: var(--font-size-meta);
+  font-weight: 500;
 
   &:hover {
-    background: var(--color-primary-hover);
+    color: var(--color-text-primary);
+    background: var(--color-secondary-hover);
+  }
+
+  &:active {
+    background: var(--color-secondary-active);
   }
 }
 
