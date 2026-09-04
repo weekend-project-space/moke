@@ -59,7 +59,7 @@ html.platform-custom-titlebar .workspace-window-actions {
 }
 
 html.platform-macos:not(.platform-macos-window-fullscreen) {
-  .sidebar-primary-actions,
+  .shell > .sidebar-host:not(.sidebar-preview) .sidebar-primary-actions,
   .settings-navigation nav {
     padding-top: 42px;
   }
