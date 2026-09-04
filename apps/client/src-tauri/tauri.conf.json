@@ -13,7 +13,11 @@
     "windows": [
       {
         "title": "Moke",
-        "titleBarStyle": "Transparent",
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 12,
+          "y": 13
+        },
         "hiddenTitle": true,
         "shadow": true,
         "width": 1280,

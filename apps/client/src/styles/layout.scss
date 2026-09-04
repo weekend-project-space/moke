@@ -58,6 +58,23 @@ html.platform-custom-titlebar .workspace-window-actions {
   right: 146px;
 }
 
+html.platform-macos:not(.platform-macos-window-fullscreen) {
+  .sidebar-primary-actions > button:first-child,
+  .settings-navigation nav > button:first-child {
+    width: calc(100% - 70px);
+    margin-left: 70px;
+  }
+
+  .shell.sidebar-collapsed .topbar,
+  .shell.sidebar-collapsed .scheduled-tasks-header {
+    padding-left: 88px;
+  }
+
+  .shell.workspace-maximized .browser-tabs-row {
+    padding-left: 72px;
+  }
+}
+
 .shell.trace-collapsed {
   grid-template-columns: var(--sidebar-width, 268px) 1px minmax(420px, 1fr) 0 0;
 }

@@ -43,17 +43,6 @@ button:disabled {
   flex-direction: column;
 }
 
-html.platform-macos #app::after {
-  order: -1;
-  flex: 0 0 8px;
-  background: var(--color-bg-frame);
-  content: '';
-}
-
-html.platform-macos.platform-macos-window-expanded #app::after {
-  display: none;
-}
-
 @media (max-width: 980px) {
   html,
   body {
