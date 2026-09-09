@@ -29,6 +29,8 @@ export function useBrowserController(options: {
   let stateRefreshTimer: number | null = null
   let stateRefreshInFlight = false
   let viewportSuspended = false
+  let visibilityQueue: Promise<void> = Promise.resolve()
+  let visibilityRequestVersion = 0
   let viewportTransition = 0
 
   const activeTab = computed(() => tabs.value.find((tab) => tabKey(tab) === activeTabKey.value) || null)
@@ -218,6 +220,15 @@ export function useBrowserController(options: {
   }
 
   async function syncVisibility() {
+    const requestVersion = ++visibilityRequestVersion
+    visibilityQueue = visibilityQueue.then(() => {
+      if (requestVersion !== visibilityRequestVersion) return
+      return syncVisibilityNow()
+    }).catch(() => undefined)
+    return visibilityQueue
+  }
+
+  async function syncVisibilityNow() {
     if (!nativeAvailable.value || !activeTab.value) return
     try {
       if (options.active.value && !viewportSuspended) {
@@ -318,7 +329,9 @@ export function useBrowserController(options: {
   })
 
   watch(() => options.active.value, () => void syncVisibility(), { flush: 'post' })
-  watch(activeTabKey, () => void syncVisibility(), { flush: 'post' })
+  watch(activeTabKey, () => {
+    if (options.active.value && !viewportSuspended) void syncVisibility()
+  }, { flush: 'post' })
   watch(options.windowElement, (element) => {
     resizeObserver?.disconnect()
     resizeObserver = null

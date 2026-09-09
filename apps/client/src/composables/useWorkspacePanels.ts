@@ -65,7 +65,6 @@ export function useWorkspacePanels() {
   }
 
   function closeWorkspace() {
-    workspaceMaximized.value = false
     traceCollapsed.value = true
     localStorage.setItem(WORKSPACE_COLLAPSED_KEY, 'true')
   }

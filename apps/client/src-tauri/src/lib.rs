@@ -4,6 +4,7 @@ mod browser;
 mod capture;
 mod downloads;
 mod sidecar;
+mod terminal;
 mod window;
 mod workspace;
 
@@ -19,6 +20,10 @@ use capture::read_local_image;
 use downloads::browser_open_download;
 use sidecar::{agent_api_token, AgentServer};
 use tauri::{Manager, RunEvent};
+use terminal::{
+    close_all, terminal_close, terminal_create, terminal_interrupt, terminal_resize,
+    terminal_write, TerminalManager,
+};
 use workspace::{list_workspace_openers, open_workspace_with};
 
 #[cfg(test)]
@@ -50,6 +55,7 @@ pub fn run() {
             next_page_id: std::sync::Mutex::new(1),
             last_bounds: std::sync::Mutex::new(None),
         })
+        .manage(TerminalManager::default())
         .invoke_handler(tauri::generate_handler![
             browser_state,
             browser_clear_data,
@@ -80,6 +86,11 @@ pub fn run() {
             open_workspace_with,
             read_local_image,
             agent_api_token,
+            terminal_create,
+            terminal_write,
+            terminal_resize,
+            terminal_interrupt,
+            terminal_close,
         ])
         .setup(|app| {
             window::setup(app)?;
@@ -92,6 +103,9 @@ pub fn run() {
             if let RunEvent::ExitRequested { .. } = event {
                 if let Some(server) = app.try_state::<AgentServer>() {
                     server.stop();
+                }
+                if let Some(terminals) = app.try_state::<TerminalManager>() {
+                    close_all(&terminals);
                 }
             }
         });

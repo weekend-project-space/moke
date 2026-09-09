@@ -279,6 +279,19 @@ const settings = {
   standardPreview: (seconds: number, retries: number) => `${seconds}s / ${retries} ${retries === 1 ? 'retry' : 'retries'}`,
 } as const
 
+const terminal = {
+  close: 'Close terminal',
+  error: 'Error',
+  exited: 'Exited',
+  idle: 'Idle',
+  hide: 'Hide terminal',
+  interrupt: 'Interrupt process',
+  running: 'Running',
+  show: 'Show terminal',
+  starting: 'Starting',
+  title: 'Terminal',
+} as const
+
 const mcp = {
   add: 'Add',
   addServer: 'Add MCP service',
@@ -560,6 +573,7 @@ export const uiText = {
   mcp,
   process,
   settings,
+  terminal,
   skills,
   sidebar,
   tool,

@@ -148,10 +148,13 @@ html.platform-custom-titlebar .browser-tabs-row {
     }
   }
 
-  label {
+  .browser-address-field {
     position: relative;
     display: flex;
     min-width: 0;
+    width: min(640px, 100%);
+    max-width: 640px;
+    justify-self: center;
     height: 30px;
     align-items: center;
     padding: 0;
@@ -198,6 +201,7 @@ html.platform-custom-titlebar .browser-tabs-row {
   overflow: hidden;
   background: var(--color-bg-content);
 }
+
 
 .browser-download-trigger {
   position: relative;

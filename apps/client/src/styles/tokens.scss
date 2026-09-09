@@ -66,6 +66,10 @@
   --color-bg-tool-output: var(--color-zinc-50);
   --color-bg-tool-error: var(--color-red-50);
   --color-bg-cli: var(--color-zinc-950);
+  --color-cli-bg: #f7f8fa;
+  --color-cli-fg: #202124;
+  --color-cli-cursor: var(--color-blue-600);
+  --color-cli-selection: #cfe2ff;
   --color-bg-code-inline: rgb(113 113 122 / 12%);
   --color-bg-code-action-hover: rgb(255 255 255 / 70%);
   --color-bg-danger-soft: var(--color-red-50);
@@ -213,6 +217,10 @@
   --color-bg-tool-output: #191919;
   --color-bg-tool-error: #3b2024;
   --color-bg-cli: #0a0d10;
+  --color-cli-bg: #0a0d10;
+  --color-cli-fg: #e5e7eb;
+  --color-cli-cursor: #8bc5ff;
+  --color-cli-selection: #35516d;
   --color-bg-code-inline: rgb(255 255 255 / 10%);
   --color-bg-code-action-hover: rgb(255 255 255 / 14%);
   --color-bg-danger-soft: #3b2024;

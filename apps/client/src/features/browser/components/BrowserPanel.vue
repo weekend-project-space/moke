@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Download, FolderOpen, Globe, LoaderCircle, Maximize2, Minimize2, Plus, RefreshCw, Trash2, X } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Download, FolderOpen, Globe, LoaderCircle, Maximize2, Minimize2, Plus, RefreshCw, SquareTerminal, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useBrowserController } from '../composables/useBrowserController'
 import { formatBrowserAddressHost } from '../model/address'
@@ -7,13 +7,22 @@ import { browserApi, type BrowserDownloadChange, type BrowserLinkOpenMode, type 
 import type { BrowserTabCloseScope } from '../model/tabClose'
 import { uiText } from '../../../text/uiText'
 
-const props = defineProps<{ active: boolean; maximized?: boolean }>()
-const emit = defineEmits<{ toggleMaximized: [] }>()
+const props = withDefaults(defineProps<{ active: boolean; maximized?: boolean; showTabs?: boolean; canCreateTerminal?: boolean }>(), {
+  showTabs: true,
+})
+const emit = defineEmits<{
+  toggleMaximized: []
+  createWorkspaceTab: [type: 'browser' | 'terminal']
+  workspaceMenuChange: [open: boolean]
+  stateChange: [{ tabs: BrowserPage[]; activeTabKey: string | null }]
+}>()
 const windowElement = ref<HTMLElement | null>(null)
 const viewportElement = ref<HTMLElement | null>(null)
 const tabsElement = ref<HTMLElement | null>(null)
 const addressInput = ref<HTMLInputElement | null>(null)
 const tabMenuElement = ref<HTMLElement | null>(null)
+const workspaceMenu = ref<{ trigger: HTMLElement; x: number; y: number } | null>(null)
+let workspaceMenuOpening = false
 const downloadTrigger = ref<HTMLButtonElement | null>(null)
 const downloadMenuElement = ref<HTMLElement | null>(null)
 const failedFaviconKeys = ref(new Set<string>())
@@ -69,11 +78,12 @@ async function handleAddressSubmit() {
 }
 
 async function openTabMenu(event: MouseEvent, tab: BrowserPage) {
+  await openTabMenuAt(tab, event.clientX, event.clientY, event.currentTarget instanceof HTMLElement ? event.currentTarget : null)
+}
+
+async function openTabMenuAt(tab: BrowserPage, clientX: number, clientY: number, trigger: HTMLElement | null = null) {
   const layoutVersion = viewportLayoutVersion
-  const target = event.currentTarget
-  const trigger = target instanceof HTMLElement
-    ? target.querySelector<HTMLElement>('.browser-tab-select') || target
-    : null
+  if (workspaceMenu.value) await closeWorkspaceMenu(false, false)
   if (downloadMenu.value) await closeDownloadMenu(false, false)
   if (!await suspendViewport()) return
   if (layoutVersion !== viewportLayoutVersion) {
@@ -83,8 +93,8 @@ async function openTabMenu(event: MouseEvent, tab: BrowserPage) {
   tabMenu.value = {
     tab,
     trigger,
-    x: Math.max(8, Math.min(event.clientX, window.innerWidth - 192)),
-    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 116)),
+    x: Math.max(8, Math.min(clientX, window.innerWidth - 192)),
+    y: Math.max(8, Math.min(clientY, window.innerHeight - 116)),
   }
   void nextTick(() => enabledTabMenuItems()[0]?.focus())
 }
@@ -94,6 +104,52 @@ async function closeTabMenu(restoreFocus = false, resume = true) {
   tabMenu.value = null
   if (restoreFocus && trigger) void nextTick(() => trigger.focus())
   if (resume) await resumeViewport()
+}
+
+async function openWorkspaceMenu(trigger: HTMLElement) {
+  if (workspaceMenu.value) return closeWorkspaceMenu(true)
+  if (workspaceMenuOpening) return
+  workspaceMenuOpening = true
+  const layoutVersion = viewportLayoutVersion
+  try {
+    if (tabMenu.value) await closeTabMenu(false, false)
+    if (downloadMenu.value) await closeDownloadMenu(false, false)
+    if (props.active && nativeAvailable.value && activeTab.value && !await suspendViewport()) return
+    if (componentDisposed || layoutVersion !== viewportLayoutVersion || !trigger.isConnected) {
+      await resumeViewport()
+      return
+    }
+    const rect = trigger.getBoundingClientRect()
+    workspaceMenu.value = { trigger, x: rect.right - 176, y: rect.bottom + 6 }
+    emit('workspaceMenuChange', true)
+    await nextTick()
+    const menu = tabMenuElement.value?.getBoundingClientRect()
+    if (!workspaceMenu.value || !menu) return
+    workspaceMenu.value.x = Math.max(8, Math.min(rect.right - menu.width, window.innerWidth - menu.width - 8))
+    workspaceMenu.value.y = Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - menu.height - 8))
+    enabledTabMenuItems()[0]?.focus()
+  } finally {
+    workspaceMenuOpening = false
+  }
+}
+
+async function closeWorkspaceMenu(restoreFocus = false, resume = true) {
+  const trigger = workspaceMenu.value?.trigger
+  workspaceMenu.value = null
+  emit('workspaceMenuChange', false)
+  if (restoreFocus) void nextTick(() => trigger?.focus())
+  if (resume) await resumeViewport()
+}
+
+async function handleCreateWorkspaceTab(type: 'browser' | 'terminal') {
+  await closeWorkspaceMenu(true, false)
+  emit('createWorkspaceTab', type)
+  await nextTick()
+  await resumeViewport()
+}
+
+function closeActionMenu(restoreFocus = false) {
+  return workspaceMenu.value ? closeWorkspaceMenu(restoreFocus) : closeTabMenu(restoreFocus)
 }
 
 function handleDownloadChange(change: BrowserDownloadChange) {
@@ -121,6 +177,7 @@ function downloadStatus(item: BrowserDownloadChange) {
 }
 
 async function toggleDownloadMenu() {
+  if (workspaceMenu.value) await closeWorkspaceMenu(false, false)
   if (downloadMenu.value) {
     await closeDownloadMenu(true)
     return
@@ -160,6 +217,7 @@ async function openDownload(item: BrowserDownloadChange, reveal: boolean) {
 
 function handleViewportLayoutChange() {
   viewportLayoutVersion += 1
+  if (workspaceMenu.value) void closeWorkspaceMenu()
   if (tabMenu.value) void closeTabMenu()
   if (downloadMenu.value) void closeDownloadMenu()
 }
@@ -226,11 +284,11 @@ async function handleCloseTabs(scope: BrowserTabCloseScope) {
 function handleTabMenuKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
-    void closeTabMenu(true)
+    void closeActionMenu(true)
     return
   }
   if (event.key === 'Tab') {
-    void closeTabMenu()
+    void closeActionMenu()
     return
   }
 
@@ -254,6 +312,8 @@ watch(tabs, (pages) => {
 })
 
 watch(() => props.active, (active) => {
+  viewportLayoutVersion += 1
+  if (workspaceMenu.value) void closeWorkspaceMenu()
   if (!active && tabMenu.value) void closeTabMenu()
   if (!active && downloadMenu.value) void closeDownloadMenu()
 })
@@ -263,13 +323,21 @@ watch(activeTabKey, async () => {
   tabsElement.value?.querySelector<HTMLElement>('.browser-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 })
 
+watch([tabs, activeTabKey], () => {
+  emit('stateChange', { tabs: tabs.value, activeTabKey: activeTabKey.value })
+}, { immediate: true, deep: true })
+
 onMounted(async () => {
+  window.addEventListener('resize', handleViewportLayoutChange)
+  window.addEventListener('scroll', handleMenuScroll, true)
   const unlisten = await browserApi.listenDownloadChanges(handleDownloadChange)
   if (componentDisposed) unlisten()
   else unlistenDownloads = unlisten
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleViewportLayoutChange)
+  window.removeEventListener('scroll', handleMenuScroll, true)
   componentDisposed = true
   unlistenDownloads?.()
   if (tabLimitTimer !== undefined) window.clearTimeout(tabLimitTimer)
@@ -278,13 +346,30 @@ onUnmounted(() => {
 defineExpose({
   getBounds: getViewportBounds,
   openUrl: (url: string, mode?: BrowserLinkOpenMode) => openUrl(url, mode),
+  createTab,
+  selectTab,
+  closeTabs,
+  openTabMenuAt,
+  openWorkspaceMenu,
+  closeWorkspaceMenu,
+  prepareWorkspaceContextMenu: async () => {
+    await closeWorkspaceMenu(false, false)
+    await closeTabMenu(false, false)
+    await closeDownloadMenu(false, false)
+    return !props.active || !nativeAvailable.value || !activeTab.value || await suspendViewport()
+  },
+  resumeViewport,
 })
+
+function handleMenuScroll(event: Event) {
+  if (workspaceMenu.value && !(event.target instanceof Node && tabMenuElement.value?.contains(event.target))) handleViewportLayoutChange()
+}
 </script>
 
 <template>
   <section class="browser-panel" :class="{ 'browser-panel-unavailable': !nativeAvailable }" @contextmenu.prevent>
     <div v-if="nativeAvailable" class="browser-controls">
-      <div class="browser-tabs-row" data-tauri-drag-region>
+      <div v-if="showTabs" class="browser-tabs-row" data-tauri-drag-region>
         <nav ref="tabsElement" class="browser-tabs" data-tauri-drag-region :aria-label="uiText.browser.pages" @wheel="handleTabsWheel">
           <div v-for="tab in tabs" :key="tabKey(tab)" class="browser-tab" :class="{ active: tabKey(tab) === activeTabKey }" @contextmenu.prevent.stop="openTabMenu($event, tab)">
             <button type="button" class="browser-tab-select" @click="selectTab(tab)">
@@ -313,9 +398,9 @@ defineExpose({
           <button type="button" :disabled="!canGoForward" :aria-label="uiText.browser.forward" :title="uiText.browser.forward" @click="navigateHistory('forward')"><ArrowRight :size="15" stroke-width="2.2" /></button>
           <button type="button" class="browser-toolbar-reload" :class="{ 'is-loading': Boolean(activeTab?.isLoading) }" :disabled="!canReload" :aria-label="uiText.browser.reload" :title="uiText.browser.reload" @click="reloadPage(false)"><RefreshCw :size="15" stroke-width="2.2" /></button>
         </div>
-        <label :class="{ 'is-editing': isEditingAddress }">
-          <input ref="addressInput" v-model="addressValue" type="text" spellcheck="false" :placeholder="uiText.browser.addressPlaceholder" :title="isEditingAddress ? undefined : address" @focus="handleAddressFocus" @blur="endAddressEdit" @keydown.escape.prevent="cancelAddressEdit" />
-        </label>
+        <div class="browser-address-field" :class="{ 'is-editing': isEditingAddress }">
+          <input ref="addressInput" v-model="addressValue" type="text" spellcheck="false" :placeholder="uiText.browser.addressPlaceholder" :title="isEditingAddress ? undefined : address" :aria-label="uiText.browser.addressPlaceholder" @focus="handleAddressFocus" @blur="endAddressEdit" @keydown.escape.prevent="cancelAddressEdit" />
+        </div>
         <button
           ref="downloadTrigger"
           type="button"
@@ -360,6 +445,22 @@ defineExpose({
   </section>
 
   <Teleport to="body">
+    <div v-if="workspaceMenu" class="browser-tab-menu-backdrop" @click="closeWorkspaceMenu()" @contextmenu.prevent="closeWorkspaceMenu()"></div>
+    <div
+      v-if="workspaceMenu"
+      id="workspace-create-menu"
+      ref="tabMenuElement"
+      class="browser-tab-context-menu workspace-tab-menu"
+      :style="{ left: `${workspaceMenu.x}px`, top: `${workspaceMenu.y}px` }"
+      role="menu"
+      aria-label="Choose workspace type"
+      @click.stop
+      @contextmenu.prevent
+      @keydown="handleTabMenuKeydown"
+    >
+      <button type="button" role="menuitem" @click="handleCreateWorkspaceTab('browser')"><Globe :size="14" /><span>New browser</span></button>
+      <button type="button" role="menuitem" :disabled="!canCreateTerminal" @click="handleCreateWorkspaceTab('terminal')"><SquareTerminal :size="14" /><span>New terminal</span></button>
+    </div>
     <div v-if="tabMenu" class="browser-tab-menu-backdrop" @click="closeTabMenu()" @contextmenu.prevent="closeTabMenu()"></div>
     <div
       v-if="tabMenu"
