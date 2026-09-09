@@ -53,12 +53,12 @@ const resultEmptyText = computed(() => {
   return props.step.renderer === 'directory' ? uiText.process.emptyDirectory : uiText.process.noResults
 })
 function browserFallbackText(toolName: string) {
-  if (toolName === 'navigate_page' || toolName === 'create_page' || toolName === 'select_page') return uiText.tool.pageOpened
+  if (toolName === 'navigate' || toolName === 'new_tab' || toolName === 'switch_tab') return uiText.tool.pageOpened
   if (toolName === 'click') return uiText.tool.clickCompleted
-  if (toolName === 'fill' || toolName === 'fill_form' || toolName === 'type_text') return uiText.tool.inputCompleted
-  if (toolName === 'take_snapshot') return uiText.tool.pageStructureCaptured
-  if (toolName === 'take_screenshot') return uiText.tool.screenshotCaptured
-  if (toolName === 'wait_for') return uiText.tool.targetStateReached
+  if (toolName === 'fill' || toolName === 'fill_form' || toolName === 'type') return uiText.tool.inputCompleted
+  if (toolName === 'snapshot') return uiText.tool.pageStructureCaptured
+  if (toolName === 'screenshot') return uiText.tool.screenshotCaptured
+  if (toolName === 'wait_for_text') return uiText.tool.targetStateReached
   return doneText
 }
 

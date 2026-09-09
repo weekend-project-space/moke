@@ -191,25 +191,25 @@ Rules:
 Used by:
 
 - `click`
-- `close_page`
-- `create_page`
-- `evaluate_script`
+- `close_tab`
+- `new_tab`
+- `evaluate`
 - `fill`
 - `fill_form`
 - `handle_dialog`
 - `hide_browser`
 - `hover`
-- `list_pages`
-- `navigate_page`
-- `press_key`
-- `resize_page`
-- `select_page`
+- `list_tabs`
+- `navigate`
+- `press`
+- `resize_viewport`
+- `switch_tab`
 - `show_browser`
-- `take_screenshot`
-- `take_snapshot`
-- `type_text`
+- `screenshot`
+- `snapshot`
+- `type`
 - `upload_file`
-- `wait_for`
+- `wait_for_text`
 
 Main row examples:
 

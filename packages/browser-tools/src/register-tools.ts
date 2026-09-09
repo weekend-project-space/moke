@@ -2,47 +2,47 @@ import type { ToolRegistry } from '@moke/agent-runtime';
 import type { BrowserBackend } from './browser-backend.js';
 import {
   createClickTool,
-  createClosePageTool,
-  createCreatePageTool,
-  createEvaluateScriptTool,
+  createCloseTabTool,
+  createNewTabTool,
+  createEvaluateTool,
   createFillFormTool,
   createFillTool,
   createHandleDialogTool,
   createHideBrowserTool,
   createHoverTool,
-  createListPagesTool,
-  createNavigatePageTool,
-  createPressKeyTool,
-  createResizePageTool,
-  createSelectPageTool,
+  createListTabsTool,
+  createNavigateTool,
+  createPressTool,
+  createResizeViewportTool,
+  createSwitchTabTool,
   createShowBrowserTool,
-  createTakeScreenshotTool,
-  createTakeSnapshotTool,
-  createTypeTextTool,
+  createScreenshotTool,
+  createSnapshotTool,
+  createTypeTool,
   createUploadFileTool,
-  createWaitForTool,
+  createWaitForTextTool,
 } from './page-tools.js';
 
 export function registerBrowserTools(toolRegistry: ToolRegistry, browser: BrowserBackend) {
   return toolRegistry
-    .register(createListPagesTool(browser))
-    .register(createCreatePageTool(browser))
-    .register(createSelectPageTool(browser))
-    .register(createClosePageTool(browser))
-    .register(createNavigatePageTool(browser))
-    .register(createEvaluateScriptTool(browser))
-    .register(createTakeSnapshotTool(browser))
-    .register(createTakeScreenshotTool(browser))
+    .register(createListTabsTool(browser))
+    .register(createNewTabTool(browser))
+    .register(createSwitchTabTool(browser))
+    .register(createCloseTabTool(browser))
+    .register(createNavigateTool(browser))
+    .register(createEvaluateTool(browser))
+    .register(createSnapshotTool(browser))
+    .register(createScreenshotTool(browser))
     .register(createClickTool(browser))
     .register(createHoverTool(browser))
     .register(createFillTool(browser))
     .register(createFillFormTool(browser))
     .register(createUploadFileTool(browser))
-    .register(createWaitForTool(browser))
-    .register(createPressKeyTool(browser))
-    .register(createTypeTextTool(browser))
+    .register(createWaitForTextTool(browser))
+    .register(createPressTool(browser))
+    .register(createTypeTool(browser))
     .register(createHandleDialogTool(browser))
-    .register(createResizePageTool(browser))
+    .register(createResizeViewportTool(browser))
     .register(createShowBrowserTool(browser))
     .register(createHideBrowserTool(browser));
 }

@@ -14,25 +14,25 @@ const NOT_FOUND = uiText.process.notFound
 
 const BROWSER_TOOLS = new Set([
   'click',
-  'close_page',
-  'create_page',
-  'evaluate_script',
+  'close_tab',
+  'new_tab',
+  'evaluate',
   'fill',
   'fill_form',
   'handle_dialog',
   'hide_browser',
   'hover',
-  'list_pages',
-  'navigate_page',
-  'press_key',
-  'resize_page',
-  'select_page',
+  'list_tabs',
+  'navigate',
+  'press',
+  'resize_viewport',
+  'switch_tab',
   'show_browser',
-  'take_screenshot',
-  'take_snapshot',
-  'type_text',
+  'screenshot',
+  'snapshot',
+  'type',
   'upload_file',
-  'wait_for',
+  'wait_for_text',
 ])
 
 const CHANGE_TOOLS = new Set([
@@ -135,7 +135,7 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
     case 'view_image':
       objectLabel = path ? shortText(path, 88) : uiText.tool.localImage
       break
-    case 'navigate_page': {
+    case 'navigate': {
       const type = firstString(args, ['type'])
       if (type === 'url' && url) {
         objectLabel = shortText(url, 96)
@@ -156,18 +156,18 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
       objectLabel = url ? shortText(url, 96) : uiText.tool.browserPage
       break
     }
-    case 'create_page':
+    case 'new_tab':
       objectLabel = url ? shortText(url, 96) : uiText.tool.newTab
       break
-    case 'select_page':
-    case 'close_page':
-    case 'resize_page':
+    case 'switch_tab':
+    case 'close_tab':
+    case 'resize_viewport':
       objectLabel = pageId ? uiText.tool.page(pageId) : uiText.tool.browserPage
       break
-    case 'take_snapshot':
+    case 'snapshot':
       objectLabel = pageId ? uiText.tool.page(pageId) : uiText.tool.currentWebPage
       break
-    case 'take_screenshot':
+    case 'screenshot':
       objectLabel = args.fullPage ? uiText.tool.fullPage : uiText.tool.currentViewport
       break
     case 'click':
@@ -185,16 +185,16 @@ export function describeToolCall(name: string, args: Record<string, unknown>): T
     case 'upload_file':
       objectLabel = path || (uid ? `Element ${uid}` : uiText.tool.selectFile)
       break
-    case 'wait_for':
+    case 'wait_for_text':
       objectLabel = text ? shortText(text, 72) : uiText.tool.targetState
       break
-    case 'press_key':
+    case 'press':
       objectLabel = key || uiText.tool.keyboardAction
       break
-    case 'type_text':
+    case 'type':
       objectLabel = text ? shortText(text, 72) : uiText.tool.textContent
       break
-    case 'evaluate_script':
+    case 'evaluate':
       objectLabel = selector ? shortText(selector, 72) : uiText.tool.currentPage
       break
     case 'handle_dialog':
@@ -261,7 +261,7 @@ function isChangeTool(name: string) {
 function viewActionLabel(name: string) {
   if (name === 'ls') return uiText.tool.viewDirectory
   if (name === 'view_image') return uiText.tool.viewImage
-  if (name === 'list_pages' || name === 'take_snapshot' || name === 'take_screenshot' || name === 'hover') {
+  if (name === 'list_tabs' || name === 'snapshot' || name === 'screenshot' || name === 'hover') {
     return uiText.tool.viewPage
   }
   return uiText.tool.viewFile
@@ -277,8 +277,8 @@ function runActionLabel(name: string) {
   if (name === 'ask_user') return uiText.tool.userInput
   if (['execute', 'shell_command', 'exec_command', 'bash', 'npm'].includes(name)) return uiText.tool.runCommand
   if (['glob', 'grep', 'search', 'rg', 'find'].includes(name)) return uiText.tool.runSearch
-  if (name === 'evaluate_script') return uiText.tool.runScript
-  if (name === 'wait_for') return uiText.tool.wait
+  if (name === 'evaluate') return uiText.tool.runScript
+  if (name === 'wait_for_text') return uiText.tool.wait
   return uiText.tool.runTool
 }
 

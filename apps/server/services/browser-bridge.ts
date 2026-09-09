@@ -158,42 +158,42 @@ export class BrowserBridgeBackend implements BrowserBackend {
   constructor(private readonly bridge: BrowserBridge) {}
 
   async listPages(): Promise<BrowserResult> {
-    return this.callBrowser('list_pages');
+    return this.callBrowser('list_tabs');
   }
 
   async createPage(input: CreatePageInput): Promise<BrowserResult> {
-    return this.callBrowser('create_page', input);
+    return this.callBrowser('new_tab', input);
   }
 
   async selectPage(input: SelectPageInput): Promise<BrowserResult> {
-    return this.callBrowser('select_page', input);
+    return this.callBrowser('switch_tab', input);
   }
 
   async closePage(input: ClosePageInput): Promise<BrowserResult> {
-    return this.callBrowser('close_page', input);
+    return this.callBrowser('close_tab', input);
   }
 
   async navigatePage(input: NavigatePageInput): Promise<BrowserResult> {
-    return this.callBrowser('navigate_page', input, input.timeout);
+    return this.callBrowser('navigate', input, input.timeout);
   }
 
   async evaluateScript(input: EvaluateScriptInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('evaluate_script', input);
+    return this.callBrowser<BrowserActionResult>('evaluate', input);
   }
 
   async takeSnapshot(input: TakeSnapshotInput, workspaceRoot: string): Promise<BrowserActionResult> {
     const params = { ...input, workspaceRoot };
     try {
-      return await this.callBrowser<BrowserActionResult>('take_snapshot', params);
+      return await this.callBrowser<BrowserActionResult>('snapshot', params);
     } catch (error) {
       if (!(error instanceof BrowserBridgeReconnectError)) throw error;
       await this.bridge.waitForClient();
-      return this.callBrowser<BrowserActionResult>('take_snapshot', params);
+      return this.callBrowser<BrowserActionResult>('snapshot', params);
     }
   }
 
   async takeScreenshot(input: TakeScreenshotInput, workspaceRoot: string): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('take_screenshot', { ...input, workspaceRoot });
+    return this.callBrowser<BrowserActionResult>('screenshot', { ...input, workspaceRoot });
   }
 
   async click(input: ClickInput): Promise<BrowserActionResult> {
@@ -217,15 +217,15 @@ export class BrowserBridgeBackend implements BrowserBackend {
   }
 
   async waitFor(input: WaitForInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('wait_for', input, input.timeout);
+    return this.callBrowser<BrowserActionResult>('wait_for_text', input, input.timeout);
   }
 
   async pressKey(input: PressKeyInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('press_key', input);
+    return this.callBrowser<BrowserActionResult>('press', input);
   }
 
   async typeText(input: TypeTextInput): Promise<BrowserActionResult> {
-    return this.callBrowser<BrowserActionResult>('type_text', input);
+    return this.callBrowser<BrowserActionResult>('type', input);
   }
 
   async handleDialog(input: HandleDialogInput): Promise<BrowserActionResult> {
@@ -233,7 +233,7 @@ export class BrowserBridgeBackend implements BrowserBackend {
   }
 
   async resizePage(input: ResizePageInput): Promise<BrowserResult> {
-    return this.callBrowser('resize_page', input);
+    return this.callBrowser('resize_viewport', input);
   }
 
   async showBrowser(): Promise<BrowserResult> {

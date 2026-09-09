@@ -20,7 +20,7 @@ test('BrowserBridge rejects pending requests when its client disconnects', async
   const client = response();
   bridge.connect(client);
 
-  const pending = bridge.request('list_pages');
+  const pending = bridge.request('list_tabs');
   bridge.disconnect(client);
 
   await assert.rejects(pending, /disconnected/);
@@ -30,7 +30,7 @@ test('BrowserBridge rejects old pending requests when its client is replaced', a
   const bridge = new BrowserBridge();
   bridge.connect(response());
 
-  const pending = bridge.request('list_pages');
+  const pending = bridge.request('list_tabs');
   bridge.connect(response());
 
   await assert.rejects(pending, /replaced/);

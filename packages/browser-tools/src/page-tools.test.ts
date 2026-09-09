@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { BrowserBackend } from './browser-backend.js';
-import { createTakeScreenshotTool, createTakeSnapshotTool } from './page-tools.js';
+import { createScreenshotTool, createSnapshotTool } from './page-tools.js';
 
-test('take_snapshot scopes file output to the active workspace', async () => {
+test('snapshot scopes file output to the active workspace', async () => {
   let workspaceRoot = '';
   const browser = {
     async takeSnapshot(_input, workspace) {
@@ -12,14 +12,14 @@ test('take_snapshot scopes file output to the active workspace', async () => {
       return { pages: [], activePageId: null };
     },
   } as BrowserBackend;
-  const tool = createTakeSnapshotTool(browser);
+  const tool = createSnapshotTool(browser);
 
   await tool.handler({ filePath: 'artifacts/page.json' }, { workspace: 'E:\\work\\project' });
 
   assert.equal(workspaceRoot, 'E:\\work\\project');
 });
 
-test('take_snapshot defaults to act and preserves actionable elements', async () => {
+test('snapshot defaults to act and preserves actionable elements', async () => {
   const browser = {
     async takeSnapshot() {
       return {
@@ -29,14 +29,14 @@ test('take_snapshot defaults to act and preserves actionable elements', async ()
       };
     },
   } as BrowserBackend;
-  const tool = createTakeSnapshotTool(browser);
+  const tool = createSnapshotTool(browser);
 
   const result = await tool.handler({}, { workspace: 'E:\\work\\project' });
 
   assert.deepEqual(result.snapshot?.elements, [{ uid: 'button-1', role: 'button', name: 'Continue', tag: 'button' }]);
 });
 
-test('take_snapshot omits elements when interaction is observe', async () => {
+test('snapshot omits elements when interaction is observe', async () => {
   let backendInput: unknown;
   const browser = {
     async takeSnapshot(input) {
@@ -48,7 +48,7 @@ test('take_snapshot omits elements when interaction is observe', async () => {
       };
     },
   } as BrowserBackend;
-  const tool = createTakeSnapshotTool(browser);
+  const tool = createSnapshotTool(browser);
 
   const result = await tool.handler({ interaction: 'observe' }, { workspace: 'E:\\work\\project' });
 
@@ -57,7 +57,7 @@ test('take_snapshot omits elements when interaction is observe', async () => {
   assert.equal(result.snapshot?.content.markdown, '# Example');
 });
 
-test('take_screenshot scopes output to the active workspace', async () => {
+test('screenshot scopes output to the active workspace', async () => {
   let workspaceRoot = '';
   const browser = {
     async takeScreenshot(_input, workspace) {
@@ -65,7 +65,7 @@ test('take_screenshot scopes output to the active workspace', async () => {
       return { pages: [], activePageId: null };
     },
   } as BrowserBackend;
-  const tool = createTakeScreenshotTool(browser);
+  const tool = createScreenshotTool(browser);
 
   await tool.handler({ path: 'artifacts/page.png' }, { workspace: 'E:\\work\\project' });
 

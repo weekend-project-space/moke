@@ -46,14 +46,14 @@ function createOptions(events: string[]): BrowserBridgeOptions {
   }
 }
 
-test('create_page stays in the background regardless of visible input', async () => {
+test('new_tab stays in the background regardless of visible input', async () => {
   const calls: Array<{ command: string; args?: Record<string, unknown> }> = []
   const events: string[] = []
   const restoreWindow = installTauriInvoke(calls)
 
   try {
     await executeBrowserRequest(
-      { id: 'request-1', method: 'create_page', params: { url: 'https://example.com', visible: true } },
+      { id: 'request-1', method: 'new_tab', params: { url: 'https://example.com', visible: true } },
       createOptions(events),
     )
 
@@ -90,23 +90,23 @@ test('background browser tools do not open the browser panel', async () => {
   const events: string[] = []
   const restoreWindow = installTauriInvoke(calls)
   const requests = [
-    { method: 'list_pages' },
-    { method: 'select_page', params: { pageId: 1 } },
-    { method: 'close_page', params: { pageId: 1 } },
-    { method: 'navigate_page', params: { pageId: 1, type: 'reload' } },
-    { method: 'evaluate_script', params: { pageId: 1, function: '() => 1' } },
-    { method: 'take_snapshot', params: { pageId: 1 } },
-    { method: 'take_screenshot', params: { pageId: 1 } },
+    { method: 'list_tabs' },
+    { method: 'switch_tab', params: { pageId: 1 } },
+    { method: 'close_tab', params: { pageId: 1 } },
+    { method: 'navigate', params: { pageId: 1, type: 'reload' } },
+    { method: 'evaluate', params: { pageId: 1, function: '() => 1' } },
+    { method: 'snapshot', params: { pageId: 1 } },
+    { method: 'screenshot', params: { pageId: 1 } },
     { method: 'click', params: { pageId: 1, uid: 'e1' } },
     { method: 'hover', params: { pageId: 1, uid: 'e1' } },
     { method: 'fill', params: { pageId: 1, uid: 'e1', value: 'text' } },
     { method: 'fill_form', params: { pageId: 1, elements: [{ uid: 'e1', value: 'text' }] } },
     { method: 'upload_file', params: { pageId: 1, uid: 'e1', filePath: 'file.txt' } },
-    { method: 'wait_for', params: { pageId: 1, text: 'ready' } },
-    { method: 'press_key', params: { pageId: 1, key: 'Enter' } },
-    { method: 'type_text', params: { pageId: 1, text: 'text' } },
+    { method: 'wait_for_text', params: { pageId: 1, text: 'ready' } },
+    { method: 'press', params: { pageId: 1, key: 'Enter' } },
+    { method: 'type', params: { pageId: 1, text: 'text' } },
     { method: 'handle_dialog', params: { pageId: 1, action: 'dismiss' } },
-    { method: 'resize_page', params: { pageId: 1, width: 800, height: 600 } },
+    { method: 'resize_viewport', params: { pageId: 1, width: 800, height: 600 } },
   ]
 
   try {
@@ -114,6 +114,13 @@ test('background browser tools do not open the browser panel', async () => {
       await executeBrowserRequest({ id: request.method, ...request }, createOptions(events))
     }
     assert.deepEqual(events, [])
+    assert.deepEqual(calls.map((call) => call.command), [
+      'browser_state', 'select_page', 'browser_close', 'browser_navigate',
+      'browser_evaluate_script', 'browser_take_snapshot', 'browser_take_screenshot',
+      'browser_click', 'browser_hover', 'browser_fill', 'browser_fill_form',
+      'browser_upload_file', 'browser_wait_for', 'browser_press_key',
+      'browser_type_text', 'browser_handle_dialog', 'resize_page',
+    ])
   } finally {
     restoreWindow()
   }

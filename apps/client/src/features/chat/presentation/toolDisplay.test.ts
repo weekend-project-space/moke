@@ -10,7 +10,7 @@ test('classifies workspace, browser, and channel tools by their owning surface',
   assert.equal(describeToolCall('view_image', { path: 'logo.png' }).toolCategory, 'view')
   assert.equal(describeToolCall('write_file', { path: 'README.md' }).toolCategory, 'change')
   assert.equal(describeToolCall('execute', { command: 'npm test' }).toolCategory, 'run')
-  assert.equal(describeToolCall('create_page', { url: 'https://example.com' }).toolCategory, 'browser')
+  assert.equal(describeToolCall('new_tab', { url: 'https://example.com' }).toolCategory, 'browser')
   assert.equal(describeToolCall('send_message', { text: 'Hello' }).toolCategory, 'claw')
   assert.equal(describeToolCall('activate_skill', { id: 'openwalk-usage' }).toolCategory, 'skill')
 })
@@ -46,7 +46,7 @@ test('renders structured search, browser, and channel tool results', () => {
         { path: 'src/main.ts', snippet: 'export { answer }', line: 18 },
       ],
     }),
-    toolCall('list_pages', 'browser', 'call-browser'),
+    toolCall('list_tabs', 'browser', 'call-browser'),
     toolResult('call-browser', {
       activePageId: 2,
       pages: [

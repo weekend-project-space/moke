@@ -38,13 +38,13 @@ const takeSnapshotSchema = z.object({
   verbose: z.boolean().optional(),
   filePath: z.string().min(1).optional(),
   interaction: z.enum(['act', 'observe']).default('act').describe(
-    'Use act when snapshot elements are needed for follow-up interaction; use observe to return page content without elements.',
+    'act includes element UIDs; observe omits them.',
   ),
 });
 
 const takeScreenshotSchema = z.object({
   pageId: z.number().int().positive().optional(),
-  path: z.string().min(1).optional().describe('Workspace-relative output path ending in .png.'),
+  path: z.string().min(1).optional(),
   fullPage: z.boolean().optional(),
   uid: z.string().min(1).optional(),
 });
@@ -108,10 +108,10 @@ const resizePageSchema = z.object({
   height: z.number().positive(),
 });
 
-export function createListPagesTool(browser: BrowserBackend): RuntimeTool<typeof emptySchema> {
+export function createListTabsTool(browser: BrowserBackend): RuntimeTool<typeof emptySchema> {
   return {
-    name: 'list_pages',
-    description: 'List all open in-app browser tabs and the active tab state.',
+    name: 'list_tabs',
+    description: 'List browser tabs, page IDs, and the active tab.',
     approval: 'none',
     schema: emptySchema,
     async handler() {
@@ -120,10 +120,10 @@ export function createListPagesTool(browser: BrowserBackend): RuntimeTool<typeof
   };
 }
 
-export function createCreatePageTool(browser: BrowserBackend): RuntimeTool<typeof createPageSchema> {
+export function createNewTabTool(browser: BrowserBackend): RuntimeTool<typeof createPageSchema> {
   return {
-    name: 'create_page',
-    description: 'Create a new in-app browser tab, optionally loading a URL.',
+    name: 'new_tab',
+    description: 'Create a browser tab without expanding the panel.',
     approval: 'none',
     schema: createPageSchema,
     async handler(input) {
@@ -132,10 +132,10 @@ export function createCreatePageTool(browser: BrowserBackend): RuntimeTool<typeo
   };
 }
 
-export function createSelectPageTool(browser: BrowserBackend): RuntimeTool<typeof pageIdSchema> {
+export function createSwitchTabTool(browser: BrowserBackend): RuntimeTool<typeof pageIdSchema> {
   return {
-    name: 'select_page',
-    description: 'Select an open in-app browser tab by page id.',
+    name: 'switch_tab',
+    description: 'Select a browser tab without expanding the panel.',
     approval: 'none',
     schema: pageIdSchema,
     async handler(input) {
@@ -144,10 +144,10 @@ export function createSelectPageTool(browser: BrowserBackend): RuntimeTool<typeo
   };
 }
 
-export function createClosePageTool(browser: BrowserBackend): RuntimeTool<typeof pageIdSchema> {
+export function createCloseTabTool(browser: BrowserBackend): RuntimeTool<typeof pageIdSchema> {
   return {
-    name: 'close_page',
-    description: 'Close an open in-app browser tab by page id.',
+    name: 'close_tab',
+    description: 'Close a browser tab by page ID.',
     approval: 'none',
     schema: pageIdSchema,
     async handler(input) {
@@ -156,10 +156,10 @@ export function createClosePageTool(browser: BrowserBackend): RuntimeTool<typeof
   };
 }
 
-export function createNavigatePageTool(browser: BrowserBackend): RuntimeTool<typeof navigatePageSchema> {
+export function createNavigateTool(browser: BrowserBackend): RuntimeTool<typeof navigatePageSchema> {
   return {
-    name: 'navigate_page',
-    description: 'Navigate the active in-app browser tab by URL, back, forward, or reload.',
+    name: 'navigate',
+    description: 'Open a URL, go back or forward, or reload a browser tab.',
     approval: 'none',
     schema: navigatePageSchema,
     async handler(input) {
@@ -168,10 +168,10 @@ export function createNavigatePageTool(browser: BrowserBackend): RuntimeTool<typ
   };
 }
 
-export function createEvaluateScriptTool(browser: BrowserBackend): RuntimeTool<typeof evaluateScriptSchema> {
+export function createEvaluateTool(browser: BrowserBackend): RuntimeTool<typeof evaluateScriptSchema> {
   return {
-    name: 'evaluate_script',
-    description: 'Execute a JavaScript function in the active in-app browser page.',
+    name: 'evaluate',
+    description: 'Run a synchronous JavaScript function in a browser page.',
     approval: 'none',
     schema: evaluateScriptSchema,
     async handler(input) {
@@ -180,11 +180,11 @@ export function createEvaluateScriptTool(browser: BrowserBackend): RuntimeTool<t
   };
 }
 
-export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typeof takeSnapshotSchema> {
+export function createSnapshotTool(browser: BrowserBackend): RuntimeTool<typeof takeSnapshotSchema> {
   return {
-    name: 'take_snapshot',
+    name: 'snapshot',
     description:
-      'Return a lightweight snapshot of the active in-app browser page. interaction defaults to act and includes actionable elements; observe returns only page content.',
+      'Read page content and actionable element UIDs.',
     approval: 'none',
     schema: takeSnapshotSchema,
     async handler({ interaction, ...input }, context) {
@@ -198,10 +198,10 @@ export function createTakeSnapshotTool(browser: BrowserBackend): RuntimeTool<typ
   };
 }
 
-export function createTakeScreenshotTool(browser: BrowserBackend): RuntimeTool<typeof takeScreenshotSchema> {
+export function createScreenshotTool(browser: BrowserBackend): RuntimeTool<typeof takeScreenshotSchema> {
   return {
-    name: 'take_screenshot',
-    description: 'Capture a PNG screenshot of the active in-app browser viewport, full page, or one snapshot element.',
+    name: 'screenshot',
+    description: 'Capture a browser viewport, full page, or snapshot element as a PNG.',
     approval: 'none',
     schema: takeScreenshotSchema,
     async handler(input, context) {
@@ -213,7 +213,7 @@ export function createTakeScreenshotTool(browser: BrowserBackend): RuntimeTool<t
 export function createClickTool(browser: BrowserBackend): RuntimeTool<typeof clickSchema> {
   return {
     name: 'click',
-    description: 'Click or double-click an element from the latest browser snapshot by uid.',
+    description: 'Click or double-click a browser element by snapshot UID.',
     approval: 'none',
     schema: clickSchema,
     async handler(input) {
@@ -225,7 +225,7 @@ export function createClickTool(browser: BrowserBackend): RuntimeTool<typeof cli
 export function createHoverTool(browser: BrowserBackend): RuntimeTool<typeof hoverSchema> {
   return {
     name: 'hover',
-    description: 'Hover an element from the latest browser snapshot by uid.',
+    description: 'Dispatch hover events to a browser element by snapshot UID.',
     approval: 'none',
     schema: hoverSchema,
     async handler(input) {
@@ -237,7 +237,7 @@ export function createHoverTool(browser: BrowserBackend): RuntimeTool<typeof hov
 export function createFillTool(browser: BrowserBackend): RuntimeTool<typeof fillSchema> {
   return {
     name: 'fill',
-    description: 'Fill an input, textarea, editable element, or select by browser snapshot uid.',
+    description: 'Replace a browser element\'s value by snapshot UID.',
     approval: 'none',
     schema: fillSchema,
     async handler(input) {
@@ -249,7 +249,7 @@ export function createFillTool(browser: BrowserBackend): RuntimeTool<typeof fill
 export function createFillFormTool(browser: BrowserBackend): RuntimeTool<typeof fillFormSchema> {
   return {
     name: 'fill_form',
-    description: 'Fill multiple browser form elements by snapshot uid.',
+    description: 'Set multiple browser form values by snapshot UID.',
     approval: 'none',
     schema: fillFormSchema,
     async handler(input) {
@@ -261,7 +261,7 @@ export function createFillFormTool(browser: BrowserBackend): RuntimeTool<typeof 
 export function createUploadFileTool(browser: BrowserBackend): RuntimeTool<typeof uploadFileSchema> {
   return {
     name: 'upload_file',
-    description: 'Attach a local file to a file input from the latest browser snapshot by uid.',
+    description: 'Attach a local file to a browser file input by snapshot UID.',
     approval: 'none',
     schema: uploadFileSchema,
     async handler(input) {
@@ -270,10 +270,10 @@ export function createUploadFileTool(browser: BrowserBackend): RuntimeTool<typeo
   };
 }
 
-export function createWaitForTool(browser: BrowserBackend): RuntimeTool<typeof waitForSchema> {
+export function createWaitForTextTool(browser: BrowserBackend): RuntimeTool<typeof waitForSchema> {
   return {
-    name: 'wait_for',
-    description: 'Wait until one of the target texts appears in the active browser page.',
+    name: 'wait_for_text',
+    description: 'Wait for any supplied text to appear in a browser page.',
     approval: 'none',
     schema: waitForSchema,
     async handler(input) {
@@ -282,10 +282,10 @@ export function createWaitForTool(browser: BrowserBackend): RuntimeTool<typeof w
   };
 }
 
-export function createPressKeyTool(browser: BrowserBackend): RuntimeTool<typeof pressKeySchema> {
+export function createPressTool(browser: BrowserBackend): RuntimeTool<typeof pressKeySchema> {
   return {
-    name: 'press_key',
-    description: 'Dispatch a keyboard key or key combination to the active browser element.',
+    name: 'press',
+    description: 'Send synthetic key events to the focused browser element.',
     approval: 'none',
     schema: pressKeySchema,
     async handler(input) {
@@ -294,10 +294,10 @@ export function createPressKeyTool(browser: BrowserBackend): RuntimeTool<typeof 
   };
 }
 
-export function createTypeTextTool(browser: BrowserBackend): RuntimeTool<typeof typeTextSchema> {
+export function createTypeTool(browser: BrowserBackend): RuntimeTool<typeof typeTextSchema> {
   return {
-    name: 'type_text',
-    description: 'Type text into the active editable browser element, optionally submitting with a key.',
+    name: 'type',
+    description: 'Append text to the focused editable browser element.',
     approval: 'none',
     schema: typeTextSchema,
     async handler(input) {
@@ -309,7 +309,7 @@ export function createTypeTextTool(browser: BrowserBackend): RuntimeTool<typeof 
 export function createHandleDialogTool(browser: BrowserBackend): RuntimeTool<typeof handleDialogSchema> {
   return {
     name: 'handle_dialog',
-    description: 'Accept or dismiss the active browser dialog.',
+    description: 'Accept or dismiss a browser dialog.',
     approval: 'none',
     schema: handleDialogSchema,
     async handler(input) {
@@ -318,10 +318,10 @@ export function createHandleDialogTool(browser: BrowserBackend): RuntimeTool<typ
   };
 }
 
-export function createResizePageTool(browser: BrowserBackend): RuntimeTool<typeof resizePageSchema> {
+export function createResizeViewportTool(browser: BrowserBackend): RuntimeTool<typeof resizePageSchema> {
   return {
-    name: 'resize_page',
-    description: 'Resize the active in-app browser page viewport.',
+    name: 'resize_viewport',
+    description: 'Resize the embedded browser viewport.',
     approval: 'none',
     schema: resizePageSchema,
     async handler(input) {
@@ -333,7 +333,7 @@ export function createResizePageTool(browser: BrowserBackend): RuntimeTool<typeo
 export function createShowBrowserTool(browser: BrowserBackend): RuntimeTool<typeof emptySchema> {
   return {
     name: 'show_browser',
-    description: 'Show the in-app browser panel.',
+    description: 'Expand the in-app browser panel and show its active browser tab.',
     approval: 'none',
     schema: emptySchema,
     async handler() {
@@ -345,7 +345,7 @@ export function createShowBrowserTool(browser: BrowserBackend): RuntimeTool<type
 export function createHideBrowserTool(browser: BrowserBackend): RuntimeTool<typeof emptySchema> {
   return {
     name: 'hide_browser',
-    description: 'Hide the in-app browser panel.',
+    description: 'Hide the in-app browser panel without closing its tabs.',
     approval: 'none',
     schema: emptySchema,
     async handler() {

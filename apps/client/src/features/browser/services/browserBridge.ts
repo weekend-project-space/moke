@@ -49,25 +49,25 @@ export async function executeBrowserRequest(
   const params = request.params || {}
 
   switch (request.method) {
-    case 'list_pages':
+    case 'list_tabs':
       return browserApi.state()
-    case 'create_page': {
+    case 'new_tab': {
       return browserApi.open({
         url: readString(params, 'url'),
         visible: false,
       })
     }
-    case 'select_page': {
+    case 'switch_tab': {
       const pageId = readPageId(params)
       if (!pageId) throw new Error('pageId is required')
       return browserApi.select(pageId)
     }
-    case 'close_page': {
+    case 'close_tab': {
       const pageId = readPageId(params)
       if (!pageId) throw new Error('pageId is required')
       return browserApi.close(pageId)
     }
-    case 'navigate_page': {
+    case 'navigate': {
       const type = readString(params, 'type') as NavigateType | undefined
       if (!type) throw new Error('type is required')
       const pageId = readPageId(params)
@@ -78,11 +78,11 @@ export async function executeBrowserRequest(
         ignoreCache: readBool(params, 'ignoreCache'),
       })
     }
-    case 'evaluate_script':
+    case 'evaluate':
       return browserApi.evaluateScript(params)
-    case 'take_snapshot':
+    case 'snapshot':
       return browserApi.takeSnapshot(params)
-    case 'take_screenshot':
+    case 'screenshot':
       return browserApi.takeScreenshot(params)
     case 'click':
       return browserApi.click(params)
@@ -94,15 +94,15 @@ export async function executeBrowserRequest(
       return browserApi.fillForm(params)
     case 'upload_file':
       return browserApi.uploadFile(params)
-    case 'wait_for':
+    case 'wait_for_text':
       return browserApi.waitFor(params)
-    case 'press_key':
+    case 'press':
       return browserApi.pressKey(params)
-    case 'type_text':
+    case 'type':
       return browserApi.typeText(params)
     case 'handle_dialog':
       return browserApi.handleDialog(params)
-    case 'resize_page': {
+    case 'resize_viewport': {
       const width = readNumber(params, 'width')
       const height = readNumber(params, 'height')
       if (!width || !height) throw new Error('width and height are required')
